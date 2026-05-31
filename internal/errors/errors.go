@@ -1,9 +1,6 @@
 package errors
 
-import (
-	"errors"
-	"fmt"
-)
+import "fmt"
 
 type FixableBy string
 
@@ -46,8 +43,4 @@ func (e *APIError) WithHint(hint string) *APIError {
 func (e *APIError) WithCause(cause error) *APIError {
 	e.Cause = cause
 	return e
-}
-
-func As(err error, target any) bool {
-	return errors.As(err, target)
 }

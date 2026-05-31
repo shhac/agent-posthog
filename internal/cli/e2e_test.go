@@ -59,6 +59,26 @@ func TestPaginationMetaFromMock(t *testing.T) {
 	}
 }
 
+func TestPaginationAllFollowsNextURL(t *testing.T) {
+	out, errOut := runCLI(t, "orgs", "list", "--limit", "1", "--all", "--page-limit", "2")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if !strings.Contains(out, `"id":"org_1"`) || !strings.Contains(out, `"id":"org_2"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestPaginationPageLimitLeavesCursor(t *testing.T) {
+	out, errOut := runCLI(t, "orgs", "list", "--limit", "1", "--all", "--page-limit", "1")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if strings.Contains(out, `"id":"org_2"`) || !strings.Contains(out, `"@pagination"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
 func TestFlagLookupMissHasHint(t *testing.T) {
 	_, errOut := runCLI(t, "flags", "get", "missing-flag")
 	if !strings.Contains(errOut, "No feature flag matched key missing-flag") || !strings.Contains(errOut, `"fixable_by":"agent"`) {
@@ -137,6 +157,28 @@ func TestRecordingSharingRedactsAccessToken(t *testing.T) {
 		t.Fatalf("stderr = %s", errOut)
 	}
 	if strings.Contains(out, "phs_recording_share_secret") || !strings.Contains(out, `"access_token": "REDACTED"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestRawAPIRejectsUnsafePathsAndPosts(t *testing.T) {
+	_, errOut := runCLI(t, "api", "get", "/not-api")
+	if !strings.Contains(errOut, "raw API paths must start with /api/") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+
+	_, errOut = runCLI(t, "api", "post", "/api/projects/123/feature_flags/")
+	if !strings.Contains(errOut, "raw POST outside query endpoints requires --yes") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+}
+
+func TestRawAPIPrintRequestRedactsAuth(t *testing.T) {
+	out, errOut := runCLI(t, "api", "get", "/api/organizations/", "--print-request")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if strings.Contains(out, "phx_mock") || !strings.Contains(out, "Bearer phx_...") {
 		t.Fatalf("stdout = %s", out)
 	}
 }

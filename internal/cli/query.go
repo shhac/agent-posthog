@@ -136,11 +136,7 @@ func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any)
 			output.WriteError(output.Stderr(), err)
 			return nil
 		}
-		if format != output.FormatNDJSON {
-			output.WriteRawJSON(raw, format, true)
-			return nil
-		}
-		return writeQueryNDJSON(raw)
+		return writeQueryResult(raw, format)
 	})
 }
 
@@ -172,7 +168,12 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 						return writeRaw(raw, globals.Format)
 					}
 					if status.Complete {
-						return writeCompletedQuery(raw, globals.Format)
+						format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
+						if err != nil {
+							output.WriteError(output.Stderr(), err)
+							return nil
+						}
+						return writeQueryResult(raw, format)
 					}
 					if time.Now().Add(interval).After(deadline) {
 						return agenterrors.New("query did not complete before --max-wait", agenterrors.FixableByRetry).
@@ -212,33 +213,25 @@ func queryStatus(raw json.RawMessage) (parsedQueryStatus, bool) {
 	return parsedQueryStatus{Complete: payload.QueryStatus.Complete, Error: payload.QueryStatus.Error}, true
 }
 
-func writeCompletedQuery(raw json.RawMessage, formatFlag string) error {
-	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return err
-	}
-	status, ok := payload["query_status"].(map[string]any)
-	if !ok {
-		return writeRaw(raw, formatFlag)
-	}
-	results, ok := status["results"].(map[string]any)
-	if !ok {
-		return writeRaw(raw, formatFlag)
-	}
-	data, err := json.Marshal(results)
-	if err != nil {
-		return err
-	}
-	format, err := output.ResolveFormat(formatFlag, output.FormatNDJSON)
-	if err != nil {
-		output.WriteError(output.Stderr(), err)
-		return nil
-	}
+func writeQueryResult(raw json.RawMessage, format output.Format) error {
+	data := queryResultPayload(raw)
 	if format != output.FormatNDJSON {
 		output.WriteRawJSON(data, format, true)
 		return nil
 	}
 	return writeQueryNDJSON(data)
+}
+
+func queryResultPayload(raw json.RawMessage) json.RawMessage {
+	var payload struct {
+		QueryStatus *struct {
+			Results json.RawMessage `json:"results"`
+		} `json:"query_status"`
+	}
+	if err := json.Unmarshal(raw, &payload); err == nil && payload.QueryStatus != nil && len(payload.QueryStatus.Results) > 0 && string(payload.QueryStatus.Results) != "null" {
+		return payload.QueryStatus.Results
+	}
+	return raw
 }
 
 func writeQueryNDJSON(raw json.RawMessage) error {

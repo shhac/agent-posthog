@@ -46,26 +46,18 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 				}
 				writer := output.NewNDJSONWriter(output.Stdout())
 				if len(page.Results) == 0 {
-					return writer.WriteItem(map[string]any{
-						"type":     "finding",
-						"severity": "warning",
-						"summary":  "No matching person found",
-						"data":     map[string]any{"email": email, "distinct_id": distinctID},
-					})
+					return writer.WriteItem(findingRecord("warning", "No matching person found", map[string]any{"email": email, "distinct_id": distinctID}))
 				}
 				for _, raw := range page.Results {
 					var person map[string]any
 					if err := json.Unmarshal(raw, &person); err != nil {
 						return err
 					}
-					if err := writer.WriteItem(map[string]any{"type": "entity", "entity": "person", "id": person["id"], "data": person}); err != nil {
+					if err := writer.WriteItem(entityRecord("person", person["id"], person)); err != nil {
 						return err
 					}
 					if personID, ok := person["id"]; ok {
-						if err := writer.WriteItem(map[string]any{
-							"type":    "next_step",
-							"command": fmt.Sprintf("agent-posthog persons activity %v --env %d", personID, resolved.EnvironmentID),
-						}); err != nil {
+						if err := writer.WriteItem(nextStepRecord(fmt.Sprintf("agent-posthog persons activity %v --env %d", personID, resolved.EnvironmentID))); err != nil {
 							return err
 						}
 					}
@@ -95,7 +87,7 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				writer := output.NewNDJSONWriter(output.Stdout())
-				if err := writer.WriteItem(map[string]any{"type": "entity", "entity": "event", "id": event, "data": map[string]any{"name": event}}); err != nil {
+				if err := writer.WriteItem(entityRecord("event", event, map[string]any{"name": event})); err != nil {
 					return err
 				}
 				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = '%s' order by timestamp desc limit %d", escapeHogQLString(event), limit)
@@ -105,7 +97,7 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 				}
 				var result any
 				_ = json.Unmarshal(raw, &result)
-				return writer.WriteItem(map[string]any{"type": "query_result", "name": "recent_events", "data": result})
+				return writer.WriteItem(queryResultRecord("recent_events", result))
 			})
 		},
 	}
@@ -136,11 +128,11 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 				}
 				var flag map[string]any
 				_ = json.Unmarshal(flagRaw, &flag)
-				if err := writer.WriteItem(map[string]any{"type": "entity", "entity": "feature_flag", "id": flag["id"], "data": flag}); err != nil {
+				if err := writer.WriteItem(entityRecord("feature_flag", flag["id"], flag)); err != nil {
 					return err
 				}
 				if active, _ := flag["active"].(bool); !active {
-					if err := writer.WriteItem(map[string]any{"type": "finding", "severity": "warning", "summary": "Feature flag is inactive", "data": map[string]any{"key": flag["key"]}}); err != nil {
+					if err := writer.WriteItem(findingRecord("warning", "Feature flag is inactive", map[string]any{"key": flag["key"]})); err != nil {
 						return err
 					}
 				}
@@ -158,12 +150,12 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 					for _, raw := range page.Results {
 						var data any
 						_ = json.Unmarshal(raw, &data)
-						if err := writer.WriteItem(map[string]any{"type": "query_result", "name": evidence.name, "data": data}); err != nil {
+						if err := writer.WriteItem(queryResultRecord(evidence.name, data)); err != nil {
 							return err
 						}
 					}
 				}
-				return writer.WriteItem(map[string]any{"type": "next_step", "command": fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])})
+				return writer.WriteItem(nextStepRecord(fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])))
 			})
 		},
 	}
@@ -171,4 +163,20 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 
 func escapeHogQLString(value string) string {
 	return strings.ReplaceAll(value, "'", "''")
+}
+
+func entityRecord(entity string, id any, data any) map[string]any {
+	return map[string]any{"type": "entity", "entity": entity, "id": id, "data": data}
+}
+
+func findingRecord(severity, summary string, data any) map[string]any {
+	return map[string]any{"type": "finding", "severity": severity, "summary": summary, "data": data}
+}
+
+func queryResultRecord(name string, data any) map[string]any {
+	return map[string]any{"type": "query_result", "name": name, "data": data}
+}
+
+func nextStepRecord(command string) map[string]any {
+	return map[string]any{"type": "next_step", "command": command}
 }

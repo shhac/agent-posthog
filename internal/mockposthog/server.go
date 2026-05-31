@@ -44,6 +44,13 @@ func Routes() []string {
 
 func handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	if handled := handlePreflight(w, r); handled {
+		return
+	}
+	dispatch(w, r)
+}
+
+func handlePreflight(w http.ResponseWriter, r *http.Request) bool {
 	auth := r.Header.Get("Authorization")
 	if auth == "" || strings.Contains(auth, "phx_invalid") {
 		writeStatus(w, http.StatusUnauthorized, map[string]any{
@@ -51,7 +58,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 			"code":   "invalid_personal_api_key",
 			"detail": "Invalid Personal API key.",
 		})
-		return
+		return true
 	}
 
 	path := r.URL.Path
@@ -61,7 +68,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 			"code":   "permission_denied",
 			"detail": "API key is missing the required scope for this endpoint.",
 		})
-		return
+		return true
 	}
 	if path == "/api/mock/rate_limit" || strings.Contains(path, "rate_limit") {
 		w.Header().Set("Retry-After", "0")
@@ -70,7 +77,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 			"code":   "throttled",
 			"detail": "Rate limit exceeded.",
 		})
-		return
+		return true
 	}
 	if path == "/api/mock/validation_error" {
 		writeStatus(w, http.StatusBadRequest, map[string]any{
@@ -79,9 +86,13 @@ func handle(w http.ResponseWriter, r *http.Request) {
 			"attr":   "query",
 			"detail": "This field is required.",
 		})
-		return
+		return true
 	}
+	return false
+}
 
+func dispatch(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
 	switch {
 	case r.Method == http.MethodGet && path == "/api/users/@me/":
 		write(w, map[string]any{"id": 7, "uuid": "user-uuid", "email": "agent@example.com", "name": "Agent User"})

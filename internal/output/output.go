@@ -2,6 +2,7 @@ package output
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -103,7 +104,7 @@ func WriteRawJSON(raw json.RawMessage, format Format, prune bool) {
 
 func WriteError(w io.Writer, err error) {
 	var aerr *agenterrors.APIError
-	if !agenterrors.As(err, &aerr) {
+	if !errors.As(err, &aerr) {
 		aerr = agenterrors.Wrap(err, agenterrors.FixableByAgent)
 	}
 	payload := map[string]any{

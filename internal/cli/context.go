@@ -152,20 +152,28 @@ func writeListResource(items []json.RawMessage, nextURL string, flagFormat strin
 		items = compactRawItems(items)
 	}
 	if format != output.FormatNDJSON {
-		var decoded []any
-		for _, raw := range items {
-			var item any
-			if err := json.Unmarshal(raw, &item); err == nil {
-				decoded = append(decoded, item)
-			}
-		}
-		payload := map[string]any{"results": decoded}
-		if nextURL != "" {
-			payload["next"] = nextURL
-		}
-		output.Print(payload, format, true)
+		output.Print(listPayload(items, nextURL), format, true)
 		return nil
 	}
+	return writeListNDJSON(items, nextURL)
+}
+
+func listPayload(items []json.RawMessage, nextURL string) map[string]any {
+	var decoded []any
+	for _, raw := range items {
+		var item any
+		if err := json.Unmarshal(raw, &item); err == nil {
+			decoded = append(decoded, item)
+		}
+	}
+	payload := map[string]any{"results": decoded}
+	if nextURL != "" {
+		payload["next"] = nextURL
+	}
+	return payload
+}
+
+func writeListNDJSON(items []json.RawMessage, nextURL string) error {
 	writer := output.NewNDJSONWriter(output.Stdout())
 	for _, raw := range items {
 		var item any
