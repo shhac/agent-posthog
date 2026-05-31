@@ -97,6 +97,11 @@ POSTHOG_ORGANIZATION_ID
 
 Prefer the `AGENT_POSTHOG_*` names in examples. Accept PostHog's native env var
 for quick local use, but mark direct env auth as less safe for LLM-guided setup.
+Resolution order is: explicit flags, profile defaults, `AGENT_POSTHOG_*`
+environment variables, PostHog-native environment variables, then built-in
+defaults such as `https://us.posthog.com`. `AGENT_POSTHOG_BASE_URL` is a test
+and mock-server override for the private API host and should win over profile
+host metadata when present.
 
 ## Auth and profiles
 
@@ -107,6 +112,7 @@ to disk.
 
 ```bash
 agent-posthog auth add prod --form --host https://us.posthog.com
+agent-posthog auth add ci --api-key <key> --host http://127.0.0.1:18118
 agent-posthog auth check prod
 agent-posthog orgs list -p prod
 agent-posthog projects list -p prod --org <uuid>
@@ -116,7 +122,9 @@ agent-posthog auth list
 ```
 
 `auth add --form` opens a native OS dialog for the personal API key, so the LLM
-never sees the secret. The setup receipt must include only redacted metadata:
+never sees the secret. `--api-key` exists for tests, automation, and human-driven
+terminal setup, but agents should prefer `--form`. The setup receipt must include
+only redacted metadata:
 
 ```json
 {
@@ -156,6 +164,7 @@ Default formats:
 - single resources: JSON
 - `--format yaml` allowed for humans
 - `--full` returns unshaped API payloads where possible
+- compact output is null-pruned by default
 
 NDJSON should use data rows plus `@` meta rows:
 
@@ -218,6 +227,11 @@ agent-posthog schema properties --type event --event "$pageview" --search browse
 agent-posthog schema properties --type person --verified true
 ```
 
+`schema events --search` is client-side filtering over the event definitions page
+because PostHog's documented endpoint does not expose a general search parameter.
+`schema properties --event` maps to PostHog's `event_names` parameter with event
+name filtering enabled.
+
 ### Query
 
 HogQL should be first-class and streamable.
@@ -258,7 +272,9 @@ agent-posthog dashboards run <dashboard-id>
 ```
 
 `dashboards run` should stream each tile/insight result as its own row so large
-dashboards do not force one giant JSON blob into context.
+dashboards do not force one giant JSON blob into context. Per-tile failures should
+emit `type:"tile_error"` records rather than failing the whole dashboard run when
+PostHog returns partial results.
 
 ### Feature flags
 
@@ -268,6 +284,10 @@ agent-posthog flags get <id-or-key>
 agent-posthog flags dependent <id-or-key>
 agent-posthog flags activity <id-or-key>
 ```
+
+The private feature flag get endpoint is ID-addressed. Key lookup should resolve
+by listing/searching flags first, then fetching the matched numeric ID. Ambiguous
+or missing key matches are agent-fixable errors with a hint to run `flags list`.
 
 Create/update should exist but require explicit inputs and produce a clear diff:
 
@@ -328,7 +348,22 @@ Rules:
 - no custom `Authorization` header flag
 - redact secrets in debug
 - default `post` to JSON body files or stdin
+- allow `post` by default only for query endpoints; require `--yes` for other raw
+  POST endpoints because many PostHog POST routes mutate state
 - do not ship raw `patch`/`delete` until there is a specific need
+- support `--print-request` to show the resolved method, path, query, host, and
+  redacted headers without sending the request
+
+## Time flags
+
+Investigation and query-helper commands should accept the same time grammar:
+
+- relative durations: `now-15m`, `now-1h`, `7d`, `24h`
+- RFC3339 timestamps: `2026-05-31T12:00:00Z`
+- Unix epoch seconds
+
+Prefer explicit `--from` and `--to` on resource/query commands, and `--since` on
+investigation shortcuts where the default end is `now`.
 
 ## Skill
 
@@ -367,7 +402,12 @@ The release command should cover:
 4. Implement auth/org/project/environment/schema/query/persons.
 5. Add insights/dashboards/flags.
 6. Add first investigation commands.
-7. Add skill, release command, symlinks, README, GoReleaser, mock server, tests.
+7. Add `mockposthog` for E2E fixtures and local development.
+8. Keep dependencies injectable: API client HTTP transport, credential store,
+   config directory, prompt/dialog function, and output writers should be
+   replaceable in tests.
+9. Add skill, release command, symlinks, README, GoReleaser, linting,
+   formatting, and tests from the start.
 
 ## Open decisions
 

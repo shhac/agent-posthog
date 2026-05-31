@@ -12,6 +12,8 @@ Sources checked on 2026-05-31:
 - https://posthog.com/docs/api/insights
 - https://posthog.com/docs/api/dashboards
 - https://posthog.com/docs/api/feature-flags
+- https://posthog.com/docs/api/session-recordings
+- https://posthog.com/docs/api/experiments
 - https://posthog.com/docs/api/event-definitions
 - https://posthog.com/docs/api/property-definitions
 
@@ -84,20 +86,25 @@ CLI behavior:
 | `environments list` | `GET /api/projects/:project_id/environments/` | project | `project:read` |
 | `environments get` | `GET /api/projects/:project_id/environments/:id/` | project | `project:read` |
 | `schema events` | `GET /api/projects/:project_id/event_definitions/` | project | `event_definition:read` |
-| `schema event get` | `GET /api/projects/:project_id/event_definitions/:id/` or `by_name` | project | `event_definition:read` |
-| `schema properties` | `GET /api/projects/:project_id/property_definitions/` | project | `property_definition:read` |
+| `schema events get` | `GET /api/projects/:project_id/event_definitions/:id/` or list-filter by name | project | `event_definition:read` |
+| `schema properties` | `GET /api/projects/:project_id/property_definitions/` with `event_names` when `--event` is provided | project | `property_definition:read` |
 | `query hogql` | `POST /api/environments/:environment_id/query/` | environment | `query:read` |
 | `query get` | `GET /api/environments/:environment_id/query/:id/` | environment | `query:read` |
+| `query log` | `GET /api/environments/:environment_id/query/:id/log/` | environment | `query:read` |
 | `query cancel` | `DELETE /api/environments/:environment_id/query/:id/` | environment | `query:read` |
 | `persons list` | `GET /api/environments/:environment_id/persons/` | environment | `person:read` |
 | `persons get` | `GET /api/environments/:environment_id/persons/:id/` | environment | `person:read` |
 | `persons activity` | `GET /api/environments/:environment_id/persons/:id/activity/` | environment | `person:read` |
-| `insights list` | `GET /api/environments/:environment_id/insights/` | environment | likely insight/query read |
-| `insights get` | `GET /api/environments/:environment_id/insights/:id/` | environment | likely insight/query read |
-| `insights analyze` | `GET /api/environments/:environment_id/insights/:id/analyze/` | environment | likely insight/query read |
+| `insights list` | `GET /api/environments/:environment_id/insights/` | environment | `insight:read` |
+| `insights get` | `GET /api/environments/:environment_id/insights/:id/` | environment | `insight:read` |
+| `insights analyze` | `GET /api/environments/:environment_id/insights/:id/analyze/` | environment | `insight:read` |
 | `dashboards list` | `GET /api/environments/:environment_id/dashboards/` | environment | `dashboard:read` |
 | `dashboards get` | `GET /api/environments/:environment_id/dashboards/:id/` | environment | `dashboard:read` |
 | `dashboards run` | `GET /api/environments/:environment_id/dashboards/:id/run_insights/` | environment | `dashboard:read` |
+| `recordings list` | `GET /api/environments/:environment_id/session_recordings/` | environment | session recording read scope |
+| `recordings get` | `GET /api/environments/:environment_id/session_recordings/:id/` | environment | session recording read scope |
+| `experiments list` | `GET /api/projects/:project_id/experiments/` | project | experiment read scope |
+| `experiments get` | `GET /api/projects/:project_id/experiments/:id/` | project | experiment read scope |
 | `flags list` | `GET /api/projects/:project_id/feature_flags/` | project | `feature_flag:read` |
 | `flags get` | `GET /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:read` |
 | `flags dependent` | `GET /api/projects/:project_id/feature_flags/:id/dependent_flags/` | project | `feature_flag:read` |
@@ -105,6 +112,14 @@ CLI behavior:
 | `flags create` | `POST /api/projects/:project_id/feature_flags/` | project | `feature_flag:write` |
 | `flags update` | `PATCH /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:write` |
 | `flags disable` | `PATCH /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:write` |
+
+`flags get <id-or-key>` is CLI sugar. If the argument is not a numeric ID, the
+CLI should search/list feature flags by key, require exactly one match, then call
+the documented ID-based endpoint.
+
+`schema events --search` is local filtering over returned event definitions.
+`schema properties --event <name>` maps to PostHog's event-name filtering
+parameters rather than a literal `event` query parameter.
 
 ## Deprecated events API
 
