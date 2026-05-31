@@ -1,0 +1,5 @@
+/.ai-cache/
+/.cache/
+/dist/
+/agent-posthog
+/mockposthog
