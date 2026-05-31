@@ -49,6 +49,7 @@ func newRootCmd(version string) *cobra.Command {
 	root.PersistentFlags().BoolVar(&globals.Full, "full", false, "Return fuller API payloads where supported")
 
 	registerUsageCommand(root)
+	registerCompletion(root)
 	registerConfig(root)
 	registerAuth(root, globals)
 	registerOrgs(root, globals)

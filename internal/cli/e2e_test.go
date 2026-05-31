@@ -243,6 +243,24 @@ func TestMockSmokeChecklist(t *testing.T) {
 	}
 }
 
+func TestCompletionScriptsRender(t *testing.T) {
+	out, errOut := runCLI(t, "completion", "zsh")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if !strings.Contains(out, "#compdef agent-posthog") {
+		t.Fatalf("stdout = %s", out)
+	}
+
+	out, errOut = runCLI(t, "completion", "bash")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if !strings.Contains(out, "bash completion V2 for agent-posthog") {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
 func runCLI(t *testing.T, args ...string) (string, string) {
 	return runCLIWithEnvironment(t, "456", args...)
 }
