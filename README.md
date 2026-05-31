@@ -55,6 +55,20 @@ make build-mock
 AGENT_POSTHOG_BASE_URL=http://127.0.0.1:18118 POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog orgs list
 ```
 
+Useful mock edge cases:
+
+```bash
+POSTHOG_PERSONAL_API_KEY=phx_invalid ./agent-posthog orgs list
+POSTHOG_PERSONAL_API_KEY=phx_no_scope ./agent-posthog orgs list
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog --max-retries 0 api get /api/mock/rate_limit
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog api get /api/mock/validation_error
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog flags get missing-flag
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog flags get ambiguous-flag
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog orgs list --limit 1
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog query get query_failed
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog api get /api/projects/123/session_recordings/rec_1/sharing/
+```
+
 ## License
 
 MIT

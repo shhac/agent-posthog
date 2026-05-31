@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"strings"
 	"sync"
 
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
@@ -134,11 +135,19 @@ func NewNDJSONWriter(w io.Writer) *NDJSONWriter {
 }
 
 func (n *NDJSONWriter) WriteItem(item any) error {
-	return n.enc.Encode(item)
+	cleaned, ok := toCleanAny(item, true)
+	if !ok {
+		return nil
+	}
+	return n.enc.Encode(cleaned)
 }
 
 func (n *NDJSONWriter) WriteMetaLine(key string, value any) error {
-	return n.enc.Encode(map[string]any{key: value})
+	cleaned, ok := toCleanAny(value, true)
+	if !ok {
+		return nil
+	}
+	return n.enc.Encode(map[string]any{key: cleaned})
 }
 
 func (n *NDJSONWriter) WritePagination(p *Pagination) error {
@@ -157,6 +166,7 @@ func toCleanAny(data any, prune bool) (any, bool) {
 	if prune {
 		decoded = pruneNulls(decoded)
 	}
+	decoded = redactSensitive(decoded)
 	return decoded, true
 }
 
@@ -201,4 +211,49 @@ func pruneNulls(v any) any {
 	default:
 		return v
 	}
+}
+
+func redactSensitive(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for key, value := range val {
+			if isSensitiveKey(key) {
+				out[key] = "REDACTED"
+				continue
+			}
+			out[key] = redactSensitive(value)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, v := range val {
+			out[i] = redactSensitive(v)
+		}
+		return out
+	case string:
+		if looksLikePostHogSecret(val) {
+			return "REDACTED"
+		}
+		return val
+	default:
+		return v
+	}
+}
+
+func isSensitiveKey(key string) bool {
+	switch key {
+	case "access_token", "api_key", "personal_api_key", "project_token", "secret", "token":
+		return true
+	default:
+		return false
+	}
+}
+
+func looksLikePostHogSecret(value string) bool {
+	return strings.HasPrefix(value, "phx_") ||
+		strings.HasPrefix(value, "phc_") ||
+		strings.HasPrefix(value, "phs_") ||
+		strings.HasPrefix(value, "pha_") ||
+		strings.HasPrefix(value, "phr_")
 }
