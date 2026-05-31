@@ -2,10 +2,13 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerInvestigate(root *cobra.Command, globals *GlobalFlags) {
@@ -41,7 +44,36 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return writeList(page.Results, page.Next, globals.Format)
+				writer := output.NewNDJSONWriter(output.Stdout())
+				if len(page.Results) == 0 {
+					return writer.WriteItem(map[string]any{
+						"type":     "finding",
+						"severity": "warning",
+						"summary":  "No matching person found",
+						"data":     map[string]any{"email": email, "distinct_id": distinctID},
+					})
+				}
+				for _, raw := range page.Results {
+					var person map[string]any
+					if err := json.Unmarshal(raw, &person); err != nil {
+						return err
+					}
+					if err := writer.WriteItem(map[string]any{"type": "entity", "entity": "person", "id": person["id"], "data": person}); err != nil {
+						return err
+					}
+					if personID, ok := person["id"]; ok {
+						if err := writer.WriteItem(map[string]any{
+							"type":    "next_step",
+							"command": fmt.Sprintf("agent-posthog persons activity %v --env %d", personID, resolved.EnvironmentID),
+						}); err != nil {
+							return err
+						}
+					}
+				}
+				if page.Next != "" {
+					return writer.WritePagination(&output.Pagination{HasMore: true, NextURL: page.Next})
+				}
+				return nil
 			})
 		},
 	}
@@ -58,8 +90,23 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 		Use:   "event",
 		Short: "Sample recent events through HogQL",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = '%s' order by timestamp desc limit %d", escapeHogQLString(event), limit)
-			return runQuery(cmd.Context(), globals, map[string]any{"query": map[string]any{"kind": "HogQLQuery", "query": sql}})
+			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
+				if err := requireEnvironment(resolved); err != nil {
+					return err
+				}
+				writer := output.NewNDJSONWriter(output.Stdout())
+				if err := writer.WriteItem(map[string]any{"type": "entity", "entity": "event", "id": event, "data": map[string]any{"name": event}}); err != nil {
+					return err
+				}
+				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = '%s' order by timestamp desc limit %d", escapeHogQLString(event), limit)
+				raw, err := resolved.Client.Post(ctx, fmt.Sprintf("/api/environments/%d/query/", resolved.EnvironmentID), nil, map[string]any{"query": map[string]any{"kind": "HogQLQuery", "query": sql}})
+				if err != nil {
+					return err
+				}
+				var result any
+				_ = json.Unmarshal(raw, &result)
+				return writer.WriteItem(map[string]any{"type": "query_result", "name": "recent_events", "data": result})
+			})
 		},
 	}
 	cmd.Flags().StringVar(&event, "event", "", "Event name")
@@ -69,7 +116,57 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 }
 
 func investigateFlag(globals *GlobalFlags) *cobra.Command {
-	return flagGetCommand(globals, "flag <id-or-key>", "Inspect a feature flag", "")
+	return &cobra.Command{
+		Use:   "flag <id-or-key>",
+		Short: "Inspect a feature flag and related evidence",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
+				if err := requireProject(resolved); err != nil {
+					return err
+				}
+				id, err := resolveFlagID(ctx, resolved, args[0])
+				if err != nil {
+					return err
+				}
+				writer := output.NewNDJSONWriter(output.Stdout())
+				flagRaw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/feature_flags/%s/", resolved.ProjectID, id), nil)
+				if err != nil {
+					return err
+				}
+				var flag map[string]any
+				_ = json.Unmarshal(flagRaw, &flag)
+				if err := writer.WriteItem(map[string]any{"type": "entity", "entity": "feature_flag", "id": flag["id"], "data": flag}); err != nil {
+					return err
+				}
+				if active, _ := flag["active"].(bool); !active {
+					if err := writer.WriteItem(map[string]any{"type": "finding", "severity": "warning", "summary": "Feature flag is inactive", "data": map[string]any{"key": flag["key"]}}); err != nil {
+						return err
+					}
+				}
+				for _, evidence := range []struct {
+					name string
+					path string
+				}{
+					{name: "dependent_flags", path: fmt.Sprintf("/api/projects/%d/feature_flags/%s/dependent_flags/", resolved.ProjectID, id)},
+					{name: "activity", path: fmt.Sprintf("/api/projects/%d/feature_flags/%s/activity/", resolved.ProjectID, id)},
+				} {
+					page, err := resolved.Client.List(ctx, evidence.path, nil)
+					if err != nil {
+						return err
+					}
+					for _, raw := range page.Results {
+						var data any
+						_ = json.Unmarshal(raw, &data)
+						if err := writer.WriteItem(map[string]any{"type": "query_result", "name": evidence.name, "data": data}); err != nil {
+							return err
+						}
+					}
+				}
+				return writer.WriteItem(map[string]any{"type": "next_step", "command": fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])})
+			})
+		},
+	}
 }
 
 func escapeHogQLString(value string) string {

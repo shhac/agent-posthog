@@ -17,6 +17,9 @@ mock:
 mock-dev:
 	AGENT_POSTHOG_BASE_URL=http://127.0.0.1:18118 POSTHOG_PERSONAL_API_KEY=phx_mock $(GOENV) go run ./cmd/agent-posthog $(ARGS)
 
+smoke-mock:
+	$(GOENV) go test ./internal/cli -run TestMockSmokeChecklist -count=1
+
 test:
 	$(GOENV) go test ./... -count=1
 
@@ -41,4 +44,4 @@ dev:
 vet:
 	$(GOENV) go vet ./...
 
-.PHONY: build build-mock mock mock-dev test test-short lint fmt clean dev vet
+.PHONY: build build-mock mock mock-dev smoke-mock test test-short lint fmt clean dev vet

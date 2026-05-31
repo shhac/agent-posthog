@@ -7,9 +7,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
@@ -17,6 +19,7 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 	query := &cobra.Command{Use: "query", Short: "Run and inspect PostHog queries"}
 	query.AddCommand(queryHogQLCommand(globals))
 	query.AddCommand(queryJSONCommand(globals))
+	query.AddCommand(queryWaitCommand(globals))
 	query.AddCommand(getCommand("get <query-id>", "Get async query status", globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireEnvironment(ctx); err != nil {
 			return "", err
@@ -51,6 +54,7 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 
 func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 	var file string
+	var async bool
 	cmd := &cobra.Command{
 		Use:   "hogql <sql>",
 		Short: "Run a HogQL query",
@@ -72,15 +76,20 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 			} else {
 				sql = args[0]
 			}
-			return runQuery(cmd.Context(), globals, map[string]any{
+			body := map[string]any{
 				"query": map[string]any{
 					"kind":  "HogQLQuery",
 					"query": sql,
 				},
-			})
+			}
+			if async {
+				body["async"] = true
+			}
+			return runQuery(cmd.Context(), globals, body)
 		},
 	}
 	cmd.Flags().StringVar(&file, "file", "", "Read HogQL from file")
+	cmd.Flags().BoolVar(&async, "async", false, "Start an async query and return its query status")
 	return cmd
 }
 
@@ -133,6 +142,103 @@ func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any)
 		}
 		return writeQueryNDJSON(raw)
 	})
+}
+
+func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
+	var interval time.Duration
+	var maxWait time.Duration
+	cmd := &cobra.Command{
+		Use:   "wait <query-id>",
+		Short: "Poll an async query until it completes or fails",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
+				if err := requireEnvironment(resolved); err != nil {
+					return err
+				}
+				deadline := time.Now().Add(maxWait)
+				var raw json.RawMessage
+				for {
+					var err error
+					raw, err = resolved.Client.Get(ctx, fmt.Sprintf("/api/environments/%d/query/%s/", resolved.EnvironmentID, args[0]), nil)
+					if err != nil {
+						return err
+					}
+					status, ok := queryStatus(raw)
+					if !ok {
+						return writeRaw(raw, globals.Format)
+					}
+					if status.Error {
+						return writeRaw(raw, globals.Format)
+					}
+					if status.Complete {
+						return writeCompletedQuery(raw, globals.Format)
+					}
+					if time.Now().Add(interval).After(deadline) {
+						return agenterrors.New("query did not complete before --max-wait", agenterrors.FixableByRetry).
+							WithHint("Run 'agent-posthog query get " + args[0] + "' to inspect the current query status.")
+					}
+					timer := time.NewTimer(interval)
+					select {
+					case <-ctx.Done():
+						timer.Stop()
+						return ctx.Err()
+					case <-timer.C:
+					}
+				}
+			})
+		},
+	}
+	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "Polling interval")
+	cmd.Flags().DurationVar(&maxWait, "max-wait", 2*time.Minute, "Maximum time to wait")
+	return cmd
+}
+
+type parsedQueryStatus struct {
+	Complete bool
+	Error    bool
+}
+
+func queryStatus(raw json.RawMessage) (parsedQueryStatus, bool) {
+	var payload struct {
+		QueryStatus *struct {
+			Complete bool `json:"complete"`
+			Error    bool `json:"error"`
+		} `json:"query_status"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil || payload.QueryStatus == nil {
+		return parsedQueryStatus{}, false
+	}
+	return parsedQueryStatus{Complete: payload.QueryStatus.Complete, Error: payload.QueryStatus.Error}, true
+}
+
+func writeCompletedQuery(raw json.RawMessage, formatFlag string) error {
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return err
+	}
+	status, ok := payload["query_status"].(map[string]any)
+	if !ok {
+		return writeRaw(raw, formatFlag)
+	}
+	results, ok := status["results"].(map[string]any)
+	if !ok {
+		return writeRaw(raw, formatFlag)
+	}
+	data, err := json.Marshal(results)
+	if err != nil {
+		return err
+	}
+	format, err := output.ResolveFormat(formatFlag, output.FormatNDJSON)
+	if err != nil {
+		output.WriteError(output.Stderr(), err)
+		return nil
+	}
+	if format != output.FormatNDJSON {
+		output.WriteRawJSON(data, format, true)
+		return nil
+	}
+	return writeQueryNDJSON(data)
 }
 
 func writeQueryNDJSON(raw json.RawMessage) error {

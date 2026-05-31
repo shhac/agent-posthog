@@ -63,7 +63,7 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 	events := &cobra.Command{Use: "events", Short: "List and get event definitions"}
 	var search string
 	var excludeHidden, excludeStale bool
-	var limit int
+	var eventListOpts listOptions
 	eventsList := &cobra.Command{
 		Use:   "list",
 		Short: "List event definitions",
@@ -72,25 +72,25 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 				if err := requireProject(resolved); err != nil {
 					return err
 				}
-				q := baseValues(limit)
+				q := baseValues(0)
 				if excludeHidden {
 					q.Set("exclude_hidden", "true")
 				}
 				if excludeStale {
 					q.Set("exclude_stale", "true")
 				}
-				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/projects/%d/event_definitions/", resolved.ProjectID), q)
+				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/projects/%d/event_definitions/", resolved.ProjectID), q, eventListOpts)
 				if err != nil {
 					return err
 				}
-				return writeList(filterRaw(page.Results, search), page.Next, globals.Format)
+				return writeListResource(filterRaw(items, search), nextURL, globals.Format, globals.Full)
 			})
 		},
 	}
 	eventsList.Flags().StringVar(&search, "search", "", "Client-side substring filter on event name")
 	eventsList.Flags().BoolVar(&excludeHidden, "exclude-hidden", false, "Exclude hidden event definitions")
 	eventsList.Flags().BoolVar(&excludeStale, "exclude-stale", false, "Exclude stale event definitions")
-	eventsList.Flags().IntVar(&limit, "limit", 100, "Maximum results to request")
+	addListPagingFlags(eventsList, &eventListOpts, 100)
 	events.AddCommand(eventsList)
 	events.AddCommand(&cobra.Command{
 		Use:   "get <event-id-or-name>",
@@ -121,7 +121,7 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 
 	properties := &cobra.Command{Use: "properties", Short: "List property definitions"}
 	var propType, eventName, propSearch string
-	var propLimit int
+	var propListOpts listOptions
 	properties.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List property definitions",
@@ -130,7 +130,7 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 				if err := requireProject(resolved); err != nil {
 					return err
 				}
-				q := baseValues(propLimit)
+				q := baseValues(0)
 				if propType != "" {
 					q.Set("type", propType)
 				}
@@ -138,18 +138,18 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 					q.Set("event_names", eventName)
 					q.Set("filter_by_event_names", "true")
 				}
-				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/projects/%d/property_definitions/", resolved.ProjectID), q)
+				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/projects/%d/property_definitions/", resolved.ProjectID), q, propListOpts)
 				if err != nil {
 					return err
 				}
-				return writeList(filterRaw(page.Results, propSearch), page.Next, globals.Format)
+				return writeListResource(filterRaw(items, propSearch), nextURL, globals.Format, globals.Full)
 			})
 		},
 	})
 	properties.PersistentFlags().StringVar(&propType, "type", "", "Property type filter, such as event or person")
 	properties.PersistentFlags().StringVar(&eventName, "event", "", "Event name filter")
 	properties.PersistentFlags().StringVar(&propSearch, "search", "", "Client-side substring filter on property name")
-	properties.PersistentFlags().IntVar(&propLimit, "limit", 100, "Maximum results to request")
+	addListPagingFlags(properties.Commands()[0], &propListOpts, 100)
 	schema.AddCommand(properties)
 	root.AddCommand(schema)
 }
@@ -157,7 +157,7 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 func registerPersons(root *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{Use: "persons", Short: "List and get PostHog persons"}
 	var email, distinctID string
-	var limit int
+	var opts listOptions
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List persons",
@@ -166,24 +166,24 @@ func registerPersons(root *cobra.Command, globals *GlobalFlags) {
 				if err := requireEnvironment(resolved); err != nil {
 					return err
 				}
-				q := baseValues(limit)
+				q := baseValues(0)
 				if email != "" {
 					q.Set("email", email)
 				}
 				if distinctID != "" {
 					q.Set("distinct_id", distinctID)
 				}
-				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/environments/%d/persons/", resolved.EnvironmentID), q)
+				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/environments/%d/persons/", resolved.EnvironmentID), q, opts)
 				if err != nil {
 					return err
 				}
-				return writeList(page.Results, page.Next, globals.Format)
+				return writeListResource(items, nextURL, globals.Format, globals.Full)
 			})
 		},
 	}
 	list.Flags().StringVar(&email, "email", "", "Email filter")
 	list.Flags().StringVar(&distinctID, "distinct-id", "", "Distinct ID filter")
-	list.Flags().IntVar(&limit, "limit", 100, "Maximum results to request")
+	addListPagingFlags(list, &opts, 100)
 	cmd.AddCommand(list)
 	cmd.AddCommand(getCommand("get <person-id>", "Get a person", globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireEnvironment(ctx); err != nil {
@@ -204,7 +204,7 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	flags := &cobra.Command{Use: "flags", Short: "List and get PostHog feature flags"}
 	var active string
 	var search string
-	var limit int
+	var opts listOptions
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List feature flags",
@@ -213,24 +213,24 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 				if err := requireProject(resolved); err != nil {
 					return err
 				}
-				q := baseValues(limit)
+				q := baseValues(0)
 				if active != "" {
 					q.Set("active", active)
 				}
 				if search != "" {
 					q.Set("search", search)
 				}
-				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/projects/%d/feature_flags/", resolved.ProjectID), q)
+				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/projects/%d/feature_flags/", resolved.ProjectID), q, opts)
 				if err != nil {
 					return err
 				}
-				return writeList(page.Results, page.Next, globals.Format)
+				return writeListResource(items, nextURL, globals.Format, globals.Full)
 			})
 		},
 	}
 	list.Flags().StringVar(&active, "active", "", "Active filter: true or false")
 	list.Flags().StringVar(&search, "search", "", "Search feature flags")
-	list.Flags().IntVar(&limit, "limit", 100, "Maximum results to request")
+	addListPagingFlags(list, &opts, 100)
 	flags.AddCommand(list)
 	flags.AddCommand(flagGetCommand(globals, "get <id-or-key>", "Get a feature flag", ""))
 	flags.AddCommand(flagGetCommand(globals, "dependent <id-or-key>", "List dependent feature flags", "dependent_flags"))
@@ -260,7 +260,7 @@ func flagGetCommand(globals *GlobalFlags, use, short, suffix string) *cobra.Comm
 				if err != nil {
 					return err
 				}
-				return writeRaw(raw, globals.Format)
+				return writeRawResource(raw, globals.Format, globals.Full)
 			})
 		},
 	}
@@ -316,7 +316,7 @@ func registerProjectDomain(root *cobra.Command, globals *GlobalFlags, name, shor
 }
 
 func listCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedContext) (string, url.Values, error)) *cobra.Command {
-	var limit int
+	var opts listOptions
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: short,
@@ -326,18 +326,15 @@ func listCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedC
 				if err != nil {
 					return err
 				}
-				if limit > 0 && q.Get("limit") == "" {
-					q.Set("limit", strconv.Itoa(limit))
-				}
-				page, err := resolved.Client.List(ctx, path, q)
+				items, nextURL, err := collectList(ctx, resolved, path, q, opts)
 				if err != nil {
 					return err
 				}
-				return writeList(page.Results, page.Next, globals.Format)
+				return writeListResource(items, nextURL, globals.Format, globals.Full)
 			})
 		},
 	}
-	cmd.Flags().IntVar(&limit, "limit", 100, "Maximum results to request")
+	addListPagingFlags(cmd, &opts, 100)
 	return cmd
 }
 
@@ -356,7 +353,7 @@ func getCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedCo
 				if err != nil {
 					return err
 				}
-				return writeRaw(raw, globals.Format)
+				return writeRawResource(raw, globals.Format, globals.Full)
 			})
 		},
 	}

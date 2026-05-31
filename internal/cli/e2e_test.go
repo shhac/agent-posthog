@@ -141,6 +141,66 @@ func TestRecordingSharingRedactsAccessToken(t *testing.T) {
 	}
 }
 
+func TestQueryHogQLAsyncReturnsStatus(t *testing.T) {
+	out, errOut := runCLI(t, "query", "hogql", "--async", "select 1")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if !strings.Contains(out, `"query_pending"`) || !strings.Contains(out, `"complete":false`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestQueryWaitEmitsCompletedRows(t *testing.T) {
+	out, errOut := runCLI(t, "query", "wait", "query_complete", "--interval", "1ms", "--max-wait", "10ms")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if !strings.Contains(out, `"event":"$pageview"`) || !strings.Contains(out, `"@query"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestInvestigateFlagEmitsEvidence(t *testing.T) {
+	out, errOut := runCLI(t, "investigate", "flag", "checkout-v2")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if !strings.Contains(out, `"type":"entity"`) || !strings.Contains(out, `"name":"activity"`) || !strings.Contains(out, `"type":"next_step"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestMockSmokeChecklist(t *testing.T) {
+	cases := [][]string{
+		{"orgs", "list", "--limit", "1"},
+		{"schema", "events", "list", "--search", "signup"},
+		{"schema", "properties", "list", "--event", "$pageview"},
+		{"query", "hogql", "select event, count() from events group by event"},
+		{"query", "get", "query_failed"},
+		{"query", "log", "query_complete"},
+		{"persons", "list", "--email", "user@example.com"},
+		{"flags", "get", "checkout-v2"},
+		{"dashboards", "run", "66"},
+		{"recordings", "list"},
+		{"experiments", "list"},
+		{"investigate", "user", "--email", "user@example.com"},
+		{"investigate", "event", "--event", "$pageview"},
+		{"investigate", "flag", "checkout-v2"},
+	}
+	for _, args := range cases {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			out, errOut := runCLI(t, args...)
+			if errOut != "" {
+				t.Fatalf("stderr = %s", errOut)
+			}
+			if strings.TrimSpace(out) == "" {
+				t.Fatal("expected stdout")
+			}
+		})
+	}
+}
+
 func runCLI(t *testing.T, args ...string) (string, string) {
 	return runCLIWithEnvironment(t, "456", args...)
 }

@@ -53,6 +53,7 @@ make build-mock
 ./mockposthog --routes
 ./mockposthog --addr 127.0.0.1:18118
 AGENT_POSTHOG_BASE_URL=http://127.0.0.1:18118 POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog orgs list
+make smoke-mock
 ```
 
 Useful mock edge cases:
