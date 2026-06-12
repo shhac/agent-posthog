@@ -19,6 +19,15 @@ func registerAuth(root *cobra.Command, globals *GlobalFlags) {
 	auth := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage PostHog credentials and profiles",
+		// KEYCHAIN-MIGRATION: Temporary root action for `agent-posthog auth --migrate`.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			migrated, err := credential.MigrateLegacyCredentials()
+			if err != nil {
+				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
+				return nil
+			}
+			return writeItem(map[string]any{"status": "migrated", "migrated": migrated}, "")
+		},
 	}
 	registerAuthAdd(auth)
 	registerAuthUpdate(auth)
