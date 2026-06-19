@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"os"
 	"strconv"
 	"time"
@@ -28,12 +27,6 @@ type resolvedContext struct {
 func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Context, *resolvedContext) error) error {
 	resolved, err := resolve(flags)
 	if err != nil {
-		// KEYCHAIN-MIGRATION: This one setup problem must hard-exit so users cannot miss it.
-		var migrationErr *credential.MigrationRequiredError
-		if errors.As(err, &migrationErr) {
-			output.WriteError(output.Stderr(), agenterrors.Wrap(migrationErr, agenterrors.FixableByHuman).WithHint(migrationErr.Hint()))
-			return err
-		}
 		output.WriteError(output.Stderr(), err)
 		return nil
 	}
@@ -68,8 +61,7 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	token := creds.FirstNonEmpty(flags.APIKey, os.Getenv("POSTHOG_PERSONAL_API_KEY"), os.Getenv("AGENT_POSTHOG_PERSONAL_API_KEY"))
 	if token == "" && profileName != "" {
 		var err error
-		// KEYCHAIN-MIGRATION: Require an explicit one-time migration when only the legacy service exists.
-		token, err = credential.GetWithMigration(profileName, flags.MigrateKeychain)
+		token, err = credential.Get(profileName)
 		if err != nil {
 			return nil, agenterrors.Wrap(err, agenterrors.FixableByHuman).
 				WithHint("Run 'agent-posthog auth add <profile> --form' to store a personal API key.")
