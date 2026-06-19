@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/shhac/lib-agent-cli/xdg"
 )
 
 const DefaultHost = "https://us.posthog.com"
@@ -45,11 +47,7 @@ func ConfigDir() string {
 	if overrideDir != "" {
 		return overrideDir
 	}
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "agent-posthog")
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "agent-posthog")
+	return xdg.ConfigDir("agent-posthog")
 }
 
 func ConfigPath() string {
