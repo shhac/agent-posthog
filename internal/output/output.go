@@ -165,32 +165,10 @@ func toCleanAny(data any, prune bool) (any, bool) {
 		return nil, false
 	}
 	if prune {
-		decoded = pruneNulls(decoded)
+		decoded = out.PruneNils(decoded)
 	}
 	decoded = redactSensitive(decoded)
 	return decoded, true
-}
-
-func pruneNulls(v any) any {
-	switch val := v.(type) {
-	case map[string]any:
-		o := make(map[string]any, len(val))
-		for k, v := range val {
-			if v == nil {
-				continue
-			}
-			o[k] = pruneNulls(v)
-		}
-		return o
-	case []any:
-		o := make([]any, len(val))
-		for i, v := range val {
-			o[i] = pruneNulls(v)
-		}
-		return o
-	default:
-		return v
-	}
 }
 
 func redactSensitive(v any) any {

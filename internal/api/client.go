@@ -128,7 +128,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 			continue
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, mapError(resp.StatusCode, raw)
+			return nil, mapError(resp.StatusCode, raw, retryAfter(resp.Header.Get("Retry-After")))
 		}
 		if len(raw) == 0 {
 			return json.RawMessage(`{}`), nil
@@ -180,7 +180,7 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 	return req, nil
 }
 
-func mapError(status int, raw []byte) error {
+func mapError(status int, raw []byte, retryAfter time.Duration) error {
 	detail := strings.TrimSpace(string(raw))
 	var payload struct {
 		Type   string `json:"type"`
@@ -209,8 +209,12 @@ func mapError(status int, raw []byte) error {
 		return agenterrors.New("Not found: "+detail, agenterrors.FixableByAgent).
 			WithHint("Check the current profile, organization, project, and environment IDs.")
 	case status == http.StatusTooManyRequests:
-		return agenterrors.New("Rate limited: "+detail, agenterrors.FixableByRetry).
+		err := agenterrors.New("Rate limited: "+detail, agenterrors.FixableByRetry).
 			WithHint("Wait and retry, or narrow the query/list page size.")
+		if retryAfter > 0 {
+			err = err.WithRetryAfter(retryAfter)
+		}
+		return err
 	case status >= 500:
 		return agenterrors.New(fmt.Sprintf("PostHog server error (%d): %s", status, detail), agenterrors.FixableByRetry)
 	default:
