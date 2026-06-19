@@ -18,8 +18,8 @@ github.com/randall77/makefat v0.0.0-20210315173500-7ddd0e42c844/go.mod h1:T1TLSf
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/shhac/lib-agent-cli v0.2.0 h1:O3qn3VJbnGaCbJijWu/IEGMWS4TAo0BMaaHkkSt7FS8=
 github.com/shhac/lib-agent-cli v0.2.0/go.mod h1:ybE6nb8sCZDX6wbYAxvhfjQSFNJCUj+7Vl25wMefp7c=
-github.com/shhac/lib-agent-output v0.4.2 h1:Geuij9kzYBAZFYZRn+p8zYCArN558nrDWpZgKE0Gamk=
-github.com/shhac/lib-agent-output v0.4.2/go.mod h1:YyO2KSKAZxRrCJGanfB6qAyV0DvG+GSsZNShQoLslT0=
+github.com/shhac/lib-agent-output v0.4.3 h1:mKQnMzCEM+Z5KG6CUbzk4eqYGeeS7pxy4MHrUylJNV0=
+github.com/shhac/lib-agent-output v0.4.3/go.mod h1:YyO2KSKAZxRrCJGanfB6qAyV0DvG+GSsZNShQoLslT0=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9 h1:9exaQaMOCwffKiiiYk6/BndUBv+iRViNW+4lEMi0PvY=
