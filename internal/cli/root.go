@@ -3,48 +3,52 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
+	libcli "github.com/shhac/lib-agent-cli/cli"
+
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
+// GlobalFlags carries the persistent flags shared by every command. The shared
+// --format/--timeout/--debug live in the embedded libcli.Globals; the rest are
+// PostHog domain flags (credential profile, org/project/environment scope, the
+// instance host, and a direct API-key override).
 type GlobalFlags struct {
+	libcli.Globals // Format, TimeoutMS, Debug
+
 	Profile       string
 	OrgID         string
 	ProjectID     int
 	EnvironmentID int
 	Host          string
 	APIKey        string
-	Format        string
-	Timeout       int
 	MaxRetries    int
-	Debug         bool
 	Full          bool
 }
 
 func newRootCmd(version string) *cobra.Command {
 	globals := &GlobalFlags{}
-	root := &cobra.Command{
-		Use:           "agent-posthog",
-		Short:         "PostHog product analytics CLI for AI agents",
-		Version:       version,
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			applyConfiguredDefaults(cmd, globals)
-		},
-	}
 
-	root.PersistentFlags().StringVarP(&globals.Profile, "profile", "p", "", "Profile alias (or AGENT_POSTHOG_PROFILE)")
-	root.PersistentFlags().StringVar(&globals.OrgID, "org", "", "PostHog organization ID override")
-	root.PersistentFlags().IntVar(&globals.ProjectID, "project", 0, "PostHog project ID override")
-	root.PersistentFlags().IntVar(&globals.EnvironmentID, "env", 0, "PostHog environment ID override")
-	root.PersistentFlags().StringVar(&globals.Host, "host", "", "PostHog private API host override")
-	root.PersistentFlags().StringVar(&globals.APIKey, "api-key", "", "Personal API key override; never printed or persisted")
-	root.PersistentFlags().StringVarP(&globals.Format, "format", "f", "", "Output format: json, yaml, jsonl")
-	root.PersistentFlags().IntVarP(&globals.Timeout, "timeout", "t", 0, "Request timeout in milliseconds")
-	root.PersistentFlags().IntVar(&globals.MaxRetries, "max-retries", 2, "Maximum automatic retries for transient responses")
-	root.PersistentFlags().BoolVarP(&globals.Debug, "debug", "d", false, "Log redacted HTTP debug records to stderr")
-	root.PersistentFlags().BoolVar(&globals.Full, "full", false, "Return fuller API payloads where supported")
+	var root *cobra.Command
+	root = libcli.NewRoot(libcli.Options{
+		Use:            "agent-posthog",
+		Short:          "PostHog product analytics CLI for AI agents",
+		Version:        version,
+		Globals:        &globals.Globals,
+		DefaultFormat:  output.FormatNDJSON,
+		ConfigDefaults: func() { applyConfiguredDefaults(root, globals) },
+		UnknownHint:    "run 'agent-posthog usage' to see the available domains",
+	})
+
+	pf := root.PersistentFlags()
+	pf.StringVarP(&globals.Profile, "profile", "p", "", "Profile alias (or AGENT_POSTHOG_PROFILE)")
+	pf.StringVar(&globals.OrgID, "org", "", "PostHog organization ID override")
+	pf.IntVar(&globals.ProjectID, "project", 0, "PostHog project ID override")
+	pf.IntVar(&globals.EnvironmentID, "env", 0, "PostHog environment ID override")
+	pf.StringVar(&globals.Host, "host", "", "PostHog private API host override")
+	pf.StringVar(&globals.APIKey, "api-key", "", "Personal API key override; never printed or persisted")
+	pf.IntVar(&globals.MaxRetries, "max-retries", 2, "Maximum automatic retries for transient responses")
+	pf.BoolVar(&globals.Full, "full", false, "Return fuller API payloads where supported")
 
 	registerUsageCommand(root)
 	registerCompletion(root)
@@ -64,21 +68,19 @@ func newRootCmd(version string) *cobra.Command {
 	return root
 }
 
-func applyConfiguredDefaults(cmd *cobra.Command, globals *GlobalFlags) {
+// Run builds the root command and executes it, rendering any bubbled error as
+// the family's structured JSON on stderr and exiting non-zero on failure.
+func Run(version string) {
+	libcli.Run(newRootCmd(version))
+}
+
+func applyConfiguredDefaults(root *cobra.Command, globals *GlobalFlags) {
 	cfg := config.Read()
-	flags := cmd.Root().PersistentFlags()
+	flags := root.PersistentFlags()
 	if cfg.Defaults.TimeoutMS != nil && !flags.Changed("timeout") {
-		globals.Timeout = *cfg.Defaults.TimeoutMS
+		globals.TimeoutMS = *cfg.Defaults.TimeoutMS
 	}
 	if cfg.Defaults.MaxRetries != nil && !flags.Changed("max-retries") {
 		globals.MaxRetries = *cfg.Defaults.MaxRetries
 	}
-}
-
-func Execute(version string) error {
-	err := newRootCmd(version).Execute()
-	if err != nil {
-		output.WriteError(output.Stderr(), err)
-	}
-	return err
 }

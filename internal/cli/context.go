@@ -30,7 +30,7 @@ func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Cont
 		output.WriteError(output.Stderr(), err)
 		return nil
 	}
-	timeout := time.Duration(flags.Timeout) * time.Millisecond
+	timeout := time.Duration(flags.TimeoutMS) * time.Millisecond
 	ctx := cmdCtx
 	if timeout > 0 {
 		var cancel context.CancelFunc
