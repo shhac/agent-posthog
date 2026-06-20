@@ -9,8 +9,7 @@ import (
 func writeItem(data any, flagFormat string) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
-		output.WriteError(output.Stderr(), err)
-		return nil
+		return err
 	}
 	output.Print(data, format, true)
 	return nil
@@ -23,8 +22,7 @@ func writeRaw(raw json.RawMessage, flagFormat string) error {
 func writeRawResource(raw json.RawMessage, flagFormat string, full bool) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
-		output.WriteError(output.Stderr(), err)
-		return nil
+		return err
 	}
 	if !full {
 		raw = compactRaw(raw)
@@ -40,8 +38,7 @@ func writeList(items []json.RawMessage, nextURL string, flagFormat string) error
 func writeListResource(items []json.RawMessage, nextURL string, flagFormat string, full bool) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
 	if err != nil {
-		output.WriteError(output.Stderr(), err)
-		return nil
+		return err
 	}
 	if !full {
 		items = compactRawItems(items)

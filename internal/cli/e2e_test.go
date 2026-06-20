@@ -289,8 +289,11 @@ func runCLIWithTokenAndEnvironment(t *testing.T, token, envID string, args ...st
 
 	cmd := newRootCmd("test")
 	cmd.SetArgs(args)
+	// Mirror libcli.Run: errors bubble out of Execute unrendered, and the single
+	// sink renders them once to stderr. We render to the captured writer here so
+	// the test sees exactly what Run would emit, exercising the single-sink path.
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		output.WriteError(output.Stderr(), err)
 	}
 	return stdout.String(), stderr.String()
 }

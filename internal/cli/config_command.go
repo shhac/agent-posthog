@@ -7,7 +7,6 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/config"
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerConfig(root *cobra.Command) {
@@ -42,12 +41,10 @@ func configSetCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var value int
 			if _, err := fmt.Sscanf(args[1], "%d", &value); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByAgent))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			if err := config.SetDefaultValue(args[0], value); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByAgent))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			return writeItem(map[string]any{"status": "set", "key": args[0], "value": value}, "")
 		},
@@ -62,8 +59,7 @@ func configUnsetCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := config.UnsetDefaultValue(args[0]); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByAgent))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			return writeItem(map[string]any{"status": "unset", "key": args[0]}, "")
 		},

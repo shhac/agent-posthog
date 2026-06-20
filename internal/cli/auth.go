@@ -10,7 +10,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/credential"
 	"github.com/shhac/agent-posthog/internal/dialog"
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 var promptSecret = dialog.PromptSecret
@@ -44,21 +43,18 @@ func registerAuthAdd(parent *cobra.Command) {
 				filled, err := promptSecret(cmd.Context(), "agent-posthog: "+alias, "PostHog personal API key", apiKey)
 				if err != nil {
 					fixableBy, hint := dialog.Classify(err)
-					output.WriteError(output.Stderr(), agenterrors.Wrap(err, fixableBy).WithHint(hint))
-					return nil
+					return agenterrors.Wrap(err, fixableBy).WithHint(hint)
 				}
 				apiKey = filled
 			}
 			if apiKey == "" {
-				output.WriteError(output.Stderr(), agenterrors.New("missing --api-key", agenterrors.FixableByAgent).
-					WithHint("Agents should use 'agent-posthog auth add <profile> --form' so the key never appears in chat."))
-				return nil
+				return agenterrors.New("missing --api-key", agenterrors.FixableByAgent).
+					WithHint("Agents should use 'agent-posthog auth add <profile> --form' so the key never appears in chat.")
 			}
 			storage, err := credential.Store(alias, apiKey)
 			if err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman).
-					WithHint("The personal API key was not written to disk. Fix Keychain access and retry with --form."))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByHuman).
+					WithHint("The personal API key was not written to disk. Fix Keychain access and retry with --form.")
 			}
 			profile := config.Profile{
 				Host:           host,
@@ -67,8 +63,7 @@ func registerAuthAdd(parent *cobra.Command) {
 				EnvironmentID:  envID,
 			}
 			if err := config.StoreProfile(alias, profile); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
 			cfg := config.Read()
 			stored := cfg.Profiles[alias]
@@ -105,9 +100,8 @@ func registerAuthUpdate(parent *cobra.Command) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias := args[0]
 			if !cmd.Flags().Changed("host") && !cmd.Flags().Changed("org") && !cmd.Flags().Changed("project") && !cmd.Flags().Changed("env") && !clearOrg && !clearProject && !clearEnv && !setDefault {
-				output.WriteError(output.Stderr(), agenterrors.New("no profile updates requested", agenterrors.FixableByAgent).
-					WithHint("Use --host, --org, --project, --env, --clear-org, --clear-project, --clear-env, or --default."))
-				return nil
+				return agenterrors.New("no profile updates requested", agenterrors.FixableByAgent).
+					WithHint("Use --host, --org, --project, --env, --clear-org, --clear-project, --clear-env, or --default.")
 			}
 			if err := config.UpdateProfile(alias, func(profile config.Profile) config.Profile {
 				if cmd.Flags().Changed("host") {
@@ -133,14 +127,12 @@ func registerAuthUpdate(parent *cobra.Command) {
 				}
 				return profile
 			}); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman).
-					WithHint("Run 'agent-posthog auth list' to see configured profiles."))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByHuman).
+					WithHint("Run 'agent-posthog auth list' to see configured profiles.")
 			}
 			if setDefault {
 				if err := config.SetDefault(alias); err != nil {
-					output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
-					return nil
+					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 				}
 			}
 			cfg := config.Read()
@@ -206,8 +198,7 @@ func registerAuthDefault(parent *cobra.Command) {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := config.SetDefault(args[0]); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
 			return writeItem(map[string]any{"status": "default_set", "profile": args[0]}, "")
 		},
@@ -248,12 +239,10 @@ func registerAuthRemove(parent *cobra.Command) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias := args[0]
 			if err := credential.Remove(alias); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
 			if err := config.RemoveProfile(alias); err != nil {
-				output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
-				return nil
+				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
 			return writeItem(map[string]any{"status": "removed", "profile": alias}, "")
 		},

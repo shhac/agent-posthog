@@ -69,8 +69,7 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 			if file != "" {
 				data, err := os.ReadFile(file)
 				if err != nil {
-					output.WriteError(output.Stderr(), err)
-					return nil
+					return err
 				}
 				sql = string(data)
 			} else {
@@ -107,13 +106,11 @@ func queryJSONCommand(globals *GlobalFlags) *cobra.Command {
 				data, err = os.ReadFile(bodyFile)
 			}
 			if err != nil {
-				output.WriteError(output.Stderr(), err)
-				return nil
+				return err
 			}
 			var body map[string]any
 			if err := json.Unmarshal(data, &body); err != nil {
-				output.WriteError(output.Stderr(), err)
-				return nil
+				return err
 			}
 			return runQuery(cmd.Context(), globals, body)
 		},
@@ -133,8 +130,7 @@ func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any)
 		}
 		format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
 		if err != nil {
-			output.WriteError(output.Stderr(), err)
-			return nil
+			return err
 		}
 		return writeQueryResult(raw, format)
 	})
@@ -170,8 +166,7 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 					if status.Complete {
 						format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
 						if err != nil {
-							output.WriteError(output.Stderr(), err)
-							return nil
+							return err
 						}
 						return writeQueryResult(raw, format)
 					}

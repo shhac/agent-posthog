@@ -65,7 +65,30 @@ func newRootCmd(version string) *cobra.Command {
 	registerInvestigate(root, globals)
 	registerAPI(root, globals)
 
+	installUnknownSubcommandHandlers(root)
+
 	return root
+}
+
+// installUnknownSubcommandHandlers walks every command group (a command with
+// subcommands but no action of its own) and installs the family's structured
+// unknown-subcommand handler, so 'agent-posthog <group> bogus' returns a
+// fixable_by:agent error listing the valid subcommands instead of plain help.
+// The root already has its own handler from NewRoot, so it is skipped.
+func installUnknownSubcommandHandlers(root *cobra.Command) {
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		for _, sub := range cmd.Commands() {
+			if !sub.HasSubCommands() {
+				continue
+			}
+			if sub.RunE == nil && sub.Run == nil {
+				libcli.HandleUnknownCommand(sub, "run 'agent-posthog usage' to see the available domains")
+			}
+			walk(sub)
+		}
+	}
+	walk(root)
 }
 
 // Run builds the root command and executes it, rendering any bubbled error as

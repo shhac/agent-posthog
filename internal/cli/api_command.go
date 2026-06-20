@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerAPI(root *cobra.Command, globals *GlobalFlags) {
@@ -34,13 +33,11 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := args[0]
 			if !strings.HasPrefix(path, "/api/") {
-				output.WriteError(output.Stderr(), agenterrors.New("raw API paths must start with /api/", agenterrors.FixableByAgent))
-				return nil
+				return agenterrors.New("raw API paths must start with /api/", agenterrors.FixableByAgent)
 			}
 			if method == http.MethodPost && !strings.Contains(path, "/query/") && !yes {
-				output.WriteError(output.Stderr(), agenterrors.New("raw POST outside query endpoints requires --yes", agenterrors.FixableByHuman).
-					WithHint("Many PostHog POST endpoints mutate state. Use a typed command when available."))
-				return nil
+				return agenterrors.New("raw POST outside query endpoints requires --yes", agenterrors.FixableByHuman).
+					WithHint("Many PostHog POST endpoints mutate state. Use a typed command when available.")
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				q := queryValuesFromPairs(queryPairs)

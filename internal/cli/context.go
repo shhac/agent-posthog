@@ -27,8 +27,7 @@ type resolvedContext struct {
 func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Context, *resolvedContext) error) error {
 	resolved, err := resolve(flags)
 	if err != nil {
-		output.WriteError(output.Stderr(), err)
-		return nil
+		return err
 	}
 	timeout := time.Duration(flags.TimeoutMS) * time.Millisecond
 	ctx := cmdCtx
@@ -37,11 +36,7 @@ func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Cont
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	if err := fn(ctx, resolved); err != nil {
-		output.WriteError(output.Stderr(), err)
-		return nil
-	}
-	return nil
+	return fn(ctx, resolved)
 }
 
 func resolve(flags *GlobalFlags) (*resolvedContext, error) {
