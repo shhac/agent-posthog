@@ -24,7 +24,7 @@ func registerUsageCommand(root *cobra.Command) {
 					"agent-posthog flags get checkout-v2",
 					"agent-posthog dashboards run <dashboard-id>",
 				},
-				"output": "Lists, queries, and investigations default to NDJSON. Single resources default to JSON. Errors are JSON on stderr with fixable_by.",
+				"output": "Lists, queries, and investigations default to NDJSON. Single resources default to JSON. Errors: stderr JSON {\"error\":\"...\",\"fixable_by\":\"agent\"|\"human\"|\"retry\",\"hint\"?:\"...\",\"retry_after_seconds\"?:N}, exit 1.",
 				"safety": "Never paste API keys into chat. Use auth add --form so the secret goes directly to a local OS dialog.",
 			}, "")
 		},

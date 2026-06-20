@@ -10,7 +10,7 @@ error hints, and no direct access to PostHog secrets.
 - Multi-profile support: profiles carry host plus default organization, project,
   and environment IDs.
 - LLM-shaped output: lists and queries default to NDJSON, single resources to JSON.
-- Structured errors: stderr JSON includes `fixable_by: agent|human|retry`.
+- Structured errors: stderr JSON `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
 - Mock server: `mockposthog` provides deterministic E2E fixtures.
 - Agent onboarding: ships with `skills/agent-posthog/SKILL.md`.
 
