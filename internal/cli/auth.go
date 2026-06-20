@@ -43,7 +43,8 @@ func registerAuthAdd(parent *cobra.Command) {
 			if form {
 				filled, err := promptSecret(cmd.Context(), "agent-posthog: "+alias, "PostHog personal API key", apiKey)
 				if err != nil {
-					output.WriteError(output.Stderr(), agenterrors.Wrap(err, agenterrors.FixableByHuman))
+					fixableBy, hint := dialog.Classify(err)
+					output.WriteError(output.Stderr(), agenterrors.Wrap(err, fixableBy).WithHint(hint))
 					return nil
 				}
 				apiKey = filled
