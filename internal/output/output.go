@@ -7,7 +7,6 @@
 package output
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -15,7 +14,11 @@ import (
 	"sync"
 
 	out "github.com/shhac/lib-agent-output"
-	"gopkg.in/yaml.v3"
+
+	// YAML support (and its yaml.v3 dependency) comes from the shared encoder in
+	// lib-agent-cli; the blank import registers it for out.FormatYAML, keeping the
+	// core lib-agent-output module dependency-free.
+	_ "github.com/shhac/lib-agent-cli/yaml"
 )
 
 // Format and its values come from the shared contract; ParseFormat is therefore
@@ -40,22 +43,6 @@ var (
 	ResolveFormat = out.ResolveFormat
 	WriteError    = out.WriteError
 )
-
-// init registers agent-posthog's YAML encoder with lib-agent-output, so YAML
-// support (and its yaml.v3 dependency) stays in this CLI while the core library
-// remains dependency-free.
-func init() {
-	out.RegisterEncoder(out.FormatYAML, func(v any) ([]byte, error) {
-		var buf bytes.Buffer
-		enc := yaml.NewEncoder(&buf)
-		enc.SetIndent(2)
-		if err := enc.Encode(v); err != nil {
-			return nil, err
-		}
-		_ = enc.Close()
-		return buf.Bytes(), nil
-	})
-}
 
 var (
 	writersMu sync.RWMutex
