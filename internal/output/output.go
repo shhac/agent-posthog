@@ -110,16 +110,14 @@ type Pagination struct {
 }
 
 // NDJSONWriter wraps the shared writer with agent-posthog's clean step (prune +
-// redact) on every record.
+// redact) on every record, delegating the encode to the shared writer so NDJSON
+// output picks up the family's per-stream color.
 type NDJSONWriter struct {
-	w   io.Writer
-	enc *json.Encoder
+	inner *out.NDJSONWriter
 }
 
 func NewNDJSONWriter(w io.Writer) *NDJSONWriter {
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	return &NDJSONWriter{w: w, enc: enc}
+	return &NDJSONWriter{inner: out.NewNDJSONWriter(w)}
 }
 
 func (n *NDJSONWriter) WriteItem(item any) error {
@@ -127,7 +125,7 @@ func (n *NDJSONWriter) WriteItem(item any) error {
 	if !ok {
 		return nil
 	}
-	return n.enc.Encode(cleaned)
+	return n.inner.WriteItem(cleaned)
 }
 
 func (n *NDJSONWriter) WriteMetaLine(key string, value any) error {
@@ -135,7 +133,7 @@ func (n *NDJSONWriter) WriteMetaLine(key string, value any) error {
 	if !ok {
 		return nil
 	}
-	return n.enc.Encode(map[string]any{key: cleaned})
+	return n.inner.WriteMetaLine(key, cleaned)
 }
 
 func (n *NDJSONWriter) WritePagination(p *Pagination) error {
