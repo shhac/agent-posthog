@@ -3,7 +3,7 @@ module github.com/shhac/agent-posthog
 go 1.26.2
 
 require (
-	github.com/shhac/lib-agent-cli v0.4.2
+	github.com/shhac/lib-agent-cli v0.5.0
 	github.com/shhac/lib-agent-output v0.4.3
 	github.com/spf13/cobra v1.10.2
 )

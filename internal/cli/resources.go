@@ -8,9 +8,11 @@ import (
 	"strconv"
 	"strings"
 
+	libcli "github.com/shhac/lib-agent-cli/cli"
 	"github.com/spf13/cobra"
 
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerOrgs(root *cobra.Command, globals *GlobalFlags) {
@@ -18,7 +20,7 @@ func registerOrgs(root *cobra.Command, globals *GlobalFlags) {
 	cmd.AddCommand(listCommand("list", "List organizations", globals, func(ctx *resolvedContext) (string, url.Values, error) {
 		return "/api/organizations/", url.Values{}, nil
 	}))
-	cmd.AddCommand(getCommand("get <org-id>", "Get an organization", globals, func(ctx *resolvedContext, id string) (string, error) {
+	cmd.AddCommand(entityGetCommand("get <org-id>...", "Get one or more organizations", globals, func(ctx *resolvedContext, id string) (string, error) {
 		return "/api/organizations/" + id + "/", nil
 	}))
 	root.AddCommand(cmd)
@@ -32,7 +34,7 @@ func registerProjects(root *cobra.Command, globals *GlobalFlags) {
 		}
 		return "/api/organizations/" + ctx.OrgID + "/projects/", url.Values{}, nil
 	}))
-	cmd.AddCommand(getCommand("get <project-id>", "Get a project", globals, func(ctx *resolvedContext, id string) (string, error) {
+	cmd.AddCommand(entityGetCommand("get <project-id>...", "Get one or more projects", globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireOrg(ctx); err != nil {
 			return "", err
 		}
@@ -49,7 +51,7 @@ func registerEnvironments(root *cobra.Command, globals *GlobalFlags) {
 		}
 		return fmt.Sprintf("/api/projects/%d/environments/", ctx.ProjectID), url.Values{}, nil
 	}))
-	cmd.AddCommand(getCommand("get <environment-id>", "Get an environment", globals, func(ctx *resolvedContext, id string) (string, error) {
+	cmd.AddCommand(entityGetCommand("get <environment-id>...", "Get one or more environments", globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireProject(ctx); err != nil {
 			return "", err
 		}
@@ -93,27 +95,36 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 	addListPagingFlags(eventsList, &eventListOpts, 100)
 	events.AddCommand(eventsList)
 	events.AddCommand(&cobra.Command{
-		Use:   "get <event-id-or-name>",
-		Short: "Get an event definition by ID or name",
-		Args:  cobra.ExactArgs(1),
+		Use:   "get <event-id-or-name>...",
+		Short: "Get one or more event definitions by ID or name",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				if _, err := strconv.Atoi(args[0]); err == nil {
-					raw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/event_definitions/%s/", resolved.ProjectID, args[0]), nil)
+			var resolved *resolvedContext
+			return libcli.EntityGet(output.Stdout(), globals.Format, args, func(id string) (any, error) {
+				if resolved == nil {
+					var err error
+					resolved, err = resolve(globals)
 					if err != nil {
-						return err
+						return nil, err
 					}
-					return writeRaw(raw, globals.Format)
+				}
+				if err := requireProject(resolved); err != nil {
+					return nil, err
+				}
+				ctx := cmd.Context()
+				if _, err := strconv.Atoi(id); err == nil {
+					raw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/event_definitions/%s/", resolved.ProjectID, id), nil)
+					if err != nil {
+						return nil, err
+					}
+					return decodeRaw(raw), nil
 				}
 				q := baseValues(200)
 				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/projects/%d/event_definitions/", resolved.ProjectID), q)
 				if err != nil {
-					return err
+					return nil, err
 				}
-				return writeResolvedByField(page.Results, "name", args[0], globals.Format, "event definition")
+				return resolveByField(page.Results, "name", id, "event definition")
 			})
 		},
 	})
@@ -185,7 +196,7 @@ func registerPersons(root *cobra.Command, globals *GlobalFlags) {
 	list.Flags().StringVar(&distinctID, "distinct-id", "", "Distinct ID filter")
 	addListPagingFlags(list, &opts, 100)
 	cmd.AddCommand(list)
-	cmd.AddCommand(getCommand("get <person-id>", "Get a person", globals, func(ctx *resolvedContext, id string) (string, error) {
+	cmd.AddCommand(entityGetCommand("get <person-id>...", "Get one or more persons", globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireEnvironment(ctx); err != nil {
 			return "", err
 		}
@@ -232,7 +243,7 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	list.Flags().StringVar(&search, "search", "", "Search feature flags")
 	addListPagingFlags(list, &opts, 100)
 	flags.AddCommand(list)
-	flags.AddCommand(flagGetCommand(globals, "get <id-or-key>", "Get a feature flag", ""))
+	flags.AddCommand(flagEntityGetCommand(globals))
 	flags.AddCommand(flagGetCommand(globals, "dependent <id-or-key>", "List dependent feature flags", "dependent_flags"))
 	flags.AddCommand(flagGetCommand(globals, "activity <id-or-key>", "Get feature flag activity", "activity"))
 	root.AddCommand(flags)
@@ -281,7 +292,7 @@ func registerEnvironmentDomain(root *cobra.Command, globals *GlobalFlags, name, 
 		}
 		return fmt.Sprintf("/api/environments/%d/%s/", ctx.EnvironmentID, apiName), url.Values{}, nil
 	}))
-	cmd.AddCommand(getCommand("get <id>", "Get "+name, globals, func(ctx *resolvedContext, id string) (string, error) {
+	cmd.AddCommand(entityGetCommand("get <id>...", "Get one or more "+name, globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireEnvironment(ctx); err != nil {
 			return "", err
 		}
@@ -306,7 +317,7 @@ func registerProjectDomain(root *cobra.Command, globals *GlobalFlags, name, shor
 		}
 		return fmt.Sprintf("/api/projects/%d/%s/", ctx.ProjectID, apiName), url.Values{}, nil
 	}))
-	cmd.AddCommand(getCommand("get <id>", "Get "+name, globals, func(ctx *resolvedContext, id string) (string, error) {
+	cmd.AddCommand(entityGetCommand("get <id>...", "Get one or more "+name, globals, func(ctx *resolvedContext, id string) (string, error) {
 		if err := requireProject(ctx); err != nil {
 			return "", err
 		}
@@ -373,26 +384,6 @@ func filterRaw(items []json.RawMessage, search string) []json.RawMessage {
 	return out
 }
 
-func writeResolvedByField(items []json.RawMessage, field, value, format, label string) error {
-	var matches []json.RawMessage
-	for _, raw := range items {
-		var m map[string]any
-		if err := json.Unmarshal(raw, &m); err != nil {
-			continue
-		}
-		if fmt.Sprint(m[field]) == value {
-			matches = append(matches, raw)
-		}
-	}
-	if len(matches) == 0 {
-		return agenterrors.New("No "+label+" matched "+value, agenterrors.FixableByAgent)
-	}
-	if len(matches) > 1 {
-		return agenterrors.New("Multiple "+label+" records matched "+value, agenterrors.FixableByAgent).
-			WithHint("Use the numeric ID instead.")
-	}
-	return writeRaw(matches[0], format)
-}
 
 func resolveFlagID(ctx context.Context, resolved *resolvedContext, idOrKey string) (string, error) {
 	if _, err := strconv.Atoi(idOrKey); err == nil {
@@ -421,6 +412,107 @@ func resolveFlagID(ctx context.Context, resolved *resolvedContext, idOrKey strin
 	if len(matches) > 1 {
 		return "", agenterrors.New("Multiple feature flags matched key "+idOrKey, agenterrors.FixableByAgent).
 			WithHint("Use the numeric feature flag ID.")
+	}
+	return matches[0], nil
+}
+
+// entityGetCommand wraps the family get contract (1..N ids, NDJSON by default)
+// around the existing URL-based path builder used across posthog entity commands.
+func entityGetCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedContext, string) (string, error)) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var resolved *resolvedContext
+			return libcli.EntityGet(output.Stdout(), globals.Format, args, func(id string) (any, error) {
+				if resolved == nil {
+					var err error
+					resolved, err = resolve(globals)
+					if err != nil {
+						return nil, err
+					}
+				}
+				path, err := pathFn(resolved, id)
+				if err != nil {
+					return nil, err
+				}
+				raw, err := resolved.Client.Get(cmd.Context(), path, nil)
+				if err != nil {
+					return nil, err
+				}
+				return decodeRaw(raw), nil
+			})
+		},
+	}
+}
+
+// flagEntityGetCommand supports `flags get <id-or-key>...` with key resolution
+// and the family multi-get contract.
+func flagEntityGetCommand(globals *GlobalFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "get <id-or-key>...",
+		Short: "Get one or more feature flags by ID or key",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var resolved *resolvedContext
+			return libcli.EntityGet(output.Stdout(), globals.Format, args, func(idOrKey string) (any, error) {
+				if resolved == nil {
+					var err error
+					resolved, err = resolve(globals)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if err := requireProject(resolved); err != nil {
+					return nil, err
+				}
+				ctx := cmd.Context()
+				id, err := resolveFlagID(ctx, resolved, idOrKey)
+				if err != nil {
+					return nil, err
+				}
+				raw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/feature_flags/%s/", resolved.ProjectID, id), nil)
+				if err != nil {
+					return nil, err
+				}
+				return decodeRaw(raw), nil
+			})
+		},
+	}
+}
+
+// decodeRaw unmarshals a JSON blob into an any so EntityGet can re-encode it.
+// Falls back to the raw bytes on decode failure to preserve the graceful
+// degradation property: never hard-fail on output that doesn't parse.
+func decodeRaw(raw json.RawMessage) any {
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return raw
+	}
+	return v
+}
+
+// resolveByField looks up a single record by the given field value in a list.
+// It returns a FixableByAgent error if zero or multiple records match, keeping
+// misses as item-level unresolved rather than aborting the batch.
+func resolveByField(items []json.RawMessage, field, value, label string) (any, error) {
+	var matches []any
+	for _, raw := range items {
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			continue
+		}
+		if fmt.Sprint(m[field]) == value {
+			matches = append(matches, m)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, agenterrors.New("No "+label+" matched "+value, agenterrors.FixableByAgent)
+	}
+	if len(matches) > 1 {
+		return nil, agenterrors.New("Multiple "+label+" records matched "+value, agenterrors.FixableByAgent).
+			WithHint("Use the numeric ID instead.")
 	}
 	return matches[0], nil
 }
