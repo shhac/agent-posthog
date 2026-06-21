@@ -9,8 +9,15 @@ import (
 	"github.com/shhac/agent-posthog/internal/config"
 )
 
+// keychainSentinel is stored in the index in place of the real key when the
+// secret lives in the macOS keychain. When the keychain is unavailable (non-
+// macOS, or opted out via AGENT_POSTHOG_NO_KEYCHAIN / LIB_AGENT_NO_KEYCHAIN),
+// the raw key is kept in the 0600 index file instead.
+const keychainSentinel = "__KEYCHAIN__"
+
 type credentialEntry struct {
-	KeychainManaged bool `json:"keychain_managed"`
+	APIKey          string `json:"api_key,omitempty"`
+	KeychainManaged bool   `json:"keychain_managed"`
 }
 
 type NotFoundError struct {
@@ -25,20 +32,29 @@ func credentialsPath() string {
 	return filepath.Join(config.ConfigDir(), "credentials.json")
 }
 
+// Store persists a credential. It prefers the macOS keychain; when the keychain
+// is unavailable (non-macOS, or opted out), it keeps the raw key in the 0600
+// index file instead. Returns "keychain" or "file" so the caller can surface the
+// choice.
 func Store(name, apiKey string) (string, error) {
-	if err := keychainStore(name, apiKey); err != nil {
-		return "", err
-	}
-
 	index, err := readIndex()
 	if err != nil {
 		return "", err
 	}
-	index[name] = credentialEntry{KeychainManaged: true}
+
+	entry := credentialEntry{APIKey: apiKey}
+	storage := "file"
+	if err := keychainStore(name, apiKey); err == nil {
+		entry.APIKey = keychainSentinel
+		entry.KeychainManaged = true
+		storage = "keychain"
+	}
+
+	index[name] = entry
 	if err := writeIndex(index); err != nil {
 		return "", err
 	}
-	return "keychain", nil
+	return storage, nil
 }
 
 func Get(name string) (string, error) {
@@ -50,10 +66,10 @@ func Get(name string) (string, error) {
 	if !ok {
 		return "", &NotFoundError{Name: name}
 	}
-	if !entry.KeychainManaged {
-		return "", fmt.Errorf("profile %q is not keychain managed", name)
+	if entry.KeychainManaged {
+		return keychainGet(name)
 	}
-	return keychainGet(name)
+	return entry.APIKey, nil
 }
 
 func Remove(name string) error {
