@@ -161,10 +161,18 @@ Config file shape:
 Default formats:
 
 - list/search/query/investigation streams: NDJSON (`jsonl`)
-- single resources: JSON
+- entity gets (`get <id>...`): NDJSON by default — one line per id (the record,
+  or `{"@unresolved":{"id","reason","fixable_by","hint"?}}` for missing ids).
+  Pass `--format json` for a single pretty object (one-id case), or
+  `--format json|yaml` to collapse to `{"data":[…],"@unresolved":[…]}` envelope.
 - `--format yaml` allowed for humans
 - `--full` returns unshaped API payloads where possible
 - compact output is null-pruned by default
+
+**Get contract.** `get <id>...` takes 1..N ids and emits one stdout line per
+input in order. Item-level misses (not found, bad key) → `@unresolved` line on
+stdout, exit 0. Command-level failures (auth, network, zero args) → structured
+`{error}` on stderr, empty stdout, exit 1. This is the only use of stderr/exit 1.
 
 NDJSON should use data rows plus `@` meta rows:
 

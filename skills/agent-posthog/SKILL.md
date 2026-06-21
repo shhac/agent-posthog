@@ -50,12 +50,15 @@ AGENT_POSTHOG_BASE_URL=http://127.0.0.1:18118 POSTHOG_PERSONAL_API_KEY=phx_mock 
 ```bash
 agent-posthog schema events list --search signup
 agent-posthog schema events get "$pageview"
+agent-posthog schema events get <id1> <id2>
 agent-posthog schema properties list --event "$pageview"
 agent-posthog query hogql "select event, count() from events group by event order by count() desc limit 20"
 agent-posthog persons list --email user@example.com
 agent-posthog persons get <person-id>
+agent-posthog persons get <id1> <id2>
 agent-posthog flags list --search checkout
 agent-posthog flags get checkout-v2
+agent-posthog flags get <key1> <key2>
 agent-posthog insights list
 agent-posthog dashboards run <dashboard-id>
 agent-posthog recordings list
@@ -67,8 +70,21 @@ queries use real event/property names.
 
 ## Output
 
-Lists, queries, and investigation commands default to NDJSON. Single resources
-default to JSON. Errors include `fixable_by` and usually a `hint`.
+**Get (single + multi).** `get <id>...` takes one or more ids and returns one
+result per id, in input order. Default output is NDJSON: one line per id —
+the record, or `{"@unresolved":{"id","reason","fixable_by","hint"?}}` for an id
+that couldn't be resolved (e.g. not found / bad id). `--format json|yaml`
+collapses to one `{"data":[…], "@unresolved":[…]}` envelope. A single
+`get <id>` is just the one-element case (NDJSON one line by default; was pretty
+JSON before — pass `--format json` for the object). Item-level misses stay on
+stdout and exit 0; only a command-level failure (auth, network) goes to stderr
+with exit 1 and empty stdout.
+
+Lists, queries, and investigation commands default to NDJSON. Errors include
+`fixable_by` and usually a `hint`. Full error shape: stderr JSON
+`{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
 
 Feature flag key lookup is CLI sugar: when a command accepts `<id-or-key>`, the
 CLI resolves keys by listing/searching flags and then fetching the numeric ID.
+A key that matches no flag (or matches multiple) yields an `@unresolved` line
+(exit 0) rather than a command-level stderr failure.
