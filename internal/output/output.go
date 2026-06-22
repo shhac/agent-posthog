@@ -152,35 +152,28 @@ func toCleanAny(data any, prune bool) (any, bool) {
 	if prune {
 		decoded = out.PruneNils(decoded)
 	}
-	decoded = redactSensitive(decoded)
+	decoded = out.Redact(decoded, postHogSecrets(), redactExpose)
 	return decoded, true
 }
 
-func redactSensitive(v any) any {
-	switch val := v.(type) {
-	case map[string]any:
-		o := make(map[string]any, len(val))
-		for key, value := range val {
-			if isSensitiveKey(key) {
-				o[key] = "REDACTED"
-				continue
-			}
-			o[key] = redactSensitive(value)
+// redactExpose is the --expose allowlist, set once from the global flag.
+var redactExpose []string
+
+// SetExpose records the --expose allowlist used by redaction (the global
+// --expose flag, wired from the root command's defaults hook).
+func SetExpose(expose []string) { redactExpose = expose }
+
+// postHogSecrets is agent-posthog's redaction POLICY: mask known secret-named
+// fields and any string value matching a PostHog key prefix. The shared
+// out.Redact owns the MECHANISM — the walk, the [REDACTED] placeholder, the
+// @redacted notes, and --expose handling.
+func postHogSecrets() out.RedactRule {
+	return func(_, key string, value any, _ map[string]any) bool {
+		if isSensitiveKey(key) {
+			return true
 		}
-		return o
-	case []any:
-		o := make([]any, len(val))
-		for i, v := range val {
-			o[i] = redactSensitive(v)
-		}
-		return o
-	case string:
-		if looksLikePostHogSecret(val) {
-			return "REDACTED"
-		}
-		return val
-	default:
-		return v
+		s, ok := value.(string)
+		return ok && looksLikePostHogSecret(s)
 	}
 }
 

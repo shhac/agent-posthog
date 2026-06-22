@@ -40,10 +40,10 @@ func TestRedactionStillApplies(t *testing.T) {
 		t.Fatal("toCleanAny failed")
 	}
 	m := cleaned.(map[string]any)
-	if m["api_key"] != "REDACTED" {
+	if m["api_key"] != "[REDACTED]" {
 		t.Errorf("sensitive key not redacted: %v", m["api_key"])
 	}
-	if m["note"] != "REDACTED" {
+	if m["note"] != "[REDACTED]" {
 		t.Errorf("posthog secret prefix not redacted: %v", m["note"])
 	}
 	if m["safe"] != "keep" {

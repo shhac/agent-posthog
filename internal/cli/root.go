@@ -106,4 +106,5 @@ func applyConfiguredDefaults(root *cobra.Command, globals *GlobalFlags) {
 	if cfg.Defaults.MaxRetries != nil && !flags.Changed("max-retries") {
 		globals.MaxRetries = *cfg.Defaults.MaxRetries
 	}
+	output.SetExpose(globals.Expose)
 }

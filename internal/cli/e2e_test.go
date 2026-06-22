@@ -166,7 +166,7 @@ func TestRecordingSharingRedactsAccessToken(t *testing.T) {
 	if errOut != "" {
 		t.Fatalf("stderr = %s", errOut)
 	}
-	if strings.Contains(out, "phs_recording_share_secret") || !strings.Contains(out, `"access_token": "REDACTED"`) {
+	if strings.Contains(out, "phs_recording_share_secret") || !strings.Contains(out, `"access_token": "[REDACTED]"`) {
 		t.Fatalf("stdout = %s", out)
 	}
 }
