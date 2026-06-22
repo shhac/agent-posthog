@@ -31,10 +31,6 @@ func writeRawResource(raw json.RawMessage, flagFormat string, full bool) error {
 	return nil
 }
 
-func writeList(items []json.RawMessage, nextURL string, flagFormat string) error {
-	return writeListResource(items, nextURL, flagFormat, false)
-}
-
 func writeListResource(items []json.RawMessage, nextURL string, flagFormat string, full bool) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
 	if err != nil {

@@ -225,7 +225,7 @@ func registerAuthList(parent *cobra.Command) {
 				})
 				rows = append(rows, row)
 			}
-			return writeList(rows, "", "")
+			return writeListNDJSON(rows, "")
 		},
 	}
 	parent.AddCommand(cmd)
