@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/mockposthog"
 	"github.com/shhac/agent-posthog/internal/output"
 	"net/http/httptest"
@@ -285,6 +286,11 @@ func runCLIWithToken(t *testing.T, token string, args ...string) (string, string
 
 func runCLIWithTokenAndEnvironment(t *testing.T, token, envID string, args ...string) (string, string) {
 	t.Helper()
+	// Isolate from the developer's real on-disk config: resolve() ranks
+	// profile.{Org,Project,Environment}ID ahead of the env vars set below, so a
+	// configured default profile would otherwise shadow the mock fixtures.
+	config.SetConfigDir(t.TempDir())
+	t.Cleanup(func() { config.SetConfigDir("") })
 	server := httptest.NewServer(mockposthog.NewServer())
 	t.Cleanup(server.Close)
 	t.Setenv("AGENT_POSTHOG_BASE_URL", server.URL)
