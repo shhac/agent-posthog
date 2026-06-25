@@ -8,7 +8,9 @@ error hints, and no direct access to PostHog secrets.
 
 - Keychain-first credentials: personal API keys are never printed back.
 - Multi-profile support: profiles carry host plus default organization, project,
-  and environment IDs.
+  and environment IDs. The environment defaults to the project when unset — a
+  project's default environment shares the project's ID, so most setups only set
+  `--project`. Override `--env` only to target a non-default environment.
 - LLM-shaped output: lists and queries default to NDJSON. Entity gets (`get <id>...`) default to NDJSON (one line per id); pass `--format json` for a single pretty object. Multi-id gets interleave `{"@unresolved":{...}}` lines for missing ids (exit 0); command-level failures go to stderr with exit 1.
 - Structured errors: stderr JSON `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
 - Mock server: `mockposthog` provides deterministic E2E fixtures.
@@ -22,8 +24,10 @@ make build
 ./agent-posthog auth check prod
 ./agent-posthog orgs list
 ./agent-posthog projects list --org <org-id>
+./agent-posthog auth update prod --org <org-id> --project <project-id> --default
+# Only if you use multiple environments per project:
 ./agent-posthog environments list --project <project-id>
-./agent-posthog auth update prod --org <org-id> --project <project-id> --env <env-id> --default
+./agent-posthog auth update prod --env <env-id>
 ./agent-posthog schema events list --search signup
 ./agent-posthog query hogql "select event, count() from events group by event order by count() desc limit 20"
 ./agent-posthog flags get checkout-v2

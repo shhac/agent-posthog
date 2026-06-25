@@ -22,7 +22,9 @@ flags, dashboards, recordings, experiments, or HogQL questions.
   `agent-posthog auth add <profile> --form` locally so the key goes directly into
   an OS dialog.
 - Prefer read-only commands.
-- Use `--project` and `--env` explicitly when the profile defaults are unknown.
+- Use `--project` explicitly when the profile default is unknown. The environment
+  defaults to the project (a project's default environment shares its ID), so set
+  `--env` only to target a non-default environment.
 - Treat feature flag mutations as high stakes.
 
 ## Setup
@@ -33,8 +35,10 @@ agent-posthog auth add prod --form --host https://us.posthog.com
 agent-posthog auth check prod
 agent-posthog orgs list -p prod
 agent-posthog projects list -p prod --org <org-id>
+agent-posthog auth update prod --org <org-id> --project <project-id> --default
+# Only if the project has multiple environments:
 agent-posthog environments list -p prod --project <project-id>
-agent-posthog auth update prod --org <org-id> --project <project-id> --env <env-id> --default
+agent-posthog auth update prod --env <env-id>
 agent-posthog usage
 ```
 

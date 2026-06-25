@@ -39,6 +39,33 @@ func TestResolvePrecedence(t *testing.T) {
 	}
 }
 
+func TestResolveEnvironmentDefaultsToProject(t *testing.T) {
+	t.Cleanup(func() {
+		config.SetConfigDir("")
+		config.ClearCache()
+	})
+	config.SetConfigDir(t.TempDir())
+	t.Setenv("POSTHOG_PERSONAL_API_KEY", "phx_env")
+
+	// Project set, environment unset: environment mirrors the project (default env).
+	resolved, err := resolve(&GlobalFlags{ProjectID: 123})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.EnvironmentID != 123 {
+		t.Fatalf("environment should default to project: %#v", resolved)
+	}
+
+	// An explicit environment still wins over the project fallback.
+	resolved, err = resolve(&GlobalFlags{ProjectID: 123, EnvironmentID: 456})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.EnvironmentID != 456 {
+		t.Fatalf("explicit environment should win: %#v", resolved)
+	}
+}
+
 func TestResolveMissingToken(t *testing.T) {
 	t.Cleanup(func() {
 		config.SetConfigDir("")

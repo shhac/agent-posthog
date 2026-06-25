@@ -53,6 +53,13 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	orgID := creds.FirstNonEmpty(flags.OrgID, profile.OrganizationID, os.Getenv("AGENT_POSTHOG_ORGANIZATION_ID"), os.Getenv("POSTHOG_ORGANIZATION_ID"))
 	projectID := creds.FirstNonZero(flags.ProjectID, profile.ProjectID, envInt("AGENT_POSTHOG_PROJECT_ID"), envInt("POSTHOG_PROJECT_ID"))
 	environmentID := creds.FirstNonZero(flags.EnvironmentID, profile.EnvironmentID, envInt("AGENT_POSTHOG_ENVIRONMENT_ID"), envInt("POSTHOG_ENVIRONMENT_ID"))
+	// A project's default environment is assigned environment_id == project_id, so
+	// an unset environment falls back to the project rather than erroring. Projects
+	// with multiple first-class environments still target a non-default one by
+	// setting it explicitly (flag, profile, or env var above).
+	if environmentID == 0 {
+		environmentID = projectID
+	}
 	token := creds.FirstNonEmpty(flags.APIKey, os.Getenv("POSTHOG_PERSONAL_API_KEY"), os.Getenv("AGENT_POSTHOG_PERSONAL_API_KEY"))
 	if token == "" && profileName != "" {
 		var err error

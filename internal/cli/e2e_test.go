@@ -44,7 +44,25 @@ func TestFlagsGetResolvesKey(t *testing.T) {
 }
 
 func TestMissingEnvironmentHasHint(t *testing.T) {
-	_, errOut := runCLIWithEnvironment(t, "", "persons", "list")
+	// Environment now mirrors the project when unset, so the missing-environment
+	// hint only surfaces when the project is unset too. Clear both.
+	config.SetConfigDir(t.TempDir())
+	t.Cleanup(func() { config.SetConfigDir("") })
+	server := httptest.NewServer(mockposthog.NewServer())
+	t.Cleanup(server.Close)
+	t.Setenv("AGENT_POSTHOG_BASE_URL", server.URL)
+	t.Setenv("POSTHOG_PERSONAL_API_KEY", "phx_mock")
+	t.Setenv("AGENT_POSTHOG_ORGANIZATION_ID", "org_1")
+
+	var stdout, stderr bytes.Buffer
+	restore := output.SetWritersForTest(&stdout, &stderr)
+	t.Cleanup(restore)
+	cmd := newRootCmd("test")
+	cmd.SetArgs([]string{"persons", "list"})
+	if err := cmd.Execute(); err != nil {
+		output.WriteError(output.Stderr(), err)
+	}
+	errOut := stderr.String()
 	if !strings.Contains(errOut, `"fixable_by":"agent"`) || !strings.Contains(errOut, "environments list") {
 		t.Fatalf("stderr = %s", errOut)
 	}
