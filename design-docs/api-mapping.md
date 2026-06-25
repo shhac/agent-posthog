@@ -113,6 +113,51 @@ CLI behavior:
 | `flags update` | `PATCH /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:write` |
 | `flags disable` | `PATCH /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:write` |
 
+## Projects vs environments (ID model and migration direction)
+
+Revisited 2026-06-25 after PostHog shipped first-class environments
+("Projects now support multiple environments", Jan 2025).
+
+The model: a **project is a container of environments**. Every project has a
+**main/default environment whose numeric ID equals the project ID** and cannot be
+removed; additional environments (e.g. staging, dev) each get their own distinct
+numeric ID. So for the common single-environment setup, `project_id ==
+environment_id` — which is why the URL number in `/project/12345/` doubles as the
+environment ID, and why the CLI defaults `environment_id` to `project_id` when it
+is unset (`resolve()` in `internal/cli/context.go`). Override `--env` only to
+target a non-default environment.
+
+The split in the table above is **intentional resource scoping, not legacy
+debt** — do not blanket-migrate it:
+
+- **Environment-level** (per-environment data): persons, query/HogQL, insights,
+  dashboards, session recordings. These correctly route through
+  `/api/environments/:environment_id/...` and follow the resolved `--env`.
+- **Project-level** (shared across a project's environments): feature flags,
+  experiments, event/property definitions. These correctly route through
+  `/api/projects/:project_id/...`. Confirmed 2026-06-25 that feature flags are
+  project-scoped, not deprecated, and have **no** `/api/environments/.../feature_flags/`
+  equivalent.
+
+This means multi-environment routing is already correct: project-level resources
+resolve to the project while environment-level resources follow the chosen
+environment.
+
+Migration watch (revisit when touching these): PostHog is moving *some*
+endpoints to be environment-centric and marks the old project-scoped forms
+"Deprecated: use /api/environments/{id}/ instead." Observed so far this targets
+team-settings endpoints (reset token, rotate secret, demo-data check,
+conversations token) — none of which this CLI calls. Two to re-verify before
+relying on project scope for *multi-environment* projects, since their underlying
+data is ingested per-environment:
+
+- `event_definitions` and `property_definitions` — confirm whether a
+  per-environment endpoint now exists; harmless today because default env ID ==
+  project ID.
+
+Until an endpoint the CLI actually uses is deprecated *with* a working
+environment-scoped replacement, keep the current routing.
+
 `flags get <id-or-key>` is CLI sugar. If the argument is not a numeric ID, the
 CLI should search/list feature flags by key, require exactly one match, then call
 the documented ID-based endpoint.
