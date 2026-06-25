@@ -30,12 +30,30 @@ func TestResolvePrecedence(t *testing.T) {
 		t.Fatalf("resolved flags did not win: %#v", resolved)
 	}
 
+	// Without flags, the namespaced AGENT_POSTHOG_* env vars win over profile
+	// metadata (consistent with AGENT_POSTHOG_BASE_URL beating profile.Host).
 	resolved, err = resolve(&GlobalFlags{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.Host != "https://base.example" || resolved.OrgID != "profile_org" || resolved.ProjectID != 1 || resolved.EnvironmentID != 2 {
-		t.Fatalf("profile/default precedence mismatch: %#v", resolved)
+	if resolved.Host != "https://base.example" || resolved.OrgID != "env_org" || resolved.ProjectID != 3 || resolved.EnvironmentID != 4 {
+		t.Fatalf("env-var-over-profile precedence mismatch: %#v", resolved)
+	}
+
+	// With the namespaced env vars cleared, profile metadata applies, and the
+	// PostHog-native vars remain a lower-tier fallback below the profile.
+	t.Setenv("AGENT_POSTHOG_ORGANIZATION_ID", "")
+	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "")
+	t.Setenv("AGENT_POSTHOG_ENVIRONMENT_ID", "")
+	t.Setenv("POSTHOG_ORGANIZATION_ID", "native_org")
+	t.Setenv("POSTHOG_PROJECT_ID", "7")
+	t.Setenv("POSTHOG_ENVIRONMENT_ID", "8")
+	resolved, err = resolve(&GlobalFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.OrgID != "profile_org" || resolved.ProjectID != 1 || resolved.EnvironmentID != 2 {
+		t.Fatalf("profile should outrank PostHog-native vars: %#v", resolved)
 	}
 }
 

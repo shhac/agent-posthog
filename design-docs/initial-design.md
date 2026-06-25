@@ -97,11 +97,13 @@ POSTHOG_ORGANIZATION_ID
 
 Prefer the `AGENT_POSTHOG_*` names in examples. Accept PostHog's native env var
 for quick local use, but mark direct env auth as less safe for LLM-guided setup.
-Resolution order is: explicit flags, profile defaults, `AGENT_POSTHOG_*`
-environment variables, PostHog-native environment variables, then built-in
-defaults such as `https://us.posthog.com`. `AGENT_POSTHOG_BASE_URL` is a test
-and mock-server override for the private API host and should win over profile
-host metadata when present.
+Resolution order is: explicit flags, `AGENT_POSTHOG_*` environment variables,
+profile defaults, PostHog-native environment variables, then built-in defaults
+such as `https://us.posthog.com`. The namespaced `AGENT_POSTHOG_*` variables win
+over profile metadata across host, organization, project, and environment so an
+agent can repoint a configured CLI (e.g. `AGENT_POSTHOG_BASE_URL` for a mock
+server) without editing the profile; the PostHog-native `POSTHOG_*` variables
+stay the lowest tier as a quick-local-use default below the profile.
 
 ## Auth and profiles
 

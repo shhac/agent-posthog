@@ -49,10 +49,15 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 		}
 	}
 
+	// Resolution order: explicit flag, AGENT_POSTHOG_* env var, profile metadata,
+	// PostHog-native env var, built-in default. The namespaced AGENT_POSTHOG_* var
+	// wins over the profile (as AGENT_POSTHOG_BASE_URL does for host) so an agent
+	// can repoint a configured CLI without editing the profile; the PostHog-native
+	// var stays the lowest tier as a quick-local-use default.
 	host := creds.FirstNonEmpty(flags.Host, os.Getenv("AGENT_POSTHOG_BASE_URL"), profile.Host, os.Getenv("AGENT_POSTHOG_HOST"), config.DefaultHost)
-	orgID := creds.FirstNonEmpty(flags.OrgID, profile.OrganizationID, os.Getenv("AGENT_POSTHOG_ORGANIZATION_ID"), os.Getenv("POSTHOG_ORGANIZATION_ID"))
-	projectID := creds.FirstNonZero(flags.ProjectID, profile.ProjectID, envInt("AGENT_POSTHOG_PROJECT_ID"), envInt("POSTHOG_PROJECT_ID"))
-	environmentID := creds.FirstNonZero(flags.EnvironmentID, profile.EnvironmentID, envInt("AGENT_POSTHOG_ENVIRONMENT_ID"), envInt("POSTHOG_ENVIRONMENT_ID"))
+	orgID := creds.FirstNonEmpty(flags.OrgID, os.Getenv("AGENT_POSTHOG_ORGANIZATION_ID"), profile.OrganizationID, os.Getenv("POSTHOG_ORGANIZATION_ID"))
+	projectID := creds.FirstNonZero(flags.ProjectID, envInt("AGENT_POSTHOG_PROJECT_ID"), profile.ProjectID, envInt("POSTHOG_PROJECT_ID"))
+	environmentID := creds.FirstNonZero(flags.EnvironmentID, envInt("AGENT_POSTHOG_ENVIRONMENT_ID"), profile.EnvironmentID, envInt("POSTHOG_ENVIRONMENT_ID"))
 	// A project's default environment is assigned environment_id == project_id, so
 	// an unset environment falls back to the project rather than erroring. Projects
 	// with multiple first-class environments still target a non-default one by
