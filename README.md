@@ -76,4 +76,4 @@ POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog api get /api/projects/123/sess
 
 ## License
 
-MIT
+PolyForm Perimeter License 1.0.0 — see [LICENSE](LICENSE).
