@@ -7,6 +7,7 @@ import (
 	agentmcp "github.com/shhac/lib-agent-mcp"
 
 	"github.com/shhac/agent-posthog/internal/config"
+	"github.com/shhac/agent-posthog/internal/credential"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
@@ -79,7 +80,9 @@ func newRootCmd(version string) *cobra.Command {
 	exposeGroups(root,
 		"api", "dashboards", "environments", "experiments", "flags", "insights", "investigate", "orgs", "persons", "projects", "query", "recordings", "schema")
 
-	root.AddCommand(agentmcp.Command(root, agentmcp.WithHiddenFlags("color", "expose")))
+	root.AddCommand(agentmcp.Command(root,
+		agentmcp.WithHiddenFlags("color", "expose"),
+		agentmcp.WithOAuthKeyringService(credential.MCPKeychainService())))
 
 	return root
 }
