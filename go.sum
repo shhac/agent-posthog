@@ -25,8 +25,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/randall77/makefat v0.0.0-20210315173500-7ddd0e42c844 h1:GranzK4hv1/pqTIhMTXt2X8MmMOuH3hMeUR0o9SP5yc=
 github.com/randall77/makefat v0.0.0-20210315173500-7ddd0e42c844/go.mod h1:T1TLSfyWVBRXVGzWd0o9BI4kfoO9InEgfQe4NV3mLz8=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/shhac/lib-agent-cli v0.16.0 h1:ICP7Ngj15Q9BdeNvKpnh6bH1siW0AaF8nG4P+rYOVp0=
-github.com/shhac/lib-agent-cli v0.16.0/go.mod h1:c6Ajjn/hD0WpERhniN96xCDsbkt49ztQm1ERlqAZMVw=
+github.com/shhac/lib-agent-cli v0.19.0 h1:fKQ8gkemoE+o4EJbRGWB0coYBgEK5ROcZEHcGlw6Svw=
+github.com/shhac/lib-agent-cli v0.19.0/go.mod h1:pXkdLWRWBJFdHWyWD9xDRFjIM2g8pU4H8kbIfnY0E60=
 github.com/shhac/lib-agent-keyring v0.1.1 h1:cAwFr0UzlQ0xsgO0zY607lmwhvSamPN6Tp1DCNJO7hg=
 github.com/shhac/lib-agent-keyring v0.1.1/go.mod h1:nTk+YfRDc2dc8Nghd1o9w4c40xU8Pqx/UgToN0yGvZ8=
 github.com/shhac/lib-agent-mcp v0.11.0 h1:snZhKs5Z3YPs3THdyWavoa/+fbpASYgPrDPLRuUU3Xk=
