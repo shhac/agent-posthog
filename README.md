@@ -14,7 +14,6 @@ error hints, and no direct access to PostHog secrets.
 - LLM-shaped output: lists and queries default to NDJSON. Entity gets (`get <id>...`) default to NDJSON (one line per id); pass `--format json` for a single pretty object. Multi-id gets interleave `{"@unresolved":{...}}` lines for missing ids (exit 0); command-level failures go to stderr with exit 1.
 - Structured errors: stderr JSON `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
 - Mock server: `mockposthog` provides deterministic E2E fixtures.
-- Agent onboarding: ships with `skills/agent-posthog/SKILL.md`.
 
 ## Quick Start
 
@@ -35,6 +34,14 @@ make build
 
 When an LLM is guiding setup, prefer `--form` over `--api-key`. A native OS
 dialog asks the user for the key, and the CLI returns only a redacted receipt.
+
+## Claude Code / AI agent skill
+
+```bash
+npx skills add shhac/agent-skills --skill agent-posthog --global
+```
+
+Installs the `agent-posthog` skill globally so Claude Code (and other AI agents) can discover and use it automatically. It ships from [`shhac/agent-skills`](https://github.com/shhac/agent-skills) — the whole family's skills in one repo, so `npx skills update` checks a single source no matter how many you use. Want several at once? Run `npx skills add shhac/agent-skills --global` and pick from the list.
 
 ## Development
 
