@@ -1,7 +1,7 @@
 ---
 name: agent-posthog
 description: |
-  Investigate PostHog product analytics, HogQL, persons, events, event/property schema, feature flags, dashboards, insights, session recordings, experiments, and project/environment discovery. Use when:
+  Investigate PostHog product analytics and write HogQL. Covers persons, events, event/property schema, feature flags, dashboards, insights, session recordings, experiments, and project/environment discovery. Use when:
   - Debugging product analytics or user journeys in PostHog
   - Writing or validating HogQL
   - Looking up persons, distinct IDs, event samples, feature flags, dashboards, insights, recordings, or experiments
