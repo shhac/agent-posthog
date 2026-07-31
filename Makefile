@@ -34,7 +34,7 @@ lint:
 # `-w .` rewrites vendored dependencies and makes `gofmt -l .` report noise.
 fmt:
 	gofmt -w $$(git ls-files '*.go')
-	goimports -w $$(git ls-files '*.go')
+	@command -v goimports >/dev/null && goimports -w $$(git ls-files '*.go') || echo "goimports not installed (optional; install: go install golang.org/x/tools/cmd/goimports@latest)"
 
 clean:
 	rm -f $(BINARY)
