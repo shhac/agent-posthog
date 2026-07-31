@@ -29,9 +29,12 @@ test-short:
 lint:
 	GOLANGCI_LINT_CACHE=$(CURDIR)/.cache/golangci-lint $(GOENV) golangci-lint run ./...
 
+# Scoped to tracked files: this repo keeps a module cache under .cache/, which
+# the go tool skips (dot-directory) but gofmt and goimports walk into, so a bare
+# `-w .` rewrites vendored dependencies and makes `gofmt -l .` report noise.
 fmt:
-	gofmt -w .
-	goimports -w .
+	gofmt -w $$(git ls-files '*.go')
+	goimports -w $$(git ls-files '*.go')
 
 clean:
 	rm -f $(BINARY)

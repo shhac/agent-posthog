@@ -384,7 +384,6 @@ func filterRaw(items []json.RawMessage, search string) []json.RawMessage {
 	return out
 }
 
-
 func resolveFlagID(ctx context.Context, resolved *resolvedContext, idOrKey string) (string, error) {
 	if _, err := strconv.Atoi(idOrKey); err == nil {
 		return idOrKey, nil
