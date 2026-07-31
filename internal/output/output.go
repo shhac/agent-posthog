@@ -168,11 +168,11 @@ func SetExpose(expose []string) { redactExpose = expose }
 // out.Redact owns the MECHANISM — the walk, the [REDACTED] placeholder, the
 // @redacted notes, and --expose handling.
 func postHogSecrets() out.RedactRule {
-	return func(_, key string, value any, _ map[string]any) bool {
-		if isSensitiveKey(key) {
+	return func(field out.RedactField) bool {
+		if isSensitiveKey(field.Key) {
 			return true
 		}
-		s, ok := value.(string)
+		s, ok := field.Value.(string)
 		return ok && looksLikePostHogSecret(s)
 	}
 }
