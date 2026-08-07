@@ -38,7 +38,7 @@ func newRootCmd(version string) *cobra.Command {
 		Version:        version,
 		Globals:        &globals.Globals,
 		DefaultFormat:  output.FormatNDJSON,
-		ConfigDefaults: func() { applyConfiguredDefaults(root, globals) },
+		ConfigDefaults: func(*cobra.Command) { applyConfiguredDefaults(root, globals) },
 		UnknownHint:    "run 'agent-posthog usage' to see the available domains",
 		Redacts:        true,
 	})
