@@ -1,12 +1,12 @@
 ---
 name: agent-posthog
 description: |
-  Investigate PostHog product analytics and write HogQL. Covers persons, events, event/property schema, feature flags, dashboards, insights, session recordings, experiments, and project/environment discovery. Use when:
-  - Debugging product analytics or user journeys in PostHog
-  - Writing or validating HogQL
-  - Looking up persons, distinct IDs, event samples, feature flags, dashboards, insights, recordings, or experiments
-  - Discovering PostHog organizations, projects, environments, events, or properties
-  Triggers: "posthog", "hogql", "product analytics", "feature flag", "session replay", "session recording", "dashboard", "insight", "funnel", "person properties", "distinct id"
+  Investigate PostHog product analytics and write HogQL. Covers persons,
+  events, event and property schema, feature flags, dashboards, insights,
+  session recordings, experiments, and project/environment discovery. Use
+  when debugging a user journey or funnel, writing or validating HogQL,
+  looking up persons, distinct IDs, or event samples, or discovering PostHog
+  organizations, projects, and properties.
 allowed-tools: Bash(agent-posthog *) Bash(mockposthog *) Read Grep Glob
 ---
 
