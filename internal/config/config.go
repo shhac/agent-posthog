@@ -94,14 +94,6 @@ func loadConfig() *Config {
 	return &cfg
 }
 
-func Write(cfg *Config) error {
-	err := store().Save(cfg)
-	cacheMu.Lock()
-	cache = nil
-	cacheMu.Unlock()
-	return err
-}
-
 func ClearCache() {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
