@@ -92,10 +92,22 @@ func (p Project) PlanSaved(ctx context.Context, plan *SavedPlan) (*Pending, erro
 	if patch.Filters == nil {
 		patch.Filters = map[string]any{}
 	}
+	if !sameChanges(flagspec.Changes(flag, patch), plan.Changes) {
+		return nil, agenterrors.New("the plan's patch does not make the changes it lists; nothing was written", agenterrors.FixableByAgent).
+			WithHint("The plan file was edited after it was saved. Plan the change again.")
+	}
 	r := p.receipt("apply-plan: "+plan.Operation, flag)
 	r.Changes = plan.Changes
 	r.Warnings = plan.Warnings
 	return &Pending{Receipt: r, patch: patch, send: func(ctx context.Context) (json.RawMessage, error) {
 		return p.patch(ctx, flag, patch)
 	}}, nil
+}
+
+// sameChanges compares change lists by their JSON form, since a plan file's
+// copy has been through JSON.
+func sameChanges(a, b []flagspec.Change) bool {
+	left, errA := json.Marshal(a)
+	right, errB := json.Marshal(b)
+	return errA == nil && errB == nil && bytes.Equal(left, right)
 }

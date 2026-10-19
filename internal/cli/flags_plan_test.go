@@ -73,3 +73,43 @@ func TestSavePlanRulesAndSecrets(t *testing.T) {
 		t.Fatalf("plan file mode = %v", info.Mode().Perm())
 	}
 }
+
+func TestSavedPlanRefusesAnEditedPatch(t *testing.T) {
+	s := gateSession(t)
+	plan := filepath.Join(t.TempDir(), "plan.json")
+	s.mustRun("flags", "enable", "beta-gate", "--save-plan", plan)
+	data, err := os.ReadFile(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := strings.Replace(string(data), `"active": true`, `"active": true, "deleted": true`, 1)
+	if edited == string(data) {
+		t.Fatalf("plan has no active field to edit: %s", data)
+	}
+	if err := os.WriteFile(plan, []byte(edited), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if errOut := s.mustFail("flags", "apply-plan", "--file", plan, "--yes"); !strings.Contains(errOut, "does not make the changes it lists") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if s.flag("beta-gate")["deleted"] == true {
+		t.Fatal("an edited plan was applied")
+	}
+}
+
+func TestReadPlanRejectsWhatIsNotAPlan(t *testing.T) {
+	s := gateSession(t)
+	dir := t.TempDir()
+	for name, content := range map[string]string{"garbage.json": "not json", "other.json": `{"format":"something-else/1"}`} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if errOut := s.mustFail("flags", "apply-plan", "--file", path, "--yes"); !strings.Contains(errOut, "is not an agent-posthog plan") {
+			t.Fatalf("%s: stderr = %s", name, errOut)
+		}
+	}
+	if errOut := s.mustFail("flags", "apply-plan", "--file", filepath.Join(dir, "missing.json"), "--yes"); !strings.Contains(errOut, "fixable_by") {
+		t.Fatalf("missing: stderr = %s", errOut)
+	}
+}
