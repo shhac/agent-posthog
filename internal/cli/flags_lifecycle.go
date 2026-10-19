@@ -32,7 +32,7 @@ func lifecycleCommand(globals *GlobalFlags, use, short, operation string) *cobra
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], operation, opts, p.Lifecycle(ctx, operation), globals.Format)
 			})
 		},
@@ -57,7 +57,7 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 				return agenterrors.New("restore needs the numeric flag ID; deleted flags cannot be looked up by key", agenterrors.FixableByAgent)
 			}
 			id, _ := strconv.Atoi(ref)
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return writeFlag(ctx, p.PlanRestore(id), opts, globals.Format)
 			})
 		},
@@ -79,7 +79,7 @@ func earlyExitCommand(globals *GlobalFlags) *cobra.Command {
 			if args[1] != "on" && args[1] != "off" {
 				return agenterrors.New("early-exit takes on or off", agenterrors.FixableByAgent)
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "early-exit", opts, featureflag.EarlyExit(args[1] == "on"), globals.Format)
 			})
 		},

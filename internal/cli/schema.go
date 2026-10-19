@@ -21,9 +21,9 @@ func schemaEventsCommand(globals *GlobalFlags) *cobra.Command {
 	events := &cobra.Command{Use: "events", Short: "List and get event definitions"}
 	var search string
 	var excludeHidden, excludeStale bool
-	list := listCommand(globals, listSpec{
-		use: "list", short: "List event definitions", scope: scopeProject, collection: []string{"event_definitions"},
-		query: func(q url.Values) {
+	list := ListCommand(globals, ListSpec{
+		Use: "list", Short: "List event definitions", Scope: ScopeProject, Collection: []string{"event_definitions"},
+		Query: func(q url.Values) {
 			if excludeHidden {
 				q.Set("exclude_hidden", "true")
 			}
@@ -31,23 +31,23 @@ func schemaEventsCommand(globals *GlobalFlags) *cobra.Command {
 				q.Set("exclude_stale", "true")
 			}
 		},
-		filter: searchFilter(&search),
+		Filter: SearchFilter(&search),
 	})
 	list.Flags().StringVar(&search, "search", "", "Client-side substring filter on event name")
 	list.Flags().BoolVar(&excludeHidden, "exclude-hidden", false, "Exclude hidden event definitions")
 	list.Flags().BoolVar(&excludeStale, "exclude-stale", false, "Exclude stale event definitions")
 	events.AddCommand(list)
-	events.AddCommand(entityGetCommand("get <event-id-or-name>...", "Get one or more event definitions by ID or name", globals, scopeProject, fetchEventDefinition))
+	events.AddCommand(EntityGetCommand("get <event-id-or-name>...", "Get one or more event definitions by ID or name", globals, ScopeProject, fetchEventDefinition))
 	return events
 }
 
 // fetchEventDefinition reads an event definition by numeric ID, or finds it
 // by exact name.
-func fetchEventDefinition(ctx context.Context, resolved *resolvedContext, ref string) (any, error) {
+func fetchEventDefinition(ctx context.Context, resolved *Resolved, ref string) (any, error) {
 	if _, err := strconv.Atoi(ref); err == nil {
-		return getByPath(scopeProject, "event_definitions")(ctx, resolved, ref)
+		return GetByPath(ScopeProject, "event_definitions")(ctx, resolved, ref)
 	}
-	path, err := resolved.path(scopeProject, "event_definitions")
+	path, err := resolved.Path(ScopeProject, "event_definitions")
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func fetchEventDefinition(ctx context.Context, resolved *resolvedContext, ref st
 	if err != nil {
 		return nil, err
 	}
-	record, err := resolveByField(page.Results, "name", ref, "event definition")
+	record, err := ResolveByField(page.Results, "name", ref, "event definition")
 	if err != nil {
 		return nil, err
 	}
@@ -65,16 +65,16 @@ func fetchEventDefinition(ctx context.Context, resolved *resolvedContext, ref st
 func schemaPropertiesCommand(globals *GlobalFlags) *cobra.Command {
 	properties := &cobra.Command{Use: "properties", Short: "List property definitions"}
 	var propType, eventName, search string
-	properties.AddCommand(listCommand(globals, listSpec{
-		use: "list", short: "List property definitions", scope: scopeProject, collection: []string{"property_definitions"},
-		query: func(q url.Values) {
-			setIf(q, "type", propType)
+	properties.AddCommand(ListCommand(globals, ListSpec{
+		Use: "list", Short: "List property definitions", Scope: ScopeProject, Collection: []string{"property_definitions"},
+		Query: func(q url.Values) {
+			SetIf(q, "type", propType)
 			if eventName != "" {
 				q.Set("event_names", eventName)
 				q.Set("filter_by_event_names", "true")
 			}
 		},
-		filter: searchFilter(&search),
+		Filter: SearchFilter(&search),
 	}))
 	properties.PersistentFlags().StringVar(&propType, "type", "", "Property type filter, such as event or person")
 	properties.PersistentFlags().StringVar(&eventName, "event", "", "Event name filter")

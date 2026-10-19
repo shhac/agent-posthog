@@ -30,14 +30,14 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 		Use:   "user",
 		Short: "Resolve a user and its recent context",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				path, err := resolved.path(scopeEnvironment, "persons")
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
+				path, err := resolved.Path(ScopeEnvironment, "persons")
 				if err != nil {
 					return err
 				}
-				q := baseValues(limit)
-				setIf(q, "email", email)
-				setIf(q, "distinct_id", distinctID)
+				q := BaseValues(limit)
+				SetIf(q, "email", email)
+				SetIf(q, "distinct_id", distinctID)
 				page, err := resolved.Client.List(ctx, path, q)
 				if err != nil {
 					return err
@@ -73,8 +73,8 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 		Use:   "event",
 		Short: "Sample recent events through HogQL",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				path, err := resolved.path(scopeEnvironment, "query")
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
+				path, err := resolved.Path(ScopeEnvironment, "query")
 				if err != nil {
 					return err
 				}
@@ -104,7 +104,7 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 		Short: "Inspect a feature flag and related evidence",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				id, err := p.ResolveID(ctx, args[0])
 				if err != nil {
 					return err

@@ -45,7 +45,7 @@ func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 			if err := featureflag.CheckSubject(f.engine, in); err != nil {
 				return err
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				e, err := f.evaluator(ctx, p, args[0])
 				if err != nil {
 					return err
@@ -59,7 +59,7 @@ func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 				if warnings := e.Warnings(); len(warnings) > 0 {
 					record.Set("warnings", warnings)
 				}
-				return writeExact(record, globals.Format)
+				return WriteExact(record, globals.Format)
 			})
 		},
 	}

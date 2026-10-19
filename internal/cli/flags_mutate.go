@@ -84,5 +84,5 @@ func writeFlag(ctx context.Context, pending *featureflag.Pending, opts writeOpti
 		}
 		r = applied
 	}
-	return writeExact(r, format)
+	return WriteExact(r, format)
 }

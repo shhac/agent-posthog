@@ -25,7 +25,7 @@ func exportCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Export a flag as a spec that 'flags apply' accepts (json, or --format yaml)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				flag, err := p.Fetch(ctx, args[0])
 				if err != nil {
 					return err
@@ -34,7 +34,7 @@ func exportCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 				}
-				return writeExact(spec, globals.Format)
+				return WriteExact(spec, globals.Format)
 			})
 		},
 	}
@@ -51,7 +51,7 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 			"Start from 'flags export <key>' to edit an existing flag.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := readInput(specJSON, file, "spec-json", "file")
+			data, err := ReadInput(specJSON, file, "spec-json", "file")
 			if err != nil {
 				return err
 			}
@@ -59,7 +59,7 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				pending, err := p.PlanApply(ctx, spec, opts.ifVersion)
 				if err != nil {
 					return err
@@ -124,7 +124,7 @@ func createCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.refuseSavePlan("create"); err != nil {
 				return err
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				pending, err := p.PlanCreate(ctx, spec)
 				if err != nil {
 					return err

@@ -23,7 +23,7 @@ func applyPlanCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
 				p, err := resolved.flagProject()
 				if err != nil {
 					return err

@@ -31,7 +31,7 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "List conditions in evaluation order, with the flag version to pass as --if-version",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				flag, err := p.Fetch(ctx, args[0])
 				if err != nil {
 					return err
@@ -42,14 +42,14 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				if format != output.FormatNDJSON {
-					return writeExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
+					return WriteExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
 				}
 				for i, condition := range conditions {
 					line := flagspec.NewOrdered()
 					line.Set("index", i)
 					line.Set("version", flag["version"])
 					line.Set("condition", condition)
-					if err := writeExactLine(line); err != nil {
+					if err := WriteExactLine(line); err != nil {
 						return err
 					}
 				}
@@ -118,7 +118,7 @@ func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
 				index = at
 			}
 			condition := featureflag.Condition{Where: c.where, Rollout: c.rollout, Variant: c.variant}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "conditions add", opts, p.AddCondition(ctx, condition, index), globals.Format)
 			})
 		},
@@ -160,7 +160,7 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 			if edit.Where == nil && edit.Rollout == nil && edit.Variant == nil {
 				return agenterrors.New("nothing to change: pass --where, --clear-where, --rollout, --variant, or --no-variant", agenterrors.FixableByAgent)
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				if edit.Where == nil && edit.Variant == nil {
 					pending, err := p.PlanConditionRollout(ctx, args[0], opts.ifVersion, index, *edit.Rollout)
 					if err != nil {
@@ -193,7 +193,7 @@ func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "conditions remove", opts, featureflag.RemoveCondition(index), globals.Format)
 			})
 		},
@@ -220,7 +220,7 @@ func conditionsMoveCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "conditions move", opts, featureflag.MoveCondition(from, to), globals.Format)
 			})
 		},

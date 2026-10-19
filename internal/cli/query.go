@@ -20,10 +20,10 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 	group.AddCommand(queryHogQLCommand(globals))
 	group.AddCommand(queryJSONCommand(globals))
 	group.AddCommand(queryWaitCommand(globals))
-	group.AddCommand(subresourceCommand("get <query-id>", "Get async query status", globals, scopeEnvironment, func(id string) []string {
+	group.AddCommand(SubresourceCommand("get <query-id>", "Get async query status", globals, ScopeEnvironment, func(id string) []string {
 		return []string{"query", id}
 	}))
-	group.AddCommand(subresourceCommand("log <query-id>", "Get async query log", globals, scopeEnvironment, func(id string) []string {
+	group.AddCommand(SubresourceCommand("log <query-id>", "Get async query log", globals, ScopeEnvironment, func(id string) []string {
 		return []string{"query", id, "log"}
 	}))
 	group.AddCommand(&cobra.Command{
@@ -31,8 +31,8 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 		Short: "Cancel an async query",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				path, err := resolved.path(scopeEnvironment, "query", args[0])
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
+				path, err := resolved.Path(ScopeEnvironment, "query", args[0])
 				if err != nil {
 					return err
 				}
@@ -40,7 +40,7 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 				if err != nil {
 					return err
 				}
-				return writeRaw(raw, globals.Format)
+				return WriteRaw(raw, globals.Format)
 			})
 		},
 	})
@@ -81,7 +81,7 @@ func hogQLText(args []string, file string) (string, error) {
 	if file == "" {
 		return args[0], nil
 	}
-	data, err := readInput("", file, "", "file")
+	data, err := ReadInput("", file, "", "file")
 	return string(data), err
 }
 
@@ -95,7 +95,7 @@ func queryJSONCommand(globals *GlobalFlags) *cobra.Command {
 			if inline != "" {
 				bodyFile = ""
 			}
-			body, err := readJSONObject(inline, bodyFile, "json", "body")
+			body, err := ReadJSONObject(inline, bodyFile, "json", "body")
 			if err != nil {
 				return err
 			}
@@ -108,8 +108,8 @@ func queryJSONCommand(globals *GlobalFlags) *cobra.Command {
 }
 
 func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any) error {
-	return withClient(cmdCtx, globals, func(ctx context.Context, resolved *resolvedContext) error {
-		path, err := resolved.path(scopeEnvironment, "query")
+	return WithClient(cmdCtx, globals, func(ctx context.Context, resolved *Resolved) error {
+		path, err := resolved.Path(ScopeEnvironment, "query")
 		if err != nil {
 			return err
 		}
@@ -129,8 +129,8 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Poll an async query until it completes or fails",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				path, err := resolved.path(scopeEnvironment, "query", args[0])
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
+				path, err := resolved.Path(ScopeEnvironment, "query", args[0])
 				if err != nil {
 					return err
 				}
@@ -147,14 +147,14 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 						WithHint("Run 'agent-posthog query get " + args[0] + "' to inspect the current query status.")
 				}
 				if status.Error {
-					if err := writeRaw(raw, globals.Format); err != nil {
+					if err := WriteRaw(raw, globals.Format); err != nil {
 						return err
 					}
 					return agenterrors.New("query failed: "+creds.FirstNonEmpty(status.Message, "PostHog reported an error"), agenterrors.FixableByAgent).
 						WithHint("Fix the HogQL and run it again; the full status is on stdout.")
 				}
 				if !status.Known || !status.Complete {
-					return writeRaw(raw, globals.Format)
+					return WriteRaw(raw, globals.Format)
 				}
 				return writeQueryResult(raw, globals.Format)
 			})

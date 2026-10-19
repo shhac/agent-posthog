@@ -28,7 +28,7 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 			if parallel < 1 || parallel > featureflag.MaxParallelCases {
 				return agenterrors.New(fmt.Sprintf("--parallel must be from 1 to %d", featureflag.MaxParallelCases), agenterrors.FixableByAgent)
 			}
-			data, err := readInput(casesJSON, casesFile, "cases-json", "cases")
+			data, err := ReadInput(casesJSON, casesFile, "cases-json", "cases")
 			if err != nil {
 				return err
 			}
@@ -41,7 +41,7 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				e, err := f.evaluator(ctx, p, args[0])
 				if err != nil {
 					return err
@@ -83,7 +83,7 @@ func writeCaseResults(e *featureflag.Evaluator, results []featureflag.CaseResult
 	if warnings := e.Warnings(); len(warnings) > 0 {
 		totals.Set("warnings", warnings)
 	}
-	if err := writeExactList(lines, map[string]any{"@summary": totals}, format); err != nil {
+	if err := WriteExactList(lines, map[string]any{"@summary": totals}, format); err != nil {
 		return err
 	}
 	if summary.Passed() {

@@ -50,9 +50,9 @@ func TestStoredProfileCredentialIsUsed(t *testing.T) {
 
 func TestAuthAddFormUsesThePrompt(t *testing.T) {
 	s, _ := authSession(t)
-	saved := promptSecret
-	t.Cleanup(func() { promptSecret = saved })
-	promptSecret = func(context.Context, string, string, string) (string, error) { return "phx_from_dialog", nil }
+	saved := PromptSecret
+	t.Cleanup(func() { PromptSecret = saved })
+	PromptSecret = func(context.Context, string, string, string) (string, error) { return "phx_from_dialog", nil }
 	if r := s.mustRun("auth", "add", "dialog", "--form"); r["status"] != "added" {
 		t.Fatalf("add --form = %v", r)
 	}

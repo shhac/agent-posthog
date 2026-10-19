@@ -30,8 +30,8 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.refuseSavePlan("copy"); err != nil {
 				return err
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireOrg(resolved); err != nil {
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
+				if err := RequireOrg(resolved); err != nil {
 					return err
 				}
 				p, err := resolved.flagProject()
@@ -40,11 +40,11 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 				}
 				targets := make([]featureflag.Target, 0, len(to))
 				for _, ref := range to {
-					id, err := resolved.projectRef(ref)
+					id, err := resolved.ProjectRef(ref)
 					if err != nil {
 						return err
 					}
-					targets = append(targets, featureflag.Target{ID: id, Alias: aliasName(ref)})
+					targets = append(targets, featureflag.Target{ID: id, Alias: AliasName(ref)})
 				}
 				plan, err := p.PlanCopy(ctx, args[0], targets, o)
 				if err != nil {
@@ -93,7 +93,7 @@ func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOption
 	hint := copyHint(plan)
 	if !opts.apply() {
 		result.Set("hint", hint)
-		return writeExact(result, format)
+		return WriteExact(result, format)
 	}
 	if len(plan.Blocked) > 0 {
 		return agenterrors.New("Not copied: "+hint, agenterrors.FixableByAgent)
@@ -105,7 +105,7 @@ func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOption
 	result.Set("outcome", applied.Outcome)
 	result.Set("succeeded", applied.Succeeded)
 	result.Set("failed", applied.Failed)
-	if writeErr := writeExact(result, format); writeErr != nil {
+	if writeErr := WriteExact(result, format); writeErr != nil {
 		return writeErr
 	}
 	return err

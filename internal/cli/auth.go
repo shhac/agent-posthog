@@ -15,8 +15,8 @@ import (
 	"github.com/shhac/agent-posthog/internal/credential"
 )
 
-// promptSecret is a variable so tests can stand in for the native dialog.
-var promptSecret = promptSecretDialog
+// PromptSecret is a variable so tests can stand in for the native dialog.
+var PromptSecret = promptSecretDialog
 
 func registerAuth(root *cobra.Command, globals *GlobalFlags) {
 	auth := &cobra.Command{
@@ -44,7 +44,7 @@ func registerAuthAdd(parent *cobra.Command, globals *GlobalFlags) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias := args[0]
 			if form {
-				filled, err := promptSecret(cmd.Context(), "agent-posthog: "+alias, "PostHog personal API key", apiKey)
+				filled, err := PromptSecret(cmd.Context(), "agent-posthog: "+alias, "PostHog personal API key", apiKey)
 				if err != nil {
 					fixableBy, hint := classifyDialogError(err)
 					return agenterrors.Wrap(err, fixableBy).WithHint(hint)
@@ -71,7 +71,7 @@ func registerAuthAdd(parent *cobra.Command, globals *GlobalFlags) {
 				_ = credential.Remove(alias)
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
-			return writeItem(profileRecord(config.Read(), alias, map[string]any{"status": "added", "storage": storage}), globals.Format)
+			return WriteItem(profileRecord(config.Read(), alias, map[string]any{"status": "added", "storage": storage}), globals.Format)
 		},
 	}
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "PostHog personal API key (required unless --form is used)")
@@ -130,7 +130,7 @@ func registerAuthUpdate(parent *cobra.Command, globals *GlobalFlags) {
 					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 				}
 			}
-			return writeItem(profileRecord(config.Read(), alias, map[string]any{"status": "updated"}), globals.Format)
+			return WriteItem(profileRecord(config.Read(), alias, map[string]any{"status": "updated"}), globals.Format)
 		},
 	}
 	cmd.Flags().StringVar(&host, "host", "", "Default PostHog private API host")
@@ -154,14 +154,14 @@ func registerAuthCheck(parent *cobra.Command, globals *GlobalFlags) {
 			if len(args) > 0 {
 				flags.Profile = args[0]
 			}
-			return withClient(cmd.Context(), &flags, func(ctx context.Context, resolved *resolvedContext) error {
+			return WithClient(cmd.Context(), &flags, func(ctx context.Context, resolved *Resolved) error {
 				raw, err := resolved.Client.Get(ctx, "/api/users/@me/", nil)
 				if err != nil {
 					return err
 				}
 				var me map[string]any
 				_ = json.Unmarshal(raw, &me)
-				return writeItem(map[string]any{
+				return WriteItem(map[string]any{
 					"status":          "ok",
 					"profile":         resolved.Profile,
 					"host":            resolved.Host,
@@ -185,7 +185,7 @@ func registerAuthDefault(parent *cobra.Command, globals *GlobalFlags) {
 			if err := config.SetDefault(args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
-			return writeItem(map[string]any{"status": "default_set", "profile": args[0]}, globals.Format)
+			return WriteItem(map[string]any{"status": "default_set", "profile": args[0]}, globals.Format)
 		},
 	}
 	parent.AddCommand(cmd)
@@ -202,7 +202,7 @@ func registerAuthList(parent *cobra.Command, globals *GlobalFlags) {
 				row, _ := json.Marshal(profileRecord(cfg, alias, map[string]any{"credential": credential.Storage(alias)}))
 				rows = append(rows, row)
 			}
-			return writeListResource(rows, "", globals.Format, true)
+			return WriteListResource(rows, "", globals.Format, true)
 		},
 	}
 	parent.AddCommand(cmd)
@@ -225,7 +225,7 @@ func registerAuthRemove(parent *cobra.Command, globals *GlobalFlags) {
 			if err := config.RemoveProfile(alias); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
-			return writeItem(map[string]any{"status": "removed", "profile": alias}, globals.Format)
+			return WriteItem(map[string]any{"status": "removed", "profile": alias}, globals.Format)
 		},
 	}
 	parent.AddCommand(cmd)

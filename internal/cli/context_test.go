@@ -22,7 +22,7 @@ func TestResolvePrecedence(t *testing.T) {
 	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "3")
 	t.Setenv("AGENT_POSTHOG_ENVIRONMENT_ID", "4")
 
-	resolved, err := resolve(&GlobalFlags{Host: "https://flag.example", OrgID: "flag_org", Project: "5", EnvironmentID: 6, APIKey: "phx_flag"})
+	resolved, err := Resolve(&GlobalFlags{Host: "https://flag.example", OrgID: "flag_org", Project: "5", EnvironmentID: 6, APIKey: "phx_flag"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestResolvePrecedence(t *testing.T) {
 
 	// Without flags, the namespaced AGENT_POSTHOG_* env vars win over profile
 	// metadata (consistent with AGENT_POSTHOG_BASE_URL beating profile.Host).
-	resolved, err = resolve(&GlobalFlags{})
+	resolved, err = Resolve(&GlobalFlags{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestResolvePrecedence(t *testing.T) {
 	t.Setenv("POSTHOG_ORGANIZATION_ID", "native_org")
 	t.Setenv("POSTHOG_PROJECT_ID", "7")
 	t.Setenv("POSTHOG_ENVIRONMENT_ID", "8")
-	resolved, err = resolve(&GlobalFlags{})
+	resolved, err = Resolve(&GlobalFlags{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestResolveEnvironmentDefaultsToProject(t *testing.T) {
 	t.Setenv("POSTHOG_PERSONAL_API_KEY", "phx_env")
 
 	// Project set, environment unset: environment mirrors the project (default env).
-	resolved, err := resolve(&GlobalFlags{Project: "123"})
+	resolved, err := Resolve(&GlobalFlags{Project: "123"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestResolveEnvironmentDefaultsToProject(t *testing.T) {
 	}
 
 	// An explicit environment still wins over the project fallback.
-	resolved, err = resolve(&GlobalFlags{Project: "123", EnvironmentID: 456})
+	resolved, err = Resolve(&GlobalFlags{Project: "123", EnvironmentID: 456})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestResolveMissingToken(t *testing.T) {
 		config.ClearCache()
 	})
 	config.SetConfigDir(t.TempDir())
-	_, err := resolve(&GlobalFlags{})
+	_, err := Resolve(&GlobalFlags{})
 	if err == nil {
 		t.Fatal("expected missing token error")
 	}

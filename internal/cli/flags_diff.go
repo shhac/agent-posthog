@@ -15,16 +15,16 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Compare a flag with the same-key flag in another project (ID or alias)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
 				p, err := resolved.flagProject()
 				if err != nil {
 					return err
 				}
-				otherProject, err := resolved.projectRef(against)
+				otherProject, err := resolved.ProjectRef(against)
 				if err != nil {
 					return err
 				}
-				c, err := p.Compare(ctx, args[0], p.In(otherProject, aliasName(against)))
+				c, err := p.Compare(ctx, args[0], p.In(otherProject, AliasName(against)))
 				if err != nil {
 					return err
 				}
@@ -38,7 +38,7 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 				if len(c.Warnings) > 0 {
 					result.Set("warnings", c.Warnings)
 				}
-				return writeExact(result, globals.Format)
+				return WriteExact(result, globals.Format)
 			})
 		},
 	}

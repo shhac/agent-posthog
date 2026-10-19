@@ -25,7 +25,7 @@ func payloadGetCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Show the payload a matching user receives (per --variant for multivariate flags)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				flag, err := p.Fetch(ctx, args[0])
 				if err != nil {
 					return err
@@ -41,7 +41,7 @@ func payloadGetCommand(globals *GlobalFlags) *cobra.Command {
 				if payload.Set {
 					result.Set("payload", payload.Value)
 				}
-				return writeExact(result, globals.Format)
+				return WriteExact(result, globals.Format)
 			})
 		},
 	}
@@ -57,7 +57,7 @@ func payloadSetCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Set the payload for a boolean/remote_config flag, or for one --variant",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := readInput(inline, file, "json", "file")
+			data, err := ReadInput(inline, file, "json", "file")
 			if err != nil {
 				return err
 			}
@@ -65,7 +65,7 @@ func payloadSetCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return agenterrors.New("payload is not valid JSON: "+err.Error(), agenterrors.FixableByAgent)
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "payload set", opts, featureflag.SetPayload(variant, value), globals.Format)
 			})
 		},
@@ -85,7 +85,7 @@ func payloadUnsetCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Remove the payload for a boolean/remote_config flag, or for one --variant",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "payload unset", opts, featureflag.UnsetPayload(variant), globals.Format)
 			})
 		},

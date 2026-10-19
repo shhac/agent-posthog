@@ -14,7 +14,7 @@ func TestResolveByField(t *testing.T) {
 	}
 
 	t.Run("single match returns the record", func(t *testing.T) {
-		got, err := resolveByField(items, "name", "signup", "event")
+		got, err := ResolveByField(items, "name", "signup", "event")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -28,14 +28,14 @@ func TestResolveByField(t *testing.T) {
 	})
 
 	t.Run("zero matches returns an error", func(t *testing.T) {
-		got, err := resolveByField(items, "name", "logout", "event")
+		got, err := ResolveByField(items, "name", "logout", "event")
 		if err == nil {
 			t.Fatalf("expected error for zero matches, got %#v", got)
 		}
 	})
 
 	t.Run("multiple matches returns an error", func(t *testing.T) {
-		got, err := resolveByField(items, "name", "login", "event")
+		got, err := ResolveByField(items, "name", "login", "event")
 		if err == nil {
 			t.Fatalf("expected error for multiple matches, got %#v", got)
 		}

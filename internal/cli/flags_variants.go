@@ -30,7 +30,7 @@ func variantsSetCommand(globals *GlobalFlags) *cobra.Command {
 			if err := flagspec.ValidateVariants(parsed); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				return editFlag(ctx, p, args[0], "variants set", opts, featureflag.SetVariants(parsed), globals.Format)
 			})
 		},

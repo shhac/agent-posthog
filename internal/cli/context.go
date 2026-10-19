@@ -16,7 +16,7 @@ import (
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
-type resolvedContext struct {
+type Resolved struct {
 	Client        *api.Client
 	Profile       string
 	Host          string
@@ -29,8 +29,8 @@ type resolvedContext struct {
 	ProjectAlias string
 }
 
-func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Context, *resolvedContext) error) error {
-	resolved, err := resolve(flags)
+func WithClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Context, *Resolved) error) error {
+	resolved, err := Resolve(flags)
 	if err != nil {
 		return err
 	}
@@ -44,9 +44,9 @@ func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Cont
 	return fn(ctx, resolved)
 }
 
-func resolve(flags *GlobalFlags) (*resolvedContext, error) {
+func Resolve(flags *GlobalFlags) (*Resolved, error) {
 	cfg := config.Read()
-	profileName := selectedProfile(flags, cfg)
+	profileName := SelectedProfile(flags, cfg)
 	profile := cfg.Profiles[profileName]
 
 	// Resolution order: explicit flag, AGENT_POSTHOG_* env var, profile metadata,
@@ -86,7 +86,7 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	client.MaxRetries = flags.MaxRetries
 	client.Debug = flags.Debug
 	client.DebugOut = output.Stderr()
-	return &resolvedContext{
+	return &Resolved{
 		Client:         client,
 		Profile:        profileName,
 		Host:           host,
@@ -94,7 +94,7 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 		ProjectID:      projectID,
 		EnvironmentID:  environmentID,
 		ProjectAliases: profile.ProjectAliases,
-		ProjectAlias:   aliasName(flags.Project),
+		ProjectAlias:   AliasName(flags.Project),
 	}, nil
 }
 
@@ -121,28 +121,28 @@ func projectFromRef(ref, profileName string, aliases map[string]int) (int, error
 		WithHint("Run 'agent-posthog config alias list', or add one with 'agent-posthog config alias set " + ref + " <project-id>'.")
 }
 
-func aliasName(ref string) string {
+func AliasName(ref string) string {
 	if _, err := strconv.Atoi(ref); err == nil {
 		return ""
 	}
 	return ref
 }
 
-// projectRef resolves a project argument (ID or alias) against the resolved profile.
-func (r *resolvedContext) projectRef(ref string) (int, error) {
+// ProjectRef resolves a project argument (ID or alias) against the resolved profile.
+func (r *Resolved) ProjectRef(ref string) (int, error) {
 	if ref == "" {
 		return 0, agenterrors.New("missing project", agenterrors.FixableByAgent)
 	}
 	return projectFromRef(ref, r.Profile, r.ProjectAliases)
 }
 
-// selectedProfile is the profile a command acts as: --profile, then
+// SelectedProfile is the profile a command acts as: --profile, then
 // AGENT_POSTHOG_PROFILE, then the configured default.
-func selectedProfile(flags *GlobalFlags, cfg *config.Config) string {
+func SelectedProfile(flags *GlobalFlags, cfg *config.Config) string {
 	return creds.FirstNonEmpty(flags.Profile, os.Getenv("AGENT_POSTHOG_PROFILE"), cfg.DefaultProfile)
 }
 
-func requireOrg(ctx *resolvedContext) error {
+func RequireOrg(ctx *Resolved) error {
 	if ctx.OrgID == "" {
 		return agenterrors.New("missing organization id", agenterrors.FixableByAgent).
 			WithHint("Run 'agent-posthog orgs list' or set one with 'agent-posthog auth update <profile> --org <id>'.")
@@ -150,7 +150,7 @@ func requireOrg(ctx *resolvedContext) error {
 	return nil
 }
 
-func requireProject(ctx *resolvedContext) error {
+func RequireProject(ctx *Resolved) error {
 	if ctx.ProjectID == 0 {
 		return agenterrors.New("missing project id", agenterrors.FixableByAgent).
 			WithHint("Run 'agent-posthog projects list --org <id>' or set one with 'agent-posthog auth update <profile> --project <id>'.")
@@ -158,7 +158,7 @@ func requireProject(ctx *resolvedContext) error {
 	return nil
 }
 
-func requireEnvironment(ctx *resolvedContext) error {
+func RequireEnvironment(ctx *Resolved) error {
 	if ctx.EnvironmentID == 0 {
 		return agenterrors.New("missing environment id", agenterrors.FixableByAgent).
 			WithHint("Run 'agent-posthog environments list --project <id>' or set one with 'agent-posthog auth update <profile> --env <id>'.")
@@ -171,15 +171,15 @@ func envInt(name string) int {
 	return value
 }
 
-// viaMCPEnv marks processes the MCP server started; its subprocesses inherit it
+// ViaMCPEnv marks processes the MCP server started; its subprocesses inherit it
 // and a tool call cannot change it.
-const viaMCPEnv = "AGENT_POSTHOG_VIA_MCP"
+const ViaMCPEnv = "AGENT_POSTHOG_VIA_MCP"
 
 // requireWriteAllowed refuses writes made through the MCP server unless a
 // person enabled them with 'config set mcp_writes on'. It is the API client's
 // Guard, so it covers every write; plans never reach it.
 func requireWriteAllowed() error {
-	if os.Getenv(viaMCPEnv) != "1" || config.Read().MCPWrites {
+	if os.Getenv(ViaMCPEnv) != "1" || config.Read().MCPWrites {
 		return nil
 	}
 	return agenterrors.New("writes through MCP are off for this agent-posthog install; nothing was written", agenterrors.FixableByHuman).

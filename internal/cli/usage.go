@@ -7,7 +7,7 @@ func registerUsageCommand(root *cobra.Command, globals *GlobalFlags) {
 		Use:   "usage",
 		Short: "Agent-friendly command reference",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return writeItem(map[string]any{
+			return WriteItem(map[string]any{
 				"setup": []string{
 					"agent-posthog auth add prod --form --host https://us.posthog.com",
 					"agent-posthog auth check prod",

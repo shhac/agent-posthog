@@ -12,17 +12,17 @@ import (
 func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	flags := &cobra.Command{Use: "flags", Short: "Read, create, edit, and evaluate PostHog feature flags"}
 	var active, search string
-	list := listCommand(globals, listSpec{
-		use: "list", short: "List feature flags", scope: scopeProject, collection: []string{"feature_flags"},
-		query: func(q url.Values) {
-			setIf(q, "active", active)
-			setIf(q, "search", search)
+	list := ListCommand(globals, ListSpec{
+		Use: "list", Short: "List feature flags", Scope: ScopeProject, Collection: []string{"feature_flags"},
+		Query: func(q url.Values) {
+			SetIf(q, "active", active)
+			SetIf(q, "search", search)
 		},
 	})
 	list.Flags().StringVar(&active, "active", "", "Active filter: true or false")
 	list.Flags().StringVar(&search, "search", "", "Search feature flags")
 	flags.AddCommand(list)
-	flags.AddCommand(entityGetCommand("get <id-or-key>...", "Get one or more feature flags by ID or key", globals, scopeProject, fetchFlagRecord))
+	flags.AddCommand(EntityGetCommand("get <id-or-key>...", "Get one or more feature flags by ID or key", globals, ScopeProject, fetchFlagRecord))
 	flags.AddCommand(flagSubresourceCommand(globals, "dependent <id-or-key>", "List dependent feature flags", "dependent_flags"))
 	flags.AddCommand(flagSubresourceCommand(globals, "activity <id-or-key>", "Get feature flag activity", "activity"))
 	registerFlagWrites(flags, globals)
@@ -39,7 +39,7 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 }
 
 // fetchFlagRecord reads a flag by ID or key for 'flags get'.
-func fetchFlagRecord(ctx context.Context, resolved *resolvedContext, ref string) (any, error) {
+func fetchFlagRecord(ctx context.Context, resolved *Resolved, ref string) (any, error) {
 	p, err := resolved.flagProject()
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func fetchFlagRecord(ctx context.Context, resolved *resolvedContext, ref string)
 	if err != nil {
 		return nil, err
 	}
-	return decodeRaw(raw), nil
+	return DecodeRaw(raw), nil
 }
 
 func flagSubresourceCommand(globals *GlobalFlags, use, short, subresource string) *cobra.Command {
@@ -61,7 +61,7 @@ func flagSubresourceCommand(globals *GlobalFlags, use, short, subresource string
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				id, err := p.ResolveID(ctx, args[0])
 				if err != nil {
 					return err
@@ -70,7 +70,7 @@ func flagSubresourceCommand(globals *GlobalFlags, use, short, subresource string
 				if err != nil {
 					return err
 				}
-				return writeRawResource(raw, globals.Format, globals.Full)
+				return WriteRawResource(raw, globals.Format, globals.Full)
 			})
 		},
 	}

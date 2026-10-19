@@ -9,7 +9,7 @@ import (
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
-func writeItem(data any, flagFormat string) error {
+func WriteItem(data any, flagFormat string) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
 		return err
@@ -18,11 +18,11 @@ func writeItem(data any, flagFormat string) error {
 	return nil
 }
 
-func writeRaw(raw json.RawMessage, flagFormat string) error {
-	return writeRawResource(raw, flagFormat, false)
+func WriteRaw(raw json.RawMessage, flagFormat string) error {
+	return WriteRawResource(raw, flagFormat, false)
 }
 
-func writeRawResource(raw json.RawMessage, flagFormat string, full bool) error {
+func WriteRawResource(raw json.RawMessage, flagFormat string, full bool) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func writeRawResource(raw json.RawMessage, flagFormat string, full bool) error {
 	return nil
 }
 
-func writeListResource(items []json.RawMessage, nextURL string, flagFormat string, full bool) error {
+func WriteListResource(items []json.RawMessage, nextURL string, flagFormat string, full bool) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
 	if err != nil {
 		return err
@@ -119,10 +119,10 @@ func compactValue(value any) any {
 	}
 }
 
-// writeExact encodes v without the pruning and redaction the general output
+// WriteExact encodes v without the pruning and redaction the general output
 // path applies, for receipts and specs that must carry nulls and payload
 // contents as they are. YAML goes through flagspec so numbers stay exact.
-func writeExact(v any, flagFormat string) error {
+func WriteExact(v any, flagFormat string) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
 		return err
@@ -138,14 +138,14 @@ func writeExact(v any, flagFormat string) error {
 	return err
 }
 
-// writeExactLine writes v as one exact NDJSON line.
-func writeExactLine(v any) error {
+// WriteExactLine writes v as one exact NDJSON line.
+func WriteExactLine(v any) error {
 	return output.PrintExact(v, output.FormatNDJSON)
 }
 
-// writeExactList is writeExact for a list: NDJSON records then one line per
+// WriteExactList is WriteExact for a list: NDJSON records then one line per
 // meta key, or one {"data":[...], <meta>} document under --format json|yaml.
-func writeExactList(items []any, meta map[string]any, flagFormat string) error {
+func WriteExactList(items []any, meta map[string]any, flagFormat string) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
 	if err != nil {
 		return err
@@ -157,15 +157,15 @@ func writeExactList(items []any, meta map[string]any, flagFormat string) error {
 		for _, key := range keys {
 			envelope.Set(key, meta[key])
 		}
-		return writeExact(envelope, flagFormat)
+		return WriteExact(envelope, flagFormat)
 	}
 	for _, item := range items {
-		if err := writeExactLine(item); err != nil {
+		if err := WriteExactLine(item); err != nil {
 			return err
 		}
 	}
 	for _, key := range keys {
-		if err := writeExactLine(map[string]any{key: meta[key]}); err != nil {
+		if err := WriteExactLine(map[string]any{key: meta[key]}); err != nil {
 			return err
 		}
 	}

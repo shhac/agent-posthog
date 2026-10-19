@@ -22,14 +22,14 @@ func registerConfig(root *cobra.Command, globals *GlobalFlags) {
 		Use:   "path",
 		Short: "Print config path",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return writeItem(map[string]any{"config_path": config.ConfigPath()}, globals.Format)
+			return WriteItem(map[string]any{"config_path": config.ConfigPath()}, globals.Format)
 		},
 	})
 	cfg.AddCommand(&cobra.Command{
 		Use:   "show",
 		Short: "Show non-secret config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return writeItem(config.Read(), globals.Format)
+			return WriteItem(config.Read(), globals.Format)
 		},
 	})
 	cfg.AddCommand(aliasCommand(globals))
@@ -108,7 +108,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if err := config.SetProjectAlias(profile, name, id); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, globals.Format)
+			return WriteItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, globals.Format)
 		}),
 	})
 	alias.AddCommand(&cobra.Command{
@@ -119,7 +119,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if err := config.UnsetProjectAlias(profile, args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, globals.Format)
+			return WriteItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, globals.Format)
 		}),
 	})
 	alias.AddCommand(&cobra.Command{
@@ -131,7 +131,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if aliases == nil {
 				aliases = map[string]int{}
 			}
-			return writeItem(map[string]any{"profile": profile, "aliases": aliases}, globals.Format)
+			return WriteItem(map[string]any{"profile": profile, "aliases": aliases}, globals.Format)
 		}),
 	})
 	return alias
@@ -151,7 +151,7 @@ func withAliasProfile(globals *GlobalFlags, run func(profile string, args []stri
 
 func aliasProfile(globals *GlobalFlags) (string, error) {
 	cfg := config.Read()
-	profile := selectedProfile(globals, cfg)
+	profile := SelectedProfile(globals, cfg)
 	if profile == "" {
 		return "", agenterrors.New("project aliases belong to a profile, and none is selected", agenterrors.FixableByAgent).
 			WithHint("Pass -p <profile>, or create one with 'agent-posthog auth add <profile> --form'.")

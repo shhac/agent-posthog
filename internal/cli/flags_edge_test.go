@@ -109,7 +109,7 @@ func TestExplicitIDAndKeyReferences(t *testing.T) {
 
 func TestWritesThroughMCPNeedLocalOptIn(t *testing.T) {
 	s := flagSession(t)
-	t.Setenv(viaMCPEnv, "1")
+	t.Setenv(ViaMCPEnv, "1")
 	if r := s.mustRun("flags", "disable", "checkout-v2", "--dry-run", "--yes"); r["outcome"] != "planned" {
 		t.Fatalf("plans must work without the opt-in: %v", r)
 	}
@@ -137,7 +137,7 @@ func TestRawPostReportsWriteErrors(t *testing.T) {
 
 func TestEveryWriteIsGatedThroughMCP(t *testing.T) {
 	s := flagSession(t)
-	t.Setenv(viaMCPEnv, "1")
+	t.Setenv(ViaMCPEnv, "1")
 	for _, args := range [][]string{
 		{"query", "cancel", "query_pending"},
 		{"flags", "copy", "checkout-v2", "--to", "124", "--yes"},

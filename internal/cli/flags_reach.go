@@ -20,7 +20,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 			if cmd.Flags().Changed("condition") {
 				only = condition
 			}
-			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				flag, err := p.Fetch(ctx, args[0])
 				if err != nil {
 					return err
@@ -40,7 +40,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 					lines = append(lines, line)
 				}
 				note := "matching counts users whose properties pass a condition's filters, before its rollout; conditions overlap, so do not sum them"
-				return writeExactList(lines, map[string]any{"@note": note}, globals.Format)
+				return WriteExactList(lines, map[string]any{"@note": note}, globals.Format)
 			})
 		},
 	}

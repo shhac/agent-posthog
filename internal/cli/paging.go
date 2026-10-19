@@ -23,7 +23,7 @@ func addListPagingFlags(cmd *cobra.Command, opts *listOptions, defaultLimit int)
 	cmd.Flags().IntVar(&opts.PageLimit, "page-limit", 10, "Maximum pages to follow when --all is set")
 }
 
-func collectList(ctx context.Context, resolved *resolvedContext, path string, query url.Values, opts listOptions) ([]json.RawMessage, string, error) {
+func collectList(ctx context.Context, resolved *Resolved, path string, query url.Values, opts listOptions) ([]json.RawMessage, string, error) {
 	if opts.Limit > 0 && query.Get("limit") == "" {
 		query.Set("limit", strconv.Itoa(opts.Limit))
 	}
@@ -34,7 +34,7 @@ func collectList(ctx context.Context, resolved *resolvedContext, path string, qu
 	return resolved.Client.ListAll(ctx, path, query, pages)
 }
 
-func baseValues(limit int) url.Values {
+func BaseValues(limit int) url.Values {
 	q := url.Values{}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))

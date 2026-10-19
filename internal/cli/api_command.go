@@ -40,10 +40,10 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 				return agenterrors.New("raw POST outside query endpoints requires --yes", agenterrors.FixableByHuman).
 					WithHint("Many PostHog POST endpoints mutate state. Use a typed command when available.")
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
+			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
 				q := queryValuesFromPairs(queryPairs)
 				if printRequest {
-					return writeItem(map[string]any{
+					return WriteItem(map[string]any{
 						"method":  method,
 						"host":    resolved.Host,
 						"path":    path,
@@ -55,7 +55,7 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return writeRaw(raw, globals.Format)
+				return WriteRaw(raw, globals.Format)
 			})
 		},
 	}
@@ -78,7 +78,7 @@ func sendRaw(ctx context.Context, client *api.Client, method, path string, q url
 	}
 	body := map[string]any{}
 	if inline != "" || bodyFile != "" {
-		parsed, err := readJSONObject(inline, bodyFile, "json", "body")
+		parsed, err := ReadJSONObject(inline, bodyFile, "json", "body")
 		if err != nil {
 			return nil, err
 		}

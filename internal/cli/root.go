@@ -75,7 +75,7 @@ func newRootCmd(version string) *cobra.Command {
 	mcpCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		// Tool calls run as subprocesses that inherit this, so writes they make
 		// are subject to 'config set mcp_writes'.
-		if err := os.Setenv(viaMCPEnv, "1"); err != nil {
+		if err := os.Setenv(ViaMCPEnv, "1"); err != nil {
 			return err
 		}
 		return serve(cmd, args)
