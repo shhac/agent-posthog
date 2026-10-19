@@ -14,9 +14,10 @@ import (
 // Fixture projects. 123 is the default; 124 stands in for a separate staging
 // project; copying to 125 is gated by an approval policy.
 const (
-	approvalProject = 125
-	approvalFlagKey = "approval-flag"
-	policyFlagKey   = "policy-flag"
+	approvalProject     = 125
+	tagsRequiredProject = 126
+	approvalFlagKey     = "approval-flag"
+	policyFlagKey       = "policy-flag"
 )
 
 var projectTokens = map[int]string{123: "phc_mock_project_123", 124: "phc_mock_project_124"}
@@ -32,8 +33,8 @@ type flagStore struct {
 }
 
 func newFlagStore() *flagStore {
-	s := &flagStore{nextID: 100, flags: map[int]map[int]map[string]any{123: {}, 124: {}, approvalProject: {}}}
-	for _, flag := range []map[string]any{checkoutFlag(), billingFlag(23), billingFlag(24), approvalFlag(), policyFlag(), encryptedFlag(), v2Flag()} {
+	s := &flagStore{nextID: 100, flags: map[int]map[int]map[string]any{123: {}, 124: {}, approvalProject: {}, tagsRequiredProject: {}}}
+	for _, flag := range []map[string]any{checkoutFlag(), billingFlag(23), billingFlag(24), approvalFlag(), policyFlag(), encryptedFlag(), v2Flag(), legacyFlag()} {
 		s.flags[123][toInt(flag["id"])] = withFlagDefaults(flag)
 	}
 	return s
@@ -129,6 +130,10 @@ func (s *flagStore) create(w http.ResponseWriter, r *http.Request, project int) 
 	}
 	if findByKey(s.flags[project], key) != nil {
 		validationError(w, "key", "There is already a feature flag with this key.")
+		return
+	}
+	if project == tagsRequiredProject && len(asList(body["tags"])) == 0 {
+		validationError(w, "tags", "This project requires at least one tag on new feature flags.")
 		return
 	}
 	if isV2(body) && body["active"] == true {
@@ -242,6 +247,17 @@ func (s *flagStore) patchV2(w http.ResponseWriter, body, flag map[string]any) {
 	write(w, flag)
 }
 
+func hasFlagDependency(flag map[string]any) bool {
+	for _, group := range asList(asObject(flag["filters"])["groups"]) {
+		for _, prop := range asList(asObject(group)["properties"]) {
+			if asObject(prop)["type"] == "flag" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func isV2(flag map[string]any) bool {
 	return toInt(asObject(flag["filters"])["version"]) == 2
 }
@@ -326,6 +342,10 @@ func (s *flagStore) copyFlags(w http.ResponseWriter, r *http.Request) {
 		item := map[string]any{
 			"id": existing["id"], "key": key, "name": existing["name"], "active": active,
 			"team_id": project, "updated_existing": toInt(existing["version"]) > 1,
+		}
+		if body["copy_dependencies"] != true && hasFlagDependency(source) {
+			item["flag_dependency_warnings"] = []any{"Dropped a dependency on a flag the target project lacks; the copy is disabled."}
+			item["active"], existing["active"] = false, false
 		}
 		if body["copy_schedule"] == true {
 			item["schedule_copy_warning"] = "Existing schedules in the target project were kept."

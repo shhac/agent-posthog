@@ -41,6 +41,11 @@ against one server:
 - `policy-flag` (27): any PATCH returns the 400 `policy_conflict`
 - `v2-flag` (29): config version 2 filters; PATCH replaces the document whole
   with a strict version check, and creates must be disabled
+- `legacy-flag` (30): predates versioning, so its `version` is null
+- project `126` requires a tag on every new flag
+- `/flags` for distinct ID `mock-quota` reports the project as quota-limited
+- `copy_flags` without `copy_dependencies` drops flag dependencies with a warning
+  and disables the copy
 - `secret-config` (28): remote config with encrypted payloads, which the CLI
   must refuse to rewrite or export
 - archiving an active flag is a 400; DELETE is a 405; delete is `deleted: true`

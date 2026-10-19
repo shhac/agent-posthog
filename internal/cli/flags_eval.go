@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -171,6 +172,9 @@ func (e *evaluator) publicEval(ctx context.Context, in evalContext) evalResult {
 // interpretFlags reads one flag's result out of a /flags response. A flag
 // PostHog did not return or could not evaluate is an error, never false.
 func interpretFlags(resp, flag map[string]any) evalResult {
+	if slices.Contains(asList(resp["quotaLimited"]), any("feature_flags")) {
+		return evalResult{Status: "error", Error: "the project is over its feature flag quota, so PostHog did not evaluate flags"}
+	}
 	detail, returned := asObject(resp["flags"])[fmt.Sprint(flag["key"])].(map[string]any)
 	switch {
 	case !returned && flag["active"] != true:

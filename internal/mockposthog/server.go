@@ -397,6 +397,11 @@ func v2Flag() map[string]any {
 	}
 }
 
+// legacyFlag predates flag versioning, so PostHog reports its version as null.
+func legacyFlag() map[string]any {
+	return map[string]any{"id": 30, "key": "legacy-flag", "name": "Before versions", "active": true, "version": nil}
+}
+
 func policyFlag() map[string]any {
 	return map[string]any{"id": 27, "key": policyFlagKey, "name": "Policy conflicted", "active": false, "version": 1}
 }

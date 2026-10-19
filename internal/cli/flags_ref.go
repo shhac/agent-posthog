@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
@@ -41,20 +42,28 @@ func resolveFlagIDIn(ctx context.Context, resolved *resolvedContext, projectID i
 	return id, nil
 }
 
+// keyLookupPages bounds how far a key lookup pages before giving up.
+var keyLookupPages = listOptions{Limit: 100, All: true, PageLimit: 20}
+
 func flagIDsByKey(ctx context.Context, resolved *resolvedContext, projectID int, key string, archived bool) ([]string, error) {
-	q := baseValues(100)
-	// key filters exactly where supported; search narrows the page if not.
+	q := url.Values{}
+	// key filters exactly where supported; search narrows the results if not.
 	q.Set("key", key)
 	q.Set("search", key)
 	if archived {
 		q.Set("archived", "true")
 	}
-	page, err := resolved.Client.List(ctx, flagsPath(projectID), q)
+	results, next, err := collectList(ctx, resolved, flagsPath(projectID), q, keyLookupPages)
 	if err != nil {
 		return nil, err
 	}
+	if next != "" {
+		// Stopping early could miss the flag and turn an update into a duplicate create.
+		return nil, agenterrors.New("too many feature flags match key "+key+" to look it up reliably", agenterrors.FixableByAgent).
+			WithHint("Use the numeric feature flag ID.")
+	}
 	var matches []string
-	for _, raw := range page.Results {
+	for _, raw := range results {
 		var flag map[string]any
 		if err := json.Unmarshal(raw, &flag); err != nil {
 			continue

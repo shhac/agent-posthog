@@ -24,6 +24,10 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	distinctID, _ := body["distinct_id"].(string)
+	if distinctID == "mock-quota" {
+		write(w, map[string]any{"flags": map[string]any{}, "errorsWhileComputingFlags": false, "quotaLimited": []any{"feature_flags"}})
+		return
+	}
 	if distinctID == "mock-error" {
 		write(w, map[string]any{"flags": map[string]any{}, "errorsWhileComputingFlags": true})
 		return
