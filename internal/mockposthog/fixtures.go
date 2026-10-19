@@ -124,3 +124,14 @@ func legacyFlag() map[string]any {
 func policyFlag() map[string]any {
 	return map[string]any{"id": 27, "key": policyFlagKey, "name": "Policy conflicted", "active": false, "version": 1}
 }
+
+// Fixture projects. 123 is the default; 124 stands in for a separate staging
+// project; copying to 125 is gated by an approval policy.
+const (
+	approvalProject     = 125
+	tagsRequiredProject = 126
+	approvalFlagKey     = "approval-flag"
+	policyFlagKey       = "policy-flag"
+)
+
+var projectTokens = map[int]string{123: "phc_mock_project_123", 124: "phc_mock_project_124"}

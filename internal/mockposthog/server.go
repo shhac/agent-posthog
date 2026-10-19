@@ -37,7 +37,7 @@ func handle(w http.ResponseWriter, r *http.Request, store *flagStore, exact map[
 		writeQueryStatus(w, r)
 		return
 	}
-	writeStatus(w, http.StatusNotFound, map[string]any{"detail": "No mock route for " + r.Method + " " + r.URL.Path})
+	notFound(w, "No mock route for "+r.Method+" "+r.URL.Path)
 }
 
 func handlePreflight(w http.ResponseWriter, r *http.Request) bool {

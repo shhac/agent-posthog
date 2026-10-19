@@ -11,10 +11,7 @@ func setRollout(w http.ResponseWriter, r *http.Request, flag map[string]any) {
 		return
 	}
 	if toInt(body["version"]) != toInt(flag["version"]) {
-		writeStatus(w, http.StatusConflict, map[string]any{
-			"type": "server_error", "code": "conflict",
-			"detail": fmt.Sprintf("This feature flag has changed since version %v; it is now at version %v. Nothing was written.", body["version"], flag["version"]),
-		})
+		conflict(w, fmt.Sprintf("This feature flag has changed since version %v; it is now at version %v. Nothing was written.", body["version"], flag["version"]))
 		return
 	}
 	groups := asList(asObject(flag["filters"])["groups"])

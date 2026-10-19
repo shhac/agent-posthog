@@ -45,6 +45,6 @@ func writeQueryStatus(w http.ResponseWriter, r *http.Request) {
 	case "query_complete":
 		write(w, map[string]any{"query_status": map[string]any{"id": id, "query_async": true, "complete": true, "error": false, "results": map[string]any{"columns": []string{"event", "count"}, "results": [][]any{{"$pageview", 42}}}}})
 	default:
-		writeStatus(w, http.StatusNotFound, map[string]any{"detail": "Query " + id + " not found."})
+		notFound(w, "Query "+id+" not found.")
 	}
 }

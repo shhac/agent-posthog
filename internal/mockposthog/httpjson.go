@@ -17,6 +17,15 @@ func decodeBody(w http.ResponseWriter, r *http.Request) (map[string]any, bool) {
 	return body, true
 }
 
+// conflict is PostHog's stale-version refusal.
+func conflict(w http.ResponseWriter, detail string) {
+	writeStatus(w, http.StatusConflict, map[string]any{"type": "server_error", "code": "conflict", "detail": detail})
+}
+
+func notFound(w http.ResponseWriter, detail string) {
+	writeStatus(w, http.StatusNotFound, map[string]any{"detail": detail})
+}
+
 func validationError(w http.ResponseWriter, attr, detail string) {
 	writeStatus(w, http.StatusBadRequest, map[string]any{"type": "validation_error", "code": "invalid_input", "attr": attr, "detail": detail})
 }
