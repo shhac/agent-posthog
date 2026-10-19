@@ -209,7 +209,8 @@ agent-posthog flags reach beta-gate                          # users matching ea
 `evaluate` reports `enabled`, `variant`, `payload`, `reason`, and the matched
 `condition`. The default `--engine public` calls PostHog's `/flags` as an SDK
 would, using the project token it reads from the project (never printed) and
-any `--props-json` overrides on top of stored properties. `--engine diagnostic`
+any `--props-json` overrides on top of stored properties (plus `--device-id`
+and `--evaluation-context` as an SDK would send them). `--engine diagnostic`
 uses stored properties only, and with `--at` (or a case's `at`) replays the
 evaluation with the flag and person as they were at that time. Cloud `/flags` hosts are derived (`us.posthog.com`
 → `us.i.posthog.com`); set `--flags-host` or `AGENT_POSTHOG_FLAGS_HOST` for

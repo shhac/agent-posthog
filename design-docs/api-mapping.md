@@ -118,6 +118,13 @@ CLI behavior:
 | `flags reach` | `POST /api/projects/:project_id/feature_flags/user_blast_radius/` | project | `feature_flag:read` |
 | `flags copy` | `POST /api/organizations/:org_id/feature_flags/copy_flags/` (+ `copy_flags/dependency_requirements/` with `--copy-dependencies`) | organization | `feature_flag:write` |
 
+Flag write and evaluation behavior was checked against PostHog source at
+`master` commit `c58dbfa6eeb72f5e735ed99cedd61ad939234ba8` (2026-10-19):
+`products/feature_flags/backend/api/feature_flag.py`,
+`products/feature_flags/backend/api/organization_feature_flag.py`, and
+`rust/feature-flags/src/flags/{flag_models,flag_request}.rs`. Self-hosted or
+older Cloud deployments may differ.
+
 ## Projects vs environments (ID model and migration direction)
 
 Revisited 2026-06-25 after PostHog shipped first-class environments

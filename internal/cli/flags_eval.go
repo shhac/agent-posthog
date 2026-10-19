@@ -37,7 +37,9 @@ type evalContext struct {
 	Groups          map[string]any
 	GroupProperties map[string]any
 	// At replays the evaluation as of a past moment (diagnostic engine only).
-	At string
+	At                 string
+	DeviceID           string
+	EvaluationContexts []string
 }
 
 // evalResult is one evaluation. Status "error" means PostHog could not
@@ -148,7 +150,13 @@ func (e *evaluator) diagnostic(ctx context.Context, in evalContext) evalResult {
 }
 
 func (e *evaluator) publicEval(ctx context.Context, in evalContext) evalResult {
-	body := map[string]any{"api_key": e.projToken, "distinct_id": in.DistinctID}
+	body := map[string]any{"api_key": e.projToken, "distinct_id": in.DistinctID, "flag_keys": []string{fmt.Sprint(e.flag["key"])}}
+	if in.DeviceID != "" {
+		body["device_id"] = in.DeviceID
+	}
+	if len(in.EvaluationContexts) > 0 {
+		body["evaluation_contexts"] = in.EvaluationContexts
+	}
 	if len(in.PersonProps) > 0 {
 		body["person_properties"] = in.PersonProps
 	}
@@ -256,7 +264,8 @@ func (e *evaluator) warnings() []string {
 }
 
 type evalFlags struct {
-	engine, flagsHost, propsJSON, groupsJSON, groupPropsJSON string
+	engine, flagsHost, propsJSON, groupsJSON, groupPropsJSON, deviceID string
+	contexts                                                           []string
 }
 
 func (f *evalFlags) add(cmd *cobra.Command) {
@@ -268,6 +277,8 @@ func (f *evalFlags) addContext(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.propsJSON, "props-json", "", `Person properties for this evaluation, e.g. '{"app_env":"staging"}' (public engine)`)
 	cmd.Flags().StringVar(&f.groupsJSON, "groups-json", "", `Groups, e.g. '{"company":"acme"}'`)
 	cmd.Flags().StringVar(&f.groupPropsJSON, "group-props-json", "", `Group properties, e.g. '{"company":{"plan":"pro"}}' (public engine)`)
+	cmd.Flags().StringVar(&f.deviceID, "device-id", "", "Device ID, for flags bucketed by device (public engine)")
+	cmd.Flags().StringArrayVar(&f.contexts, "evaluation-context", nil, "Evaluation context the request carries, as an SDK would; repeat (public engine)")
 }
 
 func evaluateCommand(globals *GlobalFlags) *cobra.Command {
@@ -325,7 +336,7 @@ func (f *evalFlags) context(distinctID, at string) (evalContext, error) {
 	if err != nil {
 		return evalContext{}, err
 	}
-	in := evalContext{DistinctID: distinctID, At: at}
+	in := evalContext{DistinctID: distinctID, At: at, DeviceID: f.deviceID, EvaluationContexts: f.contexts}
 	for _, field := range []struct {
 		name, value string
 		target      *map[string]any
@@ -349,6 +360,9 @@ func (f *evalFlags) context(distinctID, at string) (evalContext, error) {
 func checkEngineContext(engine string, in evalContext) error {
 	if engine == engineDiagnostic && (in.PersonProps != nil || in.GroupProperties != nil) {
 		return agenterrors.New("the diagnostic engine uses stored properties only; drop property overrides or use --engine public", agenterrors.FixableByAgent)
+	}
+	if engine == engineDiagnostic && (in.DeviceID != "" || len(in.EvaluationContexts) > 0) {
+		return agenterrors.New("--device-id and evaluation contexts apply to /flags; use --engine public", agenterrors.FixableByAgent)
 	}
 	if engine != engineDiagnostic && in.At != "" {
 		return agenterrors.New("evaluating as of a past moment needs --engine diagnostic, which rebuilds the flag and person as they were", agenterrors.FixableByAgent)

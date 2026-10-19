@@ -39,7 +39,7 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 	failures := false
 	for _, id := range sortedIDs(s.flags[project]) {
 		flag := s.flags[project][id]
-		if flag["active"] != true || flag["deleted"] == true {
+		if flag["active"] != true || flag["deleted"] == true || !requested(flag, asList(body["flag_keys"])) || !contextsMatch(flag, asList(body["evaluation_contexts"])) {
 			continue
 		}
 		result, err := evaluateFlag(flag, props)
@@ -211,4 +211,34 @@ func personProperties(distinctID string, overrides map[string]any) map[string]an
 		props[k] = v
 	}
 	return props
+}
+
+// contextsMatch mirrors evaluation contexts: a flag that names contexts is
+// evaluated only for requests carrying one of them.
+func contextsMatch(flag map[string]any, requested []any) bool {
+	required := asList(flag["evaluation_contexts"])
+	if len(required) == 0 {
+		return true
+	}
+	for _, want := range required {
+		for _, got := range requested {
+			if want == got {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// requested honors flag_keys, which limits a /flags call to the named flags.
+func requested(flag map[string]any, keys []any) bool {
+	if len(keys) == 0 {
+		return true
+	}
+	for _, key := range keys {
+		if key == flag["key"] {
+			return true
+		}
+	}
+	return false
 }

@@ -139,6 +139,11 @@ func TestMCPFlagWritesPreviewOnlyWithDryRun(t *testing.T) {
 		t.Fatalf("flag not disabled: %v", got)
 	}
 
+	inline := s.flags([]any{"apply"}, map[string]any{"spec-json": `{"key":"via-mcp","conditions":[{"where":["plan = pro"]}]}`})
+	if inline["outcome"] != "applied" || inline["operation"] != "create" {
+		t.Fatalf("inline spec through MCP (no stdin, no shared filesystem) = %v", inline)
+	}
+
 	nested := s.flags([]any{"conditions", "list", "checkout-v2"}, nil)
 	if nested["index"] != float64(0) {
 		t.Fatalf("nested subcommand through the group tool = %v", nested)

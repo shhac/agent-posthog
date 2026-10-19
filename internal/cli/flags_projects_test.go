@@ -149,3 +149,20 @@ func TestCopyCanIncludeSchedules(t *testing.T) {
 		t.Fatalf("schedules copied without --copy-schedule: %v", plain)
 	}
 }
+
+func TestCopyPlanNamesAliasesAndWarnsAboutSideEffects(t *testing.T) {
+	s := stagingSession(t)
+	plan := s.mustRun("flags", "copy", "checkout-v2", "--to", "staging", "--disable", "--copy-dependencies")
+	targets, warnings := mustJSON(plan["targets"]), mustJSON(plan["warnings"])
+	if !strings.Contains(targets, `"alias":"staging"`) || !strings.Contains(targets, `"project":124`) {
+		t.Fatalf("targets = %s", targets)
+	}
+	for _, want := range []string{"cohorts are matched by name", "advisory", "--disable applies to this flag only"} {
+		if !strings.Contains(warnings, want) {
+			t.Fatalf("warnings missing %q: %s", want, warnings)
+		}
+	}
+	if plan["dependencies"] == nil {
+		t.Fatalf("--copy-dependencies should preflight dependency requirements: %v", plan)
+	}
+}

@@ -156,7 +156,7 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 				if err := requireOrg(resolved); err != nil {
 					return err
 				}
-				targetIDs, err := copyTargets(resolved, targets)
+				copyTo, targetIDs, err := copyTargets(resolved, targets)
 				if err != nil {
 					return err
 				}
@@ -165,7 +165,7 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				key := fmt.Sprint(flag["key"])
-				plan, blocked, warnings, err := planCopy(ctx, resolved, flag, targetIDs, overwrite)
+				plan, blocked, warnings, err := planCopy(ctx, resolved, flag, copyTo, overwrite)
 				if err != nil {
 					return err
 				}
@@ -183,6 +183,9 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 					}
 					requirements, _ := flagspec.DecodeObject(raw)
 					result.Set("dependencies", requirements)
+				}
+				if disable && copyDependencies {
+					warnings = append(warnings, "--disable applies to this flag only; dependency flags copied alongside it keep their source state.")
 				}
 				if copySchedule {
 					warnings = append(warnings, "Scheduled changes are copied too; schedules already on a target stay and may change the copy later.")
@@ -224,29 +227,37 @@ func copyFlagsPath(orgID string) string {
 	return "/api/organizations/" + orgID + "/feature_flags/copy_flags/"
 }
 
-func copyTargets(resolved *resolvedContext, targets []string) ([]int, error) {
+// copyTarget is a resolved destination project and the alias that named it.
+type copyTarget struct {
+	id    int
+	alias string
+}
+
+func copyTargets(resolved *resolvedContext, refs []string) ([]copyTarget, []int, error) {
 	seen := map[int]bool{}
+	var targets []copyTarget
 	var ids []int
-	for _, target := range targets {
-		id, err := resolved.projectRef(target)
+	for _, ref := range refs {
+		id, err := resolved.projectRef(ref)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if id == resolved.ProjectID {
-			return nil, agenterrors.New(fmt.Sprintf("project %s is the source project", target), agenterrors.FixableByAgent)
+			return nil, nil, agenterrors.New(fmt.Sprintf("project %s is the source project", ref), agenterrors.FixableByAgent)
 		}
 		if !seen[id] {
 			seen[id] = true
+			targets = append(targets, copyTarget{id: id, alias: aliasName(ref)})
 			ids = append(ids, id)
 		}
 	}
 	if len(ids) > maxCopyTargets {
-		return nil, agenterrors.New(fmt.Sprintf("PostHog copies to at most %d projects at once", maxCopyTargets), agenterrors.FixableByAgent)
+		return nil, nil, agenterrors.New(fmt.Sprintf("PostHog copies to at most %d projects at once", maxCopyTargets), agenterrors.FixableByAgent)
 	}
-	return ids, nil
+	return targets, ids, nil
 }
 
-func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]any, targetIDs []int, overwrite bool) ([]any, []string, []string, error) {
+func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]any, targets []copyTarget, overwrite bool) ([]any, []string, []string, error) {
 	key := fmt.Sprint(flag["key"])
 	source, warnings, err := comparableSpec(ctx, resolved, resolved.ProjectID, flag)
 	if err != nil {
@@ -258,19 +269,22 @@ func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]an
 	}, warnings...)
 	var plan []any
 	var blocked []string
-	for _, target := range targetIDs {
-		existing, err := flagInProject(ctx, resolved, target, key)
+	for _, target := range targets {
+		existing, err := flagInProject(ctx, resolved, target.id, key)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		entry := flagspec.NewOrdered()
-		entry.Set("project", target)
+		entry.Set("project", target.id)
+		if target.alias != "" {
+			entry.Set("alias", target.alias)
+		}
 		if existing == nil {
 			entry.Set("action", "create")
 			plan = append(plan, entry)
 			continue
 		}
-		targetSpec, targetWarnings, err := comparableSpec(ctx, resolved, target, existing)
+		targetSpec, targetWarnings, err := comparableSpec(ctx, resolved, target.id, existing)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -279,7 +293,7 @@ func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]an
 		entry.Set("differences", relabel(flagspec.Diff("", source, targetSpec), "source", "target"))
 		plan = append(plan, entry)
 		if !overwrite {
-			blocked = append(blocked, fmt.Sprint(target))
+			blocked = append(blocked, fmt.Sprint(target.id))
 		}
 	}
 	return plan, blocked, warnings, nil

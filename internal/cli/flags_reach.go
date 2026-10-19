@@ -56,6 +56,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 					line.Set("matching", counts["affected"])
 					line.Set("total", counts["total"])
 					line.Set("rollout", group["rollout_percentage"])
+					line.Set("aggregation_group_type_index", aggregation)
 					if err := writeExactLine(line); err != nil {
 						return err
 					}

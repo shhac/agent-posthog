@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/shhac/agent-posthog/internal/api"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -98,5 +103,39 @@ func TestEvaluateAsOfAPastTime(t *testing.T) {
 		`[{"name":"before launch","distinct_id":"user_123","at":"2026-01-01","expect":{"enabled":true}}]`)
 	if err != nil || !strings.Contains(out, `"at":"2026-01-01T00:00:00Z"`) || !strings.Contains(out, `"pass":1`) {
 		t.Fatalf("err=%v\n%s\n%s", err, out, errOut)
+	}
+}
+
+func TestEvaluationContextsDecideWhetherAFlagIsServed(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "create", "web-only", "--evaluation-context", "web", "--active", "--yes")
+	if errOut := s.mustFail("flags", "evaluate", "web-only", "--distinct-id", "u1"); !strings.Contains(errOut, "evaluation runtime or contexts") {
+		t.Fatalf("a flag filtered out by context must be an error, not false: %s", errOut)
+	}
+	if r := s.mustRun("flags", "evaluate", "web-only", "--distinct-id", "u1", "--evaluation-context", "web"); r["enabled"] != true {
+		t.Fatalf("evaluate = %v", r)
+	}
+	if errOut := s.mustFail("flags", "evaluate", "web-only", "--distinct-id", "u1", "--device-id", "d1", "--engine", "diagnostic"); !strings.Contains(errOut, "--engine public") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+}
+
+func TestPublicEvaluationRequestShape(t *testing.T) {
+	var body map[string]any
+	var auth, version string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth, version = r.Header.Get("Authorization"), r.URL.Query().Get("v")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"flags":{}}`))
+	}))
+	t.Cleanup(server.Close)
+	e := &evaluator{flag: map[string]any{"key": "gate", "active": false}, engine: enginePublic, public: api.New(server.URL, ""), projToken: "phc_project"}
+	e.publicEval(context.Background(), evalContext{DistinctID: "u1", DeviceID: "d1", EvaluationContexts: []string{"web"}, PersonProps: map[string]any{"plan": "pro"}})
+	if auth != "" || version != "2" {
+		t.Fatalf("auth = %q, v = %q: /flags must not carry the personal key", auth, version)
+	}
+	want := `{"api_key":"phc_project","device_id":"d1","distinct_id":"u1","evaluation_contexts":["web"],"flag_keys":["gate"],"person_properties":{"plan":"pro"}}`
+	if got := mustJSON(body); got != want {
+		t.Fatalf("body = %s\nwant   %s", got, want)
 	}
 }
