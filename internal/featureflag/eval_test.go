@@ -135,3 +135,16 @@ func TestPublicEngineNeedsTheProjectToken(t *testing.T) {
 		t.Fatal("an unknown engine must be refused")
 	}
 }
+
+func TestParseCasesAcceptsTheWrappedFormAndRefusesUnknownFields(t *testing.T) {
+	cases, err := ParseCases([]byte(`{"cases":[{"name":"a","expect":{"enabled":true}}]}`))
+	if err != nil || len(cases) != 1 || cases[0].Name != "a" {
+		t.Fatalf("cases=%v err=%v", cases, err)
+	}
+	if _, err := ParseCases([]byte(`[{"name":"a","bogus":1,"expect":{"enabled":true}}]`)); err == nil || !strings.Contains(err.Error(), `unknown field "bogus"`) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := ParseCases([]byte(`[{"name":"a","expect":{"colour":"red"}}]`)); err == nil || !strings.Contains(err.Error(), `unknown expectation "colour"`) {
+		t.Fatalf("err = %v", err)
+	}
+}

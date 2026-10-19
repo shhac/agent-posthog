@@ -44,46 +44,61 @@ func ParseCases(data []byte) ([]Case, error) {
 		if !ok {
 			return nil, fmt.Errorf("case %d must be an object", i)
 		}
-		for field := range raw {
-			if !caseFields[field] {
-				return nil, fmt.Errorf("case %d: unknown field %q", i, field)
-			}
-		}
-		name, _ := raw["name"].(string)
-		if name == "" || seen[name] {
-			return nil, fmt.Errorf("case %d needs a unique name", i)
-		}
-		seen[name] = true
-		expect, _ := raw["expect"].(map[string]any)
-		if len(expect) == 0 {
-			return nil, fmt.Errorf("case %q has nothing to expect", name)
-		}
-		for field := range expect {
-			if !expectFields[field] {
-				return nil, fmt.Errorf("case %q: unknown expectation %q (use %s)", name, field, strings.Join(slices.Sorted(maps.Keys(expectFields)), ", "))
-			}
-		}
-		distinctID, _ := raw["distinct_id"].(string)
-		if distinctID == "" {
-			distinctID = "agent-posthog-test:" + name
-		}
-		rawAt, _ := raw["at"].(string)
-		at, err := NormalizeAt(rawAt)
+		c, err := parseCase(i, raw, seen)
 		if err != nil {
-			return nil, fmt.Errorf("case %q: %w", name, err)
+			return nil, err
 		}
-		deviceID, _ := raw["device_id"].(string)
-		var contexts []string
-		for _, c := range flagspec.List(raw["evaluation_contexts"]) {
-			contexts = append(contexts, fmt.Sprint(c))
-		}
-		in := Subject{
-			DistinctID: distinctID, PersonProps: flagspec.Object(raw["props"]), Groups: flagspec.Object(raw["groups"]),
-			GroupProperties: flagspec.Object(raw["group_props"]), At: at, DeviceID: deviceID, EvaluationContexts: contexts,
-		}
-		cases = append(cases, Case{Name: name, In: in, Expect: expect})
+		cases = append(cases, c)
 	}
 	return cases, nil
+}
+
+// parseCase reads case i, refusing a name already in seen.
+func parseCase(i int, raw map[string]any, seen map[string]bool) (Case, error) {
+	if field, ok := unknownKey(raw, caseFields); ok {
+		return Case{}, fmt.Errorf("case %d: unknown field %q", i, field)
+	}
+	name, _ := raw["name"].(string)
+	if name == "" || seen[name] {
+		return Case{}, fmt.Errorf("case %d needs a unique name", i)
+	}
+	seen[name] = true
+	expect, _ := raw["expect"].(map[string]any)
+	if len(expect) == 0 {
+		return Case{}, fmt.Errorf("case %q has nothing to expect", name)
+	}
+	if field, ok := unknownKey(expect, expectFields); ok {
+		return Case{}, fmt.Errorf("case %q: unknown expectation %q (use %s)", name, field, strings.Join(slices.Sorted(maps.Keys(expectFields)), ", "))
+	}
+	distinctID, _ := raw["distinct_id"].(string)
+	if distinctID == "" {
+		distinctID = "agent-posthog-test:" + name
+	}
+	rawAt, _ := raw["at"].(string)
+	at, err := NormalizeAt(rawAt)
+	if err != nil {
+		return Case{}, fmt.Errorf("case %q: %w", name, err)
+	}
+	deviceID, _ := raw["device_id"].(string)
+	var contexts []string
+	for _, c := range flagspec.List(raw["evaluation_contexts"]) {
+		contexts = append(contexts, fmt.Sprint(c))
+	}
+	in := Subject{
+		DistinctID: distinctID, PersonProps: flagspec.Object(raw["props"]), Groups: flagspec.Object(raw["groups"]),
+		GroupProperties: flagspec.Object(raw["group_props"]), At: at, DeviceID: deviceID, EvaluationContexts: contexts,
+	}
+	return Case{Name: name, In: in, Expect: expect}, nil
+}
+
+// unknownKey is the first key of m, in sorted order, that allowed lacks.
+func unknownKey(m map[string]any, allowed map[string]bool) (string, bool) {
+	for _, key := range slices.Sorted(maps.Keys(m)) {
+		if !allowed[key] {
+			return key, true
+		}
+	}
+	return "", false
 }
 
 // mismatches compares only the fields a case names. A payload must match
