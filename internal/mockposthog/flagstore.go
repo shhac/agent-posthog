@@ -3,6 +3,7 @@ package mockposthog
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -55,7 +56,7 @@ func (s *flagStore) handle(w http.ResponseWriter, r *http.Request) bool {
 	case id != 0:
 		flag, ok := flags[id]
 		restoring := r.Method == http.MethodPatch && action == ""
-		if !ok || flag["deleted"] == true && !restoring {
+		if !ok || (flag["deleted"] == true && !restoring) {
 			notFound(w, "Not found.")
 			return true
 		}
@@ -92,18 +93,25 @@ func (s *flagStore) list(w http.ResponseWriter, r *http.Request, flags map[int]m
 	wantArchived := q.Get("archived") == "true"
 	out := []any{}
 	for _, id := range sortedIDs(flags) {
-		flag := flags[id]
-		key := fmt.Sprint(flag["key"])
-		switch {
-		case flag["deleted"] == true:
-		case (flag["archived"] == true) != wantArchived:
-		case q.Get("key") != "" && key != q.Get("key"):
-		case q.Get("search") != "" && !strings.Contains(key, q.Get("search")):
-		default:
-			out = append(out, flag)
+		if listed(flags[id], q, wantArchived) {
+			out = append(out, flags[id])
 		}
 	}
 	writePage(w, r, out)
+}
+
+// listed applies PostHog's list filters: deleted flags never show, archived
+// ones only when asked for, and key/search narrow by key.
+func listed(flag map[string]any, q url.Values, wantArchived bool) bool {
+	key := fmt.Sprint(flag["key"])
+	if flag["deleted"] == true || (flag["archived"] == true) != wantArchived {
+		return false
+	}
+	if want := q.Get("key"); want != "" && key != want {
+		return false
+	}
+	search := q.Get("search")
+	return search == "" || strings.Contains(key, search)
 }
 
 func (s *flagStore) create(w http.ResponseWriter, r *http.Request, project int) {

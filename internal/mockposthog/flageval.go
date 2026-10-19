@@ -43,7 +43,7 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 	failures := false
 	for _, id := range sortedIDs(s.flags[project]) {
 		flag := s.flags[project][id]
-		if flag["active"] != true || flag["deleted"] == true || !requested(flag, asList(body["flag_keys"])) || flag["evaluation_runtime"] == "client" || !contextsMatch(flag, asList(body["evaluation_contexts"])) {
+		if !servedByFlags(flag, body) {
 			continue
 		}
 		result, err := evaluateFlag(flag, props)
@@ -245,4 +245,14 @@ func requested(flag map[string]any, keys []any) bool {
 		}
 	}
 	return false
+}
+
+// servedByFlags reports whether /flags evaluates flag for this request: it is
+// active and not deleted, asked for, server-side, and in the request's
+// evaluation contexts.
+func servedByFlags(flag, body map[string]any) bool {
+	if flag["active"] != true || flag["deleted"] == true || flag["evaluation_runtime"] == "client" {
+		return false
+	}
+	return requested(flag, asList(body["flag_keys"])) && contextsMatch(flag, asList(body["evaluation_contexts"]))
 }
