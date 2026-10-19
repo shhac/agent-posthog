@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/shhac/lib-agent-cli/creds"
@@ -59,15 +58,9 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 			return cobra.ExactArgs(1)(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sql := ""
-			if file != "" {
-				data, err := os.ReadFile(file)
-				if err != nil {
-					return err
-				}
-				sql = string(data)
-			} else {
-				sql = args[0]
+			sql, err := hogQLText(args, file)
+			if err != nil {
+				return err
 			}
 			body := hogQLBody(sql, nil)
 			if async {
@@ -81,30 +74,34 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
+// hogQLText is the query from --file, or else the argument.
+func hogQLText(args []string, file string) (string, error) {
+	if file == "" {
+		return args[0], nil
+	}
+	data, err := readInput("", file, "", "file")
+	return string(data), err
+}
+
 func queryJSONCommand(globals *GlobalFlags) *cobra.Command {
-	var bodyFile string
+	var bodyFile, inline string
 	cmd := &cobra.Command{
 		Use:   "json",
 		Short: "Run a raw PostHog query JSON body",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var data []byte
-			var err error
-			if bodyFile == "" || bodyFile == "-" {
-				data, err = os.ReadFile("/dev/stdin")
-			} else {
-				data, err = os.ReadFile(bodyFile)
+			if inline != "" {
+				bodyFile = ""
 			}
+			body, err := readJSONObject(inline, bodyFile, "json", "body")
 			if err != nil {
-				return err
-			}
-			var body map[string]any
-			if err := json.Unmarshal(data, &body); err != nil {
 				return err
 			}
 			return runQuery(cmd.Context(), globals, body)
 		},
 	}
 	cmd.Flags().StringVar(&bodyFile, "body", "-", "JSON body file or - for stdin")
+	cmd.Flags().StringVar(&inline, "json", "", "JSON body inline (for callers without stdin, such as MCP)")
 	return cmd
 }
 

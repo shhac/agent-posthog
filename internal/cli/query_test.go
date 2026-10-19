@@ -75,3 +75,17 @@ func TestInvestigateEventPassesTheNameAsAValue(t *testing.T) {
 		t.Fatalf("the event name must travel as a value, not inside the SQL: %v", query)
 	}
 }
+
+func TestQueryAndAPIAcceptInlineJSON(t *testing.T) {
+	s := newMockSession(t, "phx_mock", "456")
+	body := `{"query":{"kind":"HogQLQuery","query":"select 1"}}`
+	if out, errOut, err := s.run("query", "json", "--json", body); err != nil || !strings.Contains(out, "$pageview") {
+		t.Fatalf("query json --json: %v %s %s", err, errOut, out)
+	}
+	if out, errOut, err := s.run("api", "post", "/api/environments/456/query/", "--json", body); err != nil || !strings.Contains(out, "$pageview") {
+		t.Fatalf("api post --json: %v %s %s", err, errOut, out)
+	}
+	if errOut := s.mustFail("query", "json", "--json", "[1,2]"); !strings.Contains(errOut, "must hold a JSON object") || !strings.Contains(errOut, `"fixable_by":"agent"`) {
+		t.Fatalf("stderr = %s", errOut)
+	}
+}

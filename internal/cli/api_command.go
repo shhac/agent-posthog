@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
+
+	"github.com/shhac/agent-posthog/internal/api"
 )
 
 func registerAPI(root *cobra.Command, globals *GlobalFlags) {
@@ -24,7 +25,7 @@ func registerAPI(root *cobra.Command, globals *GlobalFlags) {
 
 func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 	var queryPairs []string
-	var bodyFile string
+	var bodyFile, inline string
 	var yes, printRequest bool
 	cmd := &cobra.Command{
 		Use:   strings.ToLower(method) + " <api-path>",
@@ -50,27 +51,7 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 						"headers": map[string]string{"Authorization": "Bearer phx_..."},
 					}, globals.Format)
 				}
-				var raw json.RawMessage
-				var err error
-				if method == http.MethodGet {
-					raw, err = resolved.Client.Get(ctx, path, q)
-				} else {
-					body := map[string]any{}
-					if bodyFile != "" {
-						data, readErr := os.ReadFile(bodyFile)
-						if readErr != nil {
-							return readErr
-						}
-						if err := json.Unmarshal(data, &body); err != nil {
-							return err
-						}
-					}
-					if isQueryPath(path) {
-						raw, err = resolved.Client.Post(ctx, path, q, body)
-					} else {
-						raw, err = resolved.Client.Mutate(ctx, http.MethodPost, path, q, body)
-					}
-				}
+				raw, err := sendRaw(ctx, resolved.Client, method, path, q, inline, bodyFile)
 				if err != nil {
 					return err
 				}
@@ -82,9 +63,31 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 	cmd.Flags().BoolVar(&printRequest, "print-request", false, "Print a redacted request preview without sending")
 	if method == http.MethodPost {
 		cmd.Flags().StringVar(&bodyFile, "body", "", "JSON body file")
+		cmd.Flags().StringVar(&inline, "json", "", "JSON body inline (for callers without a shared filesystem, such as MCP)")
 		cmd.Flags().BoolVar(&yes, "yes", false, "Allow raw POST outside query endpoints")
 	}
 	return cmd
+}
+
+// sendRaw sends a raw request. Query POSTs are safe to repeat; any other POST
+// may change state, so it goes through Mutate (never retried, and refused
+// through MCP unless writes are on).
+func sendRaw(ctx context.Context, client *api.Client, method, path string, q url.Values, inline, bodyFile string) (json.RawMessage, error) {
+	if method == http.MethodGet {
+		return client.Get(ctx, path, q)
+	}
+	body := map[string]any{}
+	if inline != "" || bodyFile != "" {
+		parsed, err := readJSONObject(inline, bodyFile, "json", "body")
+		if err != nil {
+			return nil, err
+		}
+		body = parsed
+	}
+	if isQueryPath(path) {
+		return client.Post(ctx, path, q, body)
+	}
+	return client.Mutate(ctx, http.MethodPost, path, q, body)
 }
 
 func isQueryPath(path string) bool {
