@@ -61,11 +61,10 @@ type Evaluator struct {
 // project token and sends /flags requests to flagsHost (see FlagsHost).
 func (p Project) NewEvaluator(ctx context.Context, flag map[string]any, engine, flagsHost string) (*Evaluator, error) {
 	e := &Evaluator{p: p, flag: flag, engine: engine}
-	switch engine {
-	case EngineDiagnostic:
+	if engine == EngineDiagnostic {
 		return e, nil
-	case EnginePublic:
-	default:
+	}
+	if engine != EnginePublic {
 		return nil, agenterrors.New("--engine must be public or diagnostic", agenterrors.FixableByAgent)
 	}
 	raw, err := p.Client.Get(ctx, api.ProjectPath(p.ID), nil)
@@ -126,6 +125,12 @@ func (e *Evaluator) diagnostic(ctx context.Context, in Subject) Result {
 	if err != nil {
 		return Result{Status: "error", Error: "unexpected test_evaluation response"}
 	}
+	return interpretDiagnostic(resp)
+}
+
+// interpretDiagnostic reads a test_evaluation response: the result is false,
+// true, or the variant served.
+func interpretDiagnostic(resp map[string]any) Result {
 	r := Result{Status: "ok", Reason: resp["reason"], Description: resp["reason_description"], ConditionIndex: resp["condition_index"]}
 	switch value := resp["result"].(type) {
 	case bool:

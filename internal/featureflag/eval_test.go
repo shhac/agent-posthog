@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/shhac/agent-posthog/internal/api"
@@ -83,5 +84,54 @@ func TestScenarioDistinctIDsAreStable(t *testing.T) {
 	again, _ := ParseCases([]byte(`[{"name":"same","expect":{"enabled":true}}]`))
 	if cases[0].In.DistinctID != "agent-posthog-test:same" || cases[0].In.DistinctID != again[0].In.DistinctID {
 		t.Fatalf("distinct ids = %s / %s", cases[0].In.DistinctID, again[0].In.DistinctID)
+	}
+}
+
+func TestInterpretDiagnosticReadsVariantsAndPayloads(t *testing.T) {
+	resp, _ := flagspec.DecodeObject([]byte(`{"result":"debug","reason":"condition_match","condition_index":1,"payload":"{\"level\":\"debug\"}"}`))
+	r := interpretDiagnostic(resp)
+	if !r.Enabled || r.Variant != "debug" || !r.PayloadSet || mustJSON(r.Payload) != `{"level":"debug"}` {
+		t.Fatalf("result = %+v", r)
+	}
+	off, _ := flagspec.DecodeObject([]byte(`{"result":false,"reason":"no_condition_match","payload":"{}"}`))
+	if r := interpretDiagnostic(off); r.Enabled || r.PayloadSet {
+		t.Fatalf("a false result carries no payload: %+v", r)
+	}
+}
+
+func TestPublicEngineNeverSendsThePersonalKey(t *testing.T) {
+	var flagsAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/projects/1/":
+			_, _ = w.Write([]byte(`{"id":1,"api_token":"phc_project"}`))
+		case "/flags":
+			flagsAuth = r.Header.Get("Authorization")
+			_, _ = w.Write([]byte(`{"flags":{}}`))
+		}
+	}))
+	t.Cleanup(server.Close)
+	p := Project{Client: api.New(server.URL, "phx_personal"), ID: 1, Host: server.URL}
+	e, err := p.NewEvaluator(context.Background(), map[string]any{"key": "gate", "active": false}, EnginePublic, server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Evaluate(context.Background(), Subject{DistinctID: "u1"})
+	if flagsAuth != "" {
+		t.Fatalf("/flags got Authorization %q; it must carry only the project token", flagsAuth)
+	}
+}
+
+func TestPublicEngineNeedsTheProjectToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":1}`))
+	}))
+	t.Cleanup(server.Close)
+	p := Project{Client: api.New(server.URL, "phx_personal"), ID: 1, Host: server.URL}
+	if _, err := p.NewEvaluator(context.Background(), map[string]any{"key": "gate"}, EnginePublic, server.URL); err == nil || !strings.Contains(err.Error(), "did not include its token") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := p.NewEvaluator(context.Background(), map[string]any{"key": "gate"}, "magic", server.URL); err == nil {
+		t.Fatal("an unknown engine must be refused")
 	}
 }
