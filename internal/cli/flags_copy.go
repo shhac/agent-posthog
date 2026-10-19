@@ -10,6 +10,7 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/api"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -126,7 +127,7 @@ func copyHint(key string, blocked []string) string {
 }
 
 func copyFlagsPath(orgID string, segments ...string) string {
-	return apiPath(append([]string{"organizations", orgID, "feature_flags", "copy_flags"}, segments...)...)
+	return api.Path(append([]string{"organizations", orgID, "feature_flags", "copy_flags"}, segments...)...)
 }
 
 // copyTarget is a resolved destination project and the alias that named it.

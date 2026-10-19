@@ -65,7 +65,7 @@ func newEvaluator(ctx context.Context, resolved *resolvedContext, flag map[strin
 	default:
 		return nil, agenterrors.New("--engine must be public or diagnostic", agenterrors.FixableByAgent)
 	}
-	raw, err := resolved.Client.Get(ctx, projectAPIPath(resolved.ProjectID), nil)
+	raw, err := resolved.Client.Get(ctx, api.ProjectPath(resolved.ProjectID), nil)
 	if err != nil {
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByHuman).
 			WithHint("The public engine reads the project token from the project; the personal API key needs project read access. Or use --engine diagnostic.")

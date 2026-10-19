@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -303,4 +305,31 @@ func apiErrHint(err error) string {
 		return apiErr.Hint
 	}
 	return ""
+}
+
+func TestListAllStopsAtThePageLimit(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		next := ""
+		if page != "3" {
+			n := 1
+			if page != "" {
+				n, _ = strconv.Atoi(page)
+			}
+			next = fmt.Sprintf("%s/api/items/?page=%d", server.URL, n+1)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{page}, "next": next})
+	}))
+	defer server.Close()
+	client := New(server.URL, "phx_test")
+
+	items, next, err := client.ListAll(context.Background(), "/api/items/", nil, 2)
+	if err != nil || len(items) != 2 || !strings.HasSuffix(next, "page=3") {
+		t.Fatalf("limited: items=%s next=%q err=%v", items, next, err)
+	}
+	items, next, err = client.ListAll(context.Background(), "/api/items/", nil, 0)
+	if err != nil || len(items) != 3 || next != "" {
+		t.Fatalf("unlimited: items=%s next=%q err=%v", items, next, err)
+	}
 }

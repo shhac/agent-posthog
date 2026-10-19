@@ -2,7 +2,8 @@ package cli
 
 import (
 	"strconv"
-	"strings"
+
+	"github.com/shhac/agent-posthog/internal/api"
 )
 
 // scope is the part of PostHog a command works in.
@@ -23,13 +24,13 @@ func (r *resolvedContext) path(s scope, segments ...string) (string, error) {
 	}
 	switch s {
 	case scopeOrg:
-		return apiPath(append([]string{"organizations", r.OrgID}, segments...)...), nil
+		return api.Path(append([]string{"organizations", r.OrgID}, segments...)...), nil
 	case scopeProject:
-		return projectAPIPath(r.ProjectID, segments...), nil
+		return api.ProjectPath(r.ProjectID, segments...), nil
 	case scopeEnvironment:
-		return apiPath(append([]string{"environments", strconv.Itoa(r.EnvironmentID)}, segments...)...), nil
+		return api.Path(append([]string{"environments", strconv.Itoa(r.EnvironmentID)}, segments...)...), nil
 	default:
-		return apiPath(segments...), nil
+		return api.Path(segments...), nil
 	}
 }
 
@@ -46,19 +47,8 @@ func (r *resolvedContext) require(s scope) error {
 	}
 }
 
-// projectAPIPath builds a path in a given project, for commands that reach
-// beyond the current one (diff, copy).
-func projectAPIPath(projectID int, segments ...string) string {
-	return apiPath(append([]string{"projects", strconv.Itoa(projectID)}, segments...)...)
-}
-
-// apiPath joins segments under /api/ with PostHog's trailing slash.
-func apiPath(segments ...string) string {
-	return "/api/" + strings.Join(segments, "/") + "/"
-}
-
 func flagsPath(projectID int, segments ...string) string {
-	return projectAPIPath(projectID, append([]string{"feature_flags"}, segments...)...)
+	return api.ProjectPath(projectID, append([]string{"feature_flags"}, segments...)...)
 }
 
 func flagPath(projectID int, id string, segments ...string) string {

@@ -72,6 +72,24 @@ func (c *Client) WithBase(baseURL, token string) *Client {
 	return &clone
 }
 
+// ListAll reads a paginated collection, following next links for at most
+// maxPages pages (0 for no limit). It returns the results and the next link
+// left unfollowed, empty once the collection is exhausted.
+func (c *Client) ListAll(ctx context.Context, path string, query url.Values, maxPages int) ([]json.RawMessage, string, error) {
+	var all []json.RawMessage
+	for pages := 1; ; pages++ {
+		page, err := c.List(ctx, path, query)
+		if err != nil {
+			return nil, "", err
+		}
+		all = append(all, page.Results...)
+		if page.Next == "" || (maxPages > 0 && pages >= maxPages) {
+			return all, page.Next, nil
+		}
+		path, query = page.Next, nil
+	}
+}
+
 func (c *Client) Get(ctx context.Context, path string, query url.Values) (json.RawMessage, error) {
 	return c.do(ctx, http.MethodGet, path, query, nil, true)
 }

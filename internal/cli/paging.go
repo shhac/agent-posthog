@@ -27,24 +27,11 @@ func collectList(ctx context.Context, resolved *resolvedContext, path string, qu
 	if opts.Limit > 0 && query.Get("limit") == "" {
 		query.Set("limit", strconv.Itoa(opts.Limit))
 	}
-	var all []json.RawMessage
-	pages := 0
-	for {
-		page, err := resolved.Client.List(ctx, path, query)
-		if err != nil {
-			return nil, "", err
-		}
-		all = append(all, page.Results...)
-		pages++
-		if !opts.All || page.Next == "" {
-			return all, page.Next, nil
-		}
-		if opts.PageLimit > 0 && pages >= opts.PageLimit {
-			return all, page.Next, nil
-		}
-		path = page.Next
-		query = url.Values{}
+	pages := 1
+	if opts.All {
+		pages = opts.PageLimit
 	}
+	return resolved.Client.ListAll(ctx, path, query, pages)
 }
 
 func baseValues(limit int) url.Values {
