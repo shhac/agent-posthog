@@ -369,6 +369,10 @@ agent-posthog flags copy beta-gate --to prod --yes
 ```
 
 The spec and `--where` grammar live in `internal/flagspec` (pure, no HTTP).
+Reading, planning, and writing flags against PostHog live in
+`internal/featureflag`, which returns receipts, plans, and results and never
+prints; `internal/cli` parses flags, calls it, and presents what comes back.
+HogQL requests and async-query waits are `internal/query`.
 Specs are presence-aware (an omitted field is left alone), decode numbers
 losslessly, keep unknown condition and variant keys, and refuse encrypted
 payload edits and remote-config conditions. Flags in PostHog's config version
@@ -404,11 +408,14 @@ Evidence record contract:
 {"type":"next_step","command":"agent-posthog flags get checkout-v2 --full"}
 ```
 
+Records print once the workflow has gathered them, one per line, or as
+`{"data":[…]}` under `--format json|yaml`.
+
 `investigate event` sends the event name in the HogQL query's `values` and
 refers to it as `{event}`, so a name is never spliced into SQL text.
 
 Built so far: `user` resolves persons and suggests `persons activity`; `event`
-samples recent events; `flag` streams the definition, an inactive finding,
+samples recent events; `flag` reports the definition, an inactive finding,
 dependent flags, and activity. Workflows still to build toward:
 
 1. `investigate user`: recent events, cohorts/flags if available, and session

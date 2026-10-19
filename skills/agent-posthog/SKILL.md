@@ -266,7 +266,8 @@ and `payload` must match exactly:
 ```
 
 It prints one line per case (`pass`, `fail` with mismatches, or `error`), then
-`@summary`, and exits 1 unless every case passes. `--parallel N` (up to 8)
+`@summary` (under `--format json|yaml`, one `{"data":[…],"@summary":…}`
+document), and exits 1 unless every case passes. `--parallel N` (up to 8)
 evaluates N cases at once; output stays in case order, and `--timeout` bounds
 the whole suite. An `error` means PostHog could
 not evaluate the flag; it is never a false result. Tests evaluate the **saved**
@@ -277,6 +278,8 @@ this flag" errors; wait a moment and run it again. `distinct_id` defaults to
 
 `reach` counts users whose properties pass each condition's filters before
 rollout; conditions overlap, so the counts do not add up to the audience.
+Like `test`, it prints one line per condition, or `{"data":[…],"@note":…}`
+under `--format json|yaml`.
 
 ## Staging recipes
 

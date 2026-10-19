@@ -166,10 +166,6 @@ func (n *NDJSONWriter) WriteMetaLine(key string, value any) error {
 	return n.inner.WriteMetaLine(key, cleaned)
 }
 
-func (n *NDJSONWriter) WritePagination(p *Pagination) error {
-	return n.WriteMetaLine(MetaKeyPagination, p)
-}
-
 func toCleanAny(data any, prune bool) (any, bool) {
 	b, err := json.Marshal(data)
 	if err != nil {
