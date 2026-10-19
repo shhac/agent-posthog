@@ -26,11 +26,11 @@ func TestCleanRedactsSecretsAndDropsNulls(t *testing.T) {
 
 func TestCompactKeepsTheUsualFields(t *testing.T) {
 	record := map[string]any{"id": 1.0, "name": "n", "timezone": "UTC"}
-	compact, _ := Cleaner(Compact)(record).(map[string]any)
+	compact, _ := cleaner(Compact)(record).(map[string]any)
 	if compact["name"] != "n" || compact["timezone"] != nil {
 		t.Fatalf("compact = %v", compact)
 	}
-	full, _ := Cleaner(Full)(record).(map[string]any)
+	full, _ := cleaner(Full)(record).(map[string]any)
 	if full["timezone"] != "UTC" {
 		t.Fatalf("full = %v", full)
 	}

@@ -6,9 +6,9 @@ import (
 	"slices"
 )
 
-// Absent marks a side of a change where the field does not exist, as opposed
+// absent marks a side of a change where the field does not exist, as opposed
 // to existing with a null value.
-const Absent = "(absent)"
+const absent = "(absent)"
 
 // Change is one leaf-level difference between two flag definitions.
 type Change struct {
@@ -71,7 +71,7 @@ func joinPath(path, key string) string {
 
 func presence(v any, ok bool) any {
 	if !ok {
-		return Absent
+		return absent
 	}
 	return v
 }

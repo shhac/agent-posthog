@@ -48,7 +48,7 @@ func ListCommand(globals *GlobalFlags, spec ListSpec) *cobra.Command {
 				if spec.Filter != nil {
 					items = spec.Filter(items)
 				}
-				return WriteRawList(items, nextURL, globals.Format, ShapeOf(globals))
+				return writeRawList(items, nextURL, globals.Format, ShapeOf(globals))
 			})
 		},
 	}

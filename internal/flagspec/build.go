@@ -122,7 +122,7 @@ func buildConditionGroups(p *Patch, spec *Spec, filters map[string]any, creating
 // validates the document itself and admits these writes per project.
 func buildDocument(current map[string]any, creating bool, spec *Spec) (*Patch, error) {
 	if !creating {
-		version, err := ConfigVersion(Object(current["filters"]))
+		version, err := configVersion(Object(current["filters"]))
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func buildMultivariate(p *Patch, spec *Spec, filters map[string]any, fromType, t
 		if toType != TypeMultivariate {
 			return nil, fmt.Errorf("variants need type multivariate")
 		}
-		variants := BuildVariants(List(spec.Get("variants")))
+		variants := buildVariants(List(spec.Get("variants")))
 		p.Filters["multivariate"] = map[string]any{"variants": variants}
 		return variants, nil
 	case toType == TypeMultivariate:
@@ -199,8 +199,8 @@ func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, 
 	return nil
 }
 
-// BuildVariants converts spec variants into PostHog multivariate variants.
-func BuildVariants(variants []any) []any {
+// buildVariants converts spec variants into PostHog multivariate variants.
+func buildVariants(variants []any) []any {
 	out := make([]any, 0, len(variants))
 	for _, item := range variants {
 		variant := Object(item)

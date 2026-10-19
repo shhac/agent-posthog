@@ -15,7 +15,7 @@ func WriteItem(data any, flagFormat string) error {
 	if err != nil {
 		return err
 	}
-	return output.Print(data, format, output.Full)
+	return output.Print(data, format)
 }
 
 // WriteRaw writes a response body cleaned to shape; JSON by default.
@@ -37,8 +37,8 @@ func WriteList(items []any, nextURL, flagFormat string, shape output.Shape) erro
 	return output.WriteList(format, items, output.PaginationMeta(nextURL), shape)
 }
 
-// WriteRawList writes a page of response records as a list.
-func WriteRawList(items []json.RawMessage, nextURL, flagFormat string, shape output.Shape) error {
+// writeRawList writes a page of response records as a list.
+func writeRawList(items []json.RawMessage, nextURL, flagFormat string, shape output.Shape) error {
 	decoded := make([]any, 0, len(items))
 	for _, raw := range items {
 		var item any
@@ -93,5 +93,5 @@ func WriteExactList(items []any, meta map[string]any, flagFormat string) error {
 		}
 		return WriteExact(envelope, flagFormat)
 	}
-	return output.WriteExactList(output.FormatNDJSON, items, meta)
+	return output.WriteExactLines(items, meta)
 }

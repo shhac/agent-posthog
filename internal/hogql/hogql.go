@@ -28,8 +28,8 @@ type Status struct {
 	Message  string
 }
 
-// ParseStatus reads the query_status of a response.
-func ParseStatus(raw json.RawMessage) Status {
+// parseStatus reads the query_status of a response.
+func parseStatus(raw json.RawMessage) Status {
 	var payload struct {
 		QueryStatus *struct {
 			Complete     bool   `json:"complete"`
@@ -56,7 +56,7 @@ func Wait(ctx context.Context, fetch func(context.Context) (json.RawMessage, err
 		if err != nil {
 			return nil, Status{}, err
 		}
-		status := ParseStatus(raw)
+		status := parseStatus(raw)
 		if !status.Known || status.Error || status.Complete {
 			return raw, status, nil
 		}

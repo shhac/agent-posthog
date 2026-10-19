@@ -17,9 +17,9 @@ const (
 	TypeRemoteConfig = "remote_config"
 )
 
-// SchemaVersion is the spec format version, unrelated to the flag row's
+// schemaVersion is the spec format version, unrelated to the flag row's
 // version and to filters.version.
-const SchemaVersion = 1
+const schemaVersion = 1
 
 var specFields = map[string]bool{
 	"schema_version": true, "key": true, "name": true, "type": true, "active": true,
@@ -122,8 +122,8 @@ func (s *Spec) validateHeader() error {
 	if incomplete := List(s.fields["incomplete"]); len(incomplete) > 0 {
 		return fmt.Errorf("this spec is marked incomplete (%v) and cannot be applied", incomplete)
 	}
-	if v, ok := s.fields["schema_version"]; ok && !Equal(v, number(SchemaVersion)) {
-		return fmt.Errorf("unsupported schema_version %v (supported: %d)", v, SchemaVersion)
+	if v, ok := s.fields["schema_version"]; ok && !Equal(v, number(schemaVersion)) {
+		return fmt.Errorf("unsupported schema_version %v (supported: %d)", v, schemaVersion)
 	}
 	if s.Key() == "" {
 		return fmt.Errorf("key is required")
@@ -221,7 +221,7 @@ func validateWhere(i int, where any) error {
 	for j, filter := range list {
 		switch f := filter.(type) {
 		case string:
-			if _, err := ParseWhere(f); err != nil {
+			if _, err := parseWhere(f); err != nil {
 				return fmt.Errorf("conditions[%d].where[%d]: %w", i, j, err)
 			}
 		case map[string]any:

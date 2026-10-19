@@ -158,11 +158,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 // send performs one request and reads the whole response.
 func (c *Client) send(req *http.Request) (int, http.Header, []byte, error) {
 	c.debug(map[string]any{"debug": "request", "method": req.Method, "url": secret.RedactURL(req.URL.String())})
-	httpClient := c.HTTPClient
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-	resp, err := httpClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return 0, nil, nil, err
 	}

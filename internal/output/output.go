@@ -21,8 +21,7 @@ import (
 	_ "github.com/shhac/lib-agent-cli/yaml"
 )
 
-// Format and its values come from the shared contract; ParseFormat is therefore
-// the family's lenient parser (accepts "ndjson"/"yml", case-insensitive).
+// Format and its values come from the shared contract.
 type Format = out.Format
 
 const (
@@ -36,7 +35,6 @@ const MetaKeyQuery = "@query"
 
 var (
 	ResolveFormat = out.ResolveFormat
-	WriteError    = out.WriteError
 )
 
 var (
@@ -86,10 +84,10 @@ const (
 	Compact
 )
 
-// Cleaner is the policy every cleaned write applies: shape the record, drop
+// cleaner is the policy every cleaned write applies: shape the record, drop
 // nulls, then mask secrets. Nulls go before masking so a null secret leaves
 // no @redacted note. It reads --expose when called, after flags are parsed.
-func Cleaner(shape Shape) out.Pruner {
+func cleaner(shape Shape) out.Pruner {
 	var compact out.Pruner
 	if shape == Compact {
 		compact = compactValue
@@ -97,9 +95,9 @@ func Cleaner(shape Shape) out.Pruner {
 	return out.Chain(compact, out.PruneNils, out.Redactor(postHogSecrets(), redactExpose))
 }
 
-// Print writes data cleaned to the given shape.
-func Print(data any, format Format, shape Shape) error {
-	return out.Print(Stdout(), data, format, Cleaner(shape))
+// Print writes a whole record, cleaned.
+func Print(data any, format Format) error {
+	return out.Print(Stdout(), data, format, cleaner(Full))
 }
 
 // PrintRaw is Print for a response body; a body that is not JSON is written
@@ -110,7 +108,7 @@ func PrintRaw(raw json.RawMessage, format Format, shape Shape) error {
 		_, err := Stdout().Write(append(raw, '\n'))
 		return err
 	}
-	return Print(data, format, shape)
+	return out.Print(Stdout(), data, format, cleaner(shape))
 }
 
 // PrintExact encodes data with neither pruning nor redaction, for output whose
@@ -119,24 +117,24 @@ func PrintExact(data any, format Format) error {
 	return out.Print(Stdout(), data, format, nil)
 }
 
-// WriteExactList is WriteList without cleaning, for records whose nulls and
-// values are the point.
-func WriteExactList(format Format, items []any, meta map[string]any) error {
-	return out.WriteList(Stdout(), format, items, meta, nil)
+// WriteExactLines writes records as NDJSON lines, then one line per meta key,
+// without cleaning, for records whose nulls and values are the point.
+func WriteExactLines(items []any, meta map[string]any) error {
+	return out.WriteList(Stdout(), FormatNDJSON, items, meta, nil)
 }
 
 // Clean prunes nils and redacts secrets from a decoded value, for records
 // handed to a writer that does not clean (such as the shared multi-get
 // printer).
 func Clean(data any) any {
-	return Cleaner(Full)(data)
+	return cleaner(Full)(data)
 }
 
 // WriteList renders a list in the family's two shapes (NDJSON records then
 // @-prefixed meta lines, or one {"data":[...], <meta>} document), cleaning
 // each record to the given shape.
 func WriteList(format Format, items []any, meta map[string]any, shape Shape) error {
-	return out.WriteList(Stdout(), format, items, meta, Cleaner(shape))
+	return out.WriteList(Stdout(), format, items, meta, cleaner(shape))
 }
 
 // PaginationMeta is the meta map for a page that has more after it, keyed
@@ -145,15 +143,14 @@ func PaginationMeta(nextURL string) map[string]any {
 	if nextURL == "" {
 		return nil
 	}
-	return map[string]any{out.MetaKeyPagination: Pagination{HasMore: true, NextURL: nextURL}}
+	return map[string]any{out.MetaKeyPagination: pagination{HasMore: true, NextURL: nextURL}}
 }
 
-// Pagination is PostHog-shaped (a next URL, not an opaque cursor), so it stays
-// local rather than using out.Pagination.
-type Pagination struct {
+// pagination is PostHog-shaped (a next URL, not an opaque cursor), so it stays
+// local rather than using out.pagination.
+type pagination struct {
 	HasMore bool   `json:"has_more"`
 	NextURL string `json:"next_url,omitempty"`
-	Limit   int    `json:"limit,omitempty"`
 }
 
 // NDJSONWriter wraps the shared writer with agent-posthog's clean step (prune +

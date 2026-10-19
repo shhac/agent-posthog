@@ -41,8 +41,8 @@ const NoVersion = -1
 // with any warnings the change calls for.
 type Build func(ctx context.Context, p Project, flag map[string]any) (*flagspec.Patch, []string, error)
 
-// Sender delivers a planned patch for a flag.
-type Sender func(ctx context.Context, flag map[string]any, patch *flagspec.Patch) (json.RawMessage, error)
+// sender delivers a planned patch for a flag.
+type sender func(ctx context.Context, flag map[string]any, patch *flagspec.Patch) (json.RawMessage, error)
 
 // Pending is a planned write: its receipt, and how to carry it out.
 type Pending struct {
@@ -61,12 +61,12 @@ func (pd *Pending) Changed() bool { return len(pd.Receipt.Changes) > 0 }
 // still at that version. The write PATCHes the flag with its version and the
 // flag as read, so PostHog refuses it if someone changed the same fields since.
 func (p Project) Plan(ctx context.Context, ref, operation string, ifVersion int, build Build) (*Pending, error) {
-	return p.PlanVia(ctx, ref, operation, ifVersion, build, p.patch)
+	return p.planVia(ctx, ref, operation, ifVersion, build, p.patch)
 }
 
-// PlanVia is Plan with a different way to deliver the patch, for edits
+// planVia is Plan with a different way to deliver the patch, for edits
 // PostHog offers a stricter endpoint for.
-func (p Project) PlanVia(ctx context.Context, ref, operation string, ifVersion int, build Build, send Sender) (*Pending, error) {
+func (p Project) planVia(ctx context.Context, ref, operation string, ifVersion int, build Build, send sender) (*Pending, error) {
 	flag, err := p.Fetch(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -161,11 +161,10 @@ func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
 func (pd *Pending) Commit(ctx context.Context) (*Receipt, error) {
 	raw, err := pd.send(ctx)
 	if err != nil {
-		return nil, ClassifyWriteError(err)
+		return nil, classifyWriteError(err)
 	}
 	r := pd.Receipt
 	r.Outcome = OutcomeApplied
-	r.Hint = ""
 	stored, err := flagspec.DecodeObject(raw)
 	if err != nil {
 		return r, nil

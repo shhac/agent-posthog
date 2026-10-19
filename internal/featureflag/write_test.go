@@ -87,8 +87,8 @@ func TestPlanCopyRefusesTheSourceAndTooManyTargets(t *testing.T) {
 	if _, err := p.PlanCopy(ctx, "checkout-v2", []Target{{ID: 123}}, CopyOptions{}); err == nil || !strings.Contains(err.Error(), "source project") {
 		t.Fatalf("err = %v", err)
 	}
-	targets := make([]Target, 0, MaxCopyTargets+1)
-	for id := 1000; len(targets) <= MaxCopyTargets; id++ {
+	targets := make([]Target, 0, maxCopyTargets+1)
+	for id := 1000; len(targets) <= maxCopyTargets; id++ {
 		targets = append(targets, Target{ID: id})
 	}
 	if _, err := p.PlanCopy(ctx, "checkout-v2", targets, CopyOptions{}); err == nil || !strings.Contains(err.Error(), "at most") {

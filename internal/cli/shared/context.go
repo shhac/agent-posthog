@@ -174,7 +174,7 @@ func RequireProject(ctx *Resolved) error {
 	return nil
 }
 
-func RequireEnvironment(ctx *Resolved) error {
+func requireEnvironment(ctx *Resolved) error {
 	if ctx.EnvironmentID == 0 {
 		return agenterrors.New("missing environment id", agenterrors.FixableByAgent).
 			WithHint("Run 'agent-posthog environments list --project <id>' or set one with 'agent-posthog auth update <profile> --env <id>'.")

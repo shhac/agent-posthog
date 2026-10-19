@@ -50,13 +50,13 @@ var personOperators = map[string]string{
 	"is_date_after":  "string",
 }
 
-// ParseWhere parses one condition filter: "<key> <op> <value>".
+// parseWhere parses one condition filter: "<key> <op> <value>".
 //
 // A bare key or person:<name> targets a person property, the bare key "cohort"
 // targets a cohort (in/not_in), and flag:<key-or-id> targets a flag dependency
 // whose key is left as written for the caller to resolve to a numeric ID. The
 // value is read as JSON when it parses as JSON, otherwise as a bare string.
-func ParseWhere(expr string) (map[string]any, error) {
+func parseWhere(expr string) (map[string]any, error) {
 	key, rest := cutField(strings.TrimSpace(expr))
 	op, rest := cutField(rest)
 	value := strings.TrimSpace(rest)
@@ -165,7 +165,7 @@ func FormatWhere(prop map[string]any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	back, err := ParseWhere(expr)
+	back, err := parseWhere(expr)
 	if err != nil || !Equal(back, prop) {
 		return "", false
 	}

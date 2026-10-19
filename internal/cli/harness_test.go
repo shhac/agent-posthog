@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	agentoutput "github.com/shhac/lib-agent-output"
+
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/mockposthog"
 	"github.com/shhac/agent-posthog/internal/output"
@@ -90,7 +92,7 @@ func (s *cliSession) run(args ...string) (string, string, error) {
 	// the test sees exactly what Run would emit, exercising the single-sink path.
 	err := cmd.Execute()
 	if err != nil {
-		output.WriteError(output.Stderr(), err)
+		agentoutput.WriteError(output.Stderr(), err)
 	}
 	return stdout.String(), stderr.String(), err
 }

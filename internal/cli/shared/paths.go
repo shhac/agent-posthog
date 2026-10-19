@@ -41,7 +41,7 @@ func (r *Resolved) require(s Scope) error {
 	case ScopeProject:
 		return RequireProject(r)
 	case ScopeEnvironment:
-		return RequireEnvironment(r)
+		return requireEnvironment(r)
 	default:
 		return nil
 	}

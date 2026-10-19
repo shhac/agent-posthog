@@ -26,7 +26,7 @@ func KeepOrEncode(stored, value any) (any, error) {
 			return stored, nil
 		}
 	}
-	return EncodePayload(value)
+	return encodePayload(value)
 }
 
 // DecodePayload turns a stored payload (a JSON-encoded string) into its value.
@@ -42,8 +42,8 @@ func DecodePayload(stored any) (any, error) {
 	return value, nil
 }
 
-// EncodePayload JSON-encodes a payload value for filters.payloads.
-func EncodePayload(value any) (string, error) {
+// encodePayload JSON-encodes a payload value for filters.payloads.
+func encodePayload(value any) (string, error) {
 	data, err := marshalUnescaped(value)
 	if err != nil {
 		return "", err

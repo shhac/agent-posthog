@@ -12,8 +12,8 @@ import (
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-// MaxCopyTargets is the most projects PostHog copies to at once.
-const MaxCopyTargets = 50
+// maxCopyTargets is the most projects PostHog copies to at once.
+const maxCopyTargets = 50
 
 // Target is a destination project and the alias that named it, if any.
 type Target struct {
@@ -132,7 +132,7 @@ func (cp *CopyPlan) Apply(ctx context.Context) (*CopyResult, error) {
 	}
 	raw, err := cp.p.Client.Mutate(ctx, http.MethodPost, cp.p.copyFlagsPath(), nil, cp.request)
 	if err != nil {
-		return nil, ClassifyWriteError(err)
+		return nil, classifyWriteError(err)
 	}
 	resp, err := flagspec.DecodeObject(raw)
 	if err != nil {
@@ -183,8 +183,8 @@ func (p Project) checkTargets(targets []Target) ([]Target, error) {
 			out = append(out, target)
 		}
 	}
-	if len(out) > MaxCopyTargets {
-		return nil, agenterrors.New(fmt.Sprintf("PostHog copies to at most %d projects at once", MaxCopyTargets), agenterrors.FixableByAgent)
+	if len(out) > maxCopyTargets {
+		return nil, agenterrors.New(fmt.Sprintf("PostHog copies to at most %d projects at once", maxCopyTargets), agenterrors.FixableByAgent)
 	}
 	return out, nil
 }

@@ -29,9 +29,9 @@ func TestParseWhere(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.expr, func(t *testing.T) {
-			got, err := ParseWhere(tc.expr)
+			got, err := parseWhere(tc.expr)
 			if err != nil {
-				t.Fatalf("ParseWhere: %v", err)
+				t.Fatalf("parseWhere: %v", err)
 			}
 			data, _ := json.Marshal(got)
 			if string(data) != tc.want {
@@ -60,7 +60,7 @@ func TestParseWhereRejects(t *testing.T) {
 	}
 	for expr, want := range cases {
 		t.Run(expr, func(t *testing.T) {
-			_, err := ParseWhere(expr)
+			_, err := parseWhere(expr)
 			if err == nil || !strings.Contains(err.Error(), want) {
 				t.Fatalf("err = %v, want containing %q", err, want)
 			}
@@ -80,7 +80,7 @@ func TestFormatWhereRoundTrips(t *testing.T) {
 		`is_beta = "true"`,
 		"name = Ada Lovelace",
 	} {
-		prop, err := ParseWhere(expr)
+		prop, err := parseWhere(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}

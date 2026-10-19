@@ -16,10 +16,10 @@ func TypeOf(flag map[string]any) string {
 	return TypeBoolean
 }
 
-// ConfigVersion reports a filters document's PostHog config format: 1 (the
+// configVersion reports a filters document's PostHog config format: 1 (the
 // classic groups/multivariate/payloads shape) or 2 (a pilot document PostHog
 // validates itself).
-func ConfigVersion(filters map[string]any) (int, error) {
+func configVersion(filters map[string]any) (int, error) {
 	v, ok := filters["version"]
 	switch {
 	case !ok || v == nil || Equal(v, number(1)):
@@ -34,7 +34,7 @@ func ConfigVersion(filters map[string]any) (int, error) {
 // RequireV1 refuses edits that address parts of the classic filters shape on
 // a flag stored in another format.
 func RequireV1(filters map[string]any) error {
-	version, err := ConfigVersion(filters)
+	version, err := configVersion(filters)
 	if err != nil || version == 1 {
 		return err
 	}

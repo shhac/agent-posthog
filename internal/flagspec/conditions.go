@@ -65,7 +65,7 @@ func BuildProperties(where []any, resolve FlagResolver) ([]any, error) {
 func buildProperty(item any) (map[string]any, error) {
 	switch w := item.(type) {
 	case string:
-		return ParseWhere(w)
+		return parseWhere(w)
 	case map[string]any:
 		return Object(Clone(w)), nil
 	default:

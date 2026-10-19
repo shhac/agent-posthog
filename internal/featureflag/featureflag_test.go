@@ -47,14 +47,14 @@ func conflictError(t *testing.T, body string) error {
 }
 
 func TestPendingChangeRequestIsForAHuman(t *testing.T) {
-	err := ClassifyWriteError(conflictError(t, `{"code":"change_request_pending","status":"approval_required","detail":"Already pending","change_request_id":"cr_9"}`))
+	err := classifyWriteError(conflictError(t, `{"code":"change_request_pending","status":"approval_required","detail":"Already pending","change_request_id":"cr_9"}`))
 	if !strings.Contains(err.Error(), "change request cr_9") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestStaleConflictIsForTheAgent(t *testing.T) {
-	err := ClassifyWriteError(conflictError(t, `{"type":"server_error","code":"conflict","detail":"The feature flag was updated by someone"}`))
+	err := classifyWriteError(conflictError(t, `{"type":"server_error","code":"conflict","detail":"The feature flag was updated by someone"}`))
 	if !strings.Contains(err.Error(), "updated by someone") {
 		t.Fatalf("err = %v", err)
 	}

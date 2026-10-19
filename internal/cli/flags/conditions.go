@@ -53,7 +53,7 @@ func conditionsListCommand(globals *shared.GlobalFlags) *cobra.Command {
 					line.Set("condition", condition)
 					lines = append(lines, line)
 				}
-				return output.WriteExactList(output.FormatNDJSON, lines, nil)
+				return output.WriteExactLines(lines, nil)
 			})
 		},
 	}

@@ -12,10 +12,10 @@ import (
 	"github.com/shhac/agent-posthog/internal/api"
 )
 
-// ClassifyWriteError separates approval-policy refusals (a human must
+// classifyWriteError separates approval-policy refusals (a human must
 // approve) from stale-version conflicts (re-read and retry), which share HTTP
 // 409.
-func ClassifyWriteError(err error) error {
+func classifyWriteError(err error) error {
 	var httpErr *api.HTTPError
 	if !errors.As(err, &httpErr) {
 		return err

@@ -109,7 +109,7 @@ func (p Project) PlanConditionRollout(ctx context.Context, ref string, ifVersion
 		body := map[string]any{"condition_index": index, "rollout_percentage": rolloutNumber(rollout), "version": flag["version"]}
 		return p.Client.Mutate(ctx, http.MethodPost, p.flagPath(fmt.Sprint(flag["id"]), "set_release_condition_rollout"), nil, body)
 	}
-	return p.PlanVia(ctx, ref, "conditions set", ifVersion, build, send)
+	return p.planVia(ctx, ref, "conditions set", ifVersion, build, send)
 }
 
 // RemoveCondition removes the condition at index.

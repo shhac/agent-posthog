@@ -12,7 +12,7 @@ import (
 // incomplete so it cannot be applied back over the flag.
 func Export(flag map[string]any) (*Ordered, error) {
 	filters := Object(flag["filters"])
-	version, err := ConfigVersion(filters)
+	version, err := configVersion(filters)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func Export(flag map[string]any) (*Ordered, error) {
 // exportCommon sets the fields every spec carries, whatever the filters format.
 func exportCommon(flag map[string]any, withType bool) *Ordered {
 	spec := NewOrdered()
-	spec.Set("schema_version", number(SchemaVersion))
+	spec.Set("schema_version", number(schemaVersion))
 	spec.Set("key", flag["key"])
 	if name, ok := flag["name"].(string); ok && name != "" {
 		spec.Set("name", name)
