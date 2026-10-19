@@ -21,24 +21,24 @@ func registerConfig(root *cobra.Command, globals *GlobalFlags) {
 		Use:   "path",
 		Short: "Print config path",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return writeItem(map[string]any{"config_path": config.ConfigPath()}, "")
+			return writeItem(map[string]any{"config_path": config.ConfigPath()}, globals.Format)
 		},
 	})
 	cfg.AddCommand(&cobra.Command{
 		Use:   "show",
 		Short: "Show non-secret config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return writeItem(config.Read(), "")
+			return writeItem(config.Read(), globals.Format)
 		},
 	})
-	cfg.AddCommand(configSetCommand())
-	cfg.AddCommand(configUnsetCommand())
+	cfg.AddCommand(configSetCommand(globals))
+	cfg.AddCommand(configUnsetCommand(globals))
 	cfg.AddCommand(aliasCommand(globals))
-	cfg.AddCommand(mcpWritesCommand())
+	cfg.AddCommand(mcpWritesCommand(globals))
 	root.AddCommand(cfg)
 }
 
-func configSetCommand() *cobra.Command {
+func configSetCommand(globals *GlobalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <timeout_ms|max_retries> <value>",
 		Short: "Set an integer default config value",
@@ -51,13 +51,13 @@ func configSetCommand() *cobra.Command {
 			if err := config.SetDefaultValue(args[0], value); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"status": "set", "key": args[0], "value": value}, "")
+			return writeItem(map[string]any{"status": "set", "key": args[0], "value": value}, globals.Format)
 		},
 	}
 	return cmd
 }
 
-func configUnsetCommand() *cobra.Command {
+func configUnsetCommand(globals *GlobalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "unset <timeout_ms|max_retries>",
 		Short: "Unset a default config value",
@@ -66,7 +66,7 @@ func configUnsetCommand() *cobra.Command {
 			if err := config.UnsetDefaultValue(args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"status": "unset", "key": args[0]}, "")
+			return writeItem(map[string]any{"status": "unset", "key": args[0]}, globals.Format)
 		},
 	}
 }
@@ -98,7 +98,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if err := config.SetProjectAlias(profile, name, id); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, "")
+			return writeItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, globals.Format)
 		},
 	})
 	alias.AddCommand(&cobra.Command{
@@ -113,7 +113,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if err := config.UnsetProjectAlias(profile, args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, "")
+			return writeItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, globals.Format)
 		},
 	})
 	alias.AddCommand(&cobra.Command{
@@ -129,7 +129,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if aliases == nil {
 				aliases = map[string]int{}
 			}
-			return writeItem(map[string]any{"profile": profile, "aliases": aliases}, "")
+			return writeItem(map[string]any{"profile": profile, "aliases": aliases}, globals.Format)
 		},
 	})
 	return alias
@@ -149,7 +149,7 @@ func aliasProfile(globals *GlobalFlags) (string, error) {
 	return profile, nil
 }
 
-func mcpWritesCommand() *cobra.Command {
+func mcpWritesCommand(globals *GlobalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "mcp-writes <on|off|status>",
 		Short: "Allow or block PostHog writes from commands run through the MCP server (off by default)",
@@ -164,7 +164,7 @@ func mcpWritesCommand() *cobra.Command {
 			default:
 				return agenterrors.New("mcp-writes takes on, off, or status", agenterrors.FixableByAgent)
 			}
-			return writeItem(map[string]any{"mcp_writes": config.Read().MCPWrites}, "")
+			return writeItem(map[string]any{"mcp_writes": config.Read().MCPWrites}, globals.Format)
 		},
 	}
 }

@@ -20,16 +20,16 @@ func registerAuth(root *cobra.Command, globals *GlobalFlags) {
 		Use:   "auth",
 		Short: "Manage PostHog credentials and profiles",
 	}
-	registerAuthAdd(auth)
-	registerAuthUpdate(auth)
+	registerAuthAdd(auth, globals)
+	registerAuthUpdate(auth, globals)
 	registerAuthCheck(auth, globals)
-	registerAuthDefault(auth)
-	registerAuthList(auth)
-	registerAuthRemove(auth)
+	registerAuthDefault(auth, globals)
+	registerAuthList(auth, globals)
+	registerAuthRemove(auth, globals)
 	root.AddCommand(auth)
 }
 
-func registerAuthAdd(parent *cobra.Command) {
+func registerAuthAdd(parent *cobra.Command, globals *GlobalFlags) {
 	var apiKey, host, orgID string
 	var projectID, envID int
 	var form bool
@@ -79,7 +79,7 @@ func registerAuthAdd(parent *cobra.Command) {
 				"organization_id": stored.OrganizationID,
 				"project_id":      stored.ProjectID,
 				"environment_id":  stored.EnvironmentID,
-			}, "")
+			}, globals.Format)
 		},
 	}
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "PostHog personal API key (required unless --form is used)")
@@ -91,7 +91,7 @@ func registerAuthAdd(parent *cobra.Command) {
 	parent.AddCommand(cmd)
 }
 
-func registerAuthUpdate(parent *cobra.Command) {
+func registerAuthUpdate(parent *cobra.Command, globals *GlobalFlags) {
 	var host, orgID string
 	var projectID, envID int
 	var clearOrg, clearProject, clearEnv, setDefault bool
@@ -148,7 +148,7 @@ func registerAuthUpdate(parent *cobra.Command) {
 				"organization_id": profile.OrganizationID,
 				"project_id":      profile.ProjectID,
 				"environment_id":  profile.EnvironmentID,
-			}, "")
+			}, globals.Format)
 		},
 	}
 	cmd.Flags().StringVar(&host, "host", "", "Default PostHog private API host")
@@ -194,7 +194,7 @@ func registerAuthCheck(parent *cobra.Command, globals *GlobalFlags) {
 	parent.AddCommand(cmd)
 }
 
-func registerAuthDefault(parent *cobra.Command) {
+func registerAuthDefault(parent *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{
 		Use:   "default <profile>",
 		Short: "Set the default profile",
@@ -203,13 +203,13 @@ func registerAuthDefault(parent *cobra.Command) {
 			if err := config.SetDefault(args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
-			return writeItem(map[string]any{"status": "default_set", "profile": args[0]}, "")
+			return writeItem(map[string]any{"status": "default_set", "profile": args[0]}, globals.Format)
 		},
 	}
 	parent.AddCommand(cmd)
 }
 
-func registerAuthList(parent *cobra.Command) {
+func registerAuthList(parent *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List configured profiles without exposing secrets",
@@ -228,13 +228,13 @@ func registerAuthList(parent *cobra.Command) {
 				})
 				rows = append(rows, row)
 			}
-			return writeListNDJSON(rows, "")
+			return writeListResource(rows, "", globals.Format, true)
 		},
 	}
 	parent.AddCommand(cmd)
 }
 
-func registerAuthRemove(parent *cobra.Command) {
+func registerAuthRemove(parent *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{
 		Use:   "remove <profile>",
 		Short: "Remove a profile and its Keychain credential",
@@ -251,7 +251,7 @@ func registerAuthRemove(parent *cobra.Command) {
 			if err := config.RemoveProfile(alias); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
-			return writeItem(map[string]any{"status": "removed", "profile": alias}, "")
+			return writeItem(map[string]any{"status": "removed", "profile": alias}, globals.Format)
 		},
 	}
 	parent.AddCommand(cmd)

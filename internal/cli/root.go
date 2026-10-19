@@ -55,7 +55,7 @@ func newRootCmd(version string) *cobra.Command {
 	pf.IntVar(&globals.MaxRetries, "max-retries", 2, "Maximum automatic retries for transient responses")
 	pf.BoolVar(&globals.Full, "full", false, "Return fuller API payloads where supported")
 
-	registerUsageCommand(root)
+	registerUsageCommand(root, globals)
 	registerCompletion(root)
 	registerConfig(root, globals)
 	registerAuth(root, globals)
