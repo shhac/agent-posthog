@@ -355,3 +355,25 @@ func normalizeGroups(v any) any {
 	}
 	return groups
 }
+
+// ConditionWarnings flags condition orders that probably do not do what was
+// meant. Conditions are tried top to bottom and the first match wins, so a
+// catch-all at 100% hides everything after it.
+func ConditionWarnings(groups []any, flagType string) []string {
+	if flagType == TypeRemoteConfig {
+		return nil
+	}
+	if len(groups) == 0 {
+		return []string{"The flag has no conditions, so it matches nobody."}
+	}
+	var warnings []string
+	for i, item := range groups[:len(groups)-1] {
+		group := asMap(item)
+		rollout, hasRollout := group["rollout_percentage"]
+		full := !hasRollout || rollout == nil || Equal(rollout, number(100))
+		if len(asSlice(group["properties"])) == 0 && full {
+			warnings = append(warnings, fmt.Sprintf("Condition %d matches everyone at 100%%, so conditions after it never match.", i))
+		}
+	}
+	return warnings
+}

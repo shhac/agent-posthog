@@ -119,3 +119,47 @@ agent-posthog flags early-exit <id-or-key> on --yes
   request; a stale-version conflict is `fixable_by: agent`: re-read and decide again.
 - A numeric argument is a flag ID; a flag whose key is numeric must be
   addressed by its ID.
+
+### Create, apply, export
+
+```bash
+agent-posthog flags create beta-gate --where "email icontains @letsdothis.com" --yes
+agent-posthog flags create checkout-config --type multivariate --variant debug=0 --variant default=100 --yes
+agent-posthog flags create site-config --type remote_config --payload-json '{"banner":"hi"}' --yes
+agent-posthog flags export checkout-config --format yaml > spec.yaml   # edit, then:
+agent-posthog flags apply --file spec.yaml           # plan; add --yes to apply
+agent-posthog flags apply --spec-json '{"key":"beta-gate","active":true}' --yes
+```
+
+New flags are created **disabled** unless `--active` / `active: true`.
+`apply` creates the flag if its key is new, otherwise it changes only the
+fields the spec names. A spec:
+
+```yaml
+schema_version: 1
+key: checkout-config
+type: multivariate          # boolean (gate) | multivariate | remote_config (one payload for all)
+active: true
+early_exit: true            # a matching 0% condition denies instead of falling through
+conditions:                 # top to bottom; the first match wins
+  - where: ["email icontains @contractor.com"]
+    rollout: 0              # deny (needs early_exit)
+  - where: ["app_env = staging"]
+    variant: debug
+  - variant: default        # no where = everyone (the else branch)
+variants: [{key: debug, rollout: 0}, {key: default, rollout: 100}]
+payloads: {debug: {logLevel: debug}, default: {logLevel: warn}}
+# payload: {...}            # boolean / remote_config: the one payload
+```
+
+`--where` is `<key> <op> <value>`. Ops: `=` `!=` `>` `>=` `<` `<=` `icontains`
+`not_icontains` `regex` `not_regex` `is_set` `is_not_set` `is_date_before`
+`is_date_after`. The value is JSON when it parses as JSON (`["a@x.com","b@x.com"]`,
+`5`, `true`, `"true"`), otherwise a bare string. `cohort in <id>` / `cohort not_in <id>`
+targets a cohort; `flag:<key> = true|false|<variant>` depends on another flag;
+`person:<name>` targets a person property named like a keyword. Other property
+types (group properties) go in a spec as raw PostHog property objects.
+
+Rule → JSON config is a **multivariate** flag: conditions pick a variant with
+`variant:`, and each variant carries its payload. `remote_config` serves one
+payload to everyone and ignores conditions.
