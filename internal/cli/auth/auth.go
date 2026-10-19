@@ -199,7 +199,7 @@ func registerAuthList(parent *cobra.Command, globals *shared.GlobalFlags) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Read()
 			rows := make([]json.RawMessage, 0, len(cfg.Profiles))
-			for alias := range cfg.Profiles {
+			for _, alias := range slices.Sorted(maps.Keys(cfg.Profiles)) {
 				row, _ := json.Marshal(profileRecord(cfg, alias, map[string]any{"credential": credential.Storage(alias)}))
 				rows = append(rows, row)
 			}
