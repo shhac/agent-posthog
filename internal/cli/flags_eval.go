@@ -9,10 +9,10 @@ import (
 	"slices"
 	"time"
 
+	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/api"
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 

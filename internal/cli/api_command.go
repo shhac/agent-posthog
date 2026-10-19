@@ -7,9 +7,8 @@ import (
 	"os"
 	"strings"
 
+	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
-
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 )
 
 func registerAPI(root *cobra.Command, globals *GlobalFlags) {

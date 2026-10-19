@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
+	agenterrors "github.com/shhac/lib-agent-output"
+
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 

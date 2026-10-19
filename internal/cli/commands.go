@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	libcli "github.com/shhac/lib-agent-cli/cli"
+	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 

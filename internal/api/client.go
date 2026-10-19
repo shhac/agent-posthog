@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
+	agenterrors "github.com/shhac/lib-agent-output"
 )
 
 type Doer interface {
@@ -279,13 +279,13 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 
 const outcomeUnknownHint = "The write may or may not have been applied. Re-read the resource before retrying."
 
-func mapError(status int, raw []byte, retryAfter time.Duration) *agenterrors.APIError {
+func mapError(status int, raw []byte, retryAfter time.Duration) *agenterrors.Error {
 	err := classifyError(status, raw, retryAfter)
 	err.Cause = &HTTPError{Status: status, Body: append(json.RawMessage(nil), raw...)}
 	return err
 }
 
-func classifyError(status int, raw []byte, retryAfter time.Duration) *agenterrors.APIError {
+func classifyError(status int, raw []byte, retryAfter time.Duration) *agenterrors.Error {
 	detail := strings.TrimSpace(string(raw))
 	var payload struct {
 		Type   string `json:"type"`

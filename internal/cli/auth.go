@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 
+	clidialog "github.com/shhac/lib-agent-cli/dialog"
+	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/credential"
-	"github.com/shhac/agent-posthog/internal/dialog"
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 )
 
-var promptSecret = dialog.PromptSecret
+// promptSecret is a variable so tests can stand in for the native dialog.
+var promptSecret = promptSecretDialog
 
 func registerAuth(root *cobra.Command, globals *GlobalFlags) {
 	auth := &cobra.Command{
@@ -43,7 +44,7 @@ func registerAuthAdd(parent *cobra.Command, globals *GlobalFlags) {
 			if form {
 				filled, err := promptSecret(cmd.Context(), "agent-posthog: "+alias, "PostHog personal API key", apiKey)
 				if err != nil {
-					fixableBy, hint := dialog.Classify(err)
+					fixableBy, hint := classifyDialogError(err)
 					return agenterrors.Wrap(err, fixableBy).WithHint(hint)
 				}
 				apiKey = filled
@@ -255,4 +256,41 @@ func registerAuthRemove(parent *cobra.Command, globals *GlobalFlags) {
 		},
 	}
 	parent.AddCommand(cmd)
+}
+
+// promptSecretDialog opens a masked native prompt seeded with initial, so a
+// token never transits argv.
+func promptSecretDialog(ctx context.Context, title, label, initial string) (string, error) {
+	res, err := clidialog.Prompt(ctx, clidialog.Spec{
+		Title: title,
+		Items: []clidialog.Field{{
+			ID:        "secret",
+			Label:     label,
+			InputType: clidialog.Password,
+			Initial:   initial,
+		}},
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, r := range res {
+		if r.ID == "secret" {
+			return r.Value, nil
+		}
+	}
+	return "", nil
+}
+
+// classifyDialogError maps a dialog failure onto fixable_by, so a cancelled
+// prompt reads as retry and a headless host as human.
+func classifyDialogError(err error) (agenterrors.FixableBy, string) {
+	category, hint := clidialog.ClassifyError(err)
+	switch category {
+	case clidialog.CategoryHuman:
+		return agenterrors.FixableByHuman, hint
+	case clidialog.CategoryRetry:
+		return agenterrors.FixableByRetry, hint
+	default:
+		return agenterrors.FixableByAgent, hint
+	}
 }

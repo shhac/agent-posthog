@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
+	agenterrors "github.com/shhac/lib-agent-output"
 )
 
 func TestClientListAndAuthHeader(t *testing.T) {
@@ -96,7 +96,7 @@ func TestMutateDoesNotRetryServerErrors(t *testing.T) {
 	if requests != 1 {
 		t.Fatalf("requests = %d, want 1", requests)
 	}
-	var apiErr *agenterrors.APIError
+	var apiErr *agenterrors.Error
 	if !errors.As(err, &apiErr) || apiErr.FixableBy != agenterrors.FixableByAgent || !strings.Contains(apiErr.Hint, "Re-read") {
 		t.Fatalf("err = %#v", err)
 	}
@@ -179,7 +179,7 @@ func TestNetworkErrorsRetryReadsButNeverWrites(t *testing.T) {
 	write := &failingDoer{}
 	client.HTTPClient = write
 	_, err := client.Mutate(context.Background(), http.MethodPost, "/api/x/", nil, map[string]any{})
-	var apiErr *agenterrors.APIError
+	var apiErr *agenterrors.Error
 	if write.calls != 1 || !errors.As(err, &apiErr) || apiErr.FixableBy != agenterrors.FixableByAgent || !strings.Contains(apiErr.Hint, "Re-read") {
 		t.Fatalf("write attempts = %d, err = %#v", write.calls, err)
 	}
@@ -194,7 +194,7 @@ func TestExpiredContextStopsRetries(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := client.Get(ctx, "/api/x/", nil)
-	var apiErr *agenterrors.APIError
+	var apiErr *agenterrors.Error
 	if doer.calls != 1 || slept != 0 || !errors.As(err, &apiErr) || !strings.Contains(apiErr.Hint, "--timeout") {
 		t.Fatalf("calls = %d, slept = %d, err = %#v", doer.calls, slept, err)
 	}
@@ -267,7 +267,7 @@ func TestRetryAfterIsCappedAndHonorsTheDeadline(t *testing.T) {
 	client := New(server.URL, "phx_test")
 	client.Sleep = func(d time.Duration) { waits = append(waits, d) }
 	_, err := client.Get(context.Background(), "/api/x/", nil)
-	var apiErr *agenterrors.APIError
+	var apiErr *agenterrors.Error
 	if !errors.As(err, &apiErr) || apiErr.FixableBy != agenterrors.FixableByRetry || apiErr.RetryAfterSeconds != 3600 || len(waits) != 0 {
 		t.Fatalf("an hour-long Retry-After must come back to the caller, not be slept: err=%#v waits=%v", err, waits)
 	}
@@ -298,7 +298,7 @@ func TestRetryAfterIsCappedAndHonorsTheDeadline(t *testing.T) {
 }
 
 func apiErrHint(err error) string {
-	var apiErr *agenterrors.APIError
+	var apiErr *agenterrors.Error
 	if errors.As(err, &apiErr) {
 		return apiErr.Hint
 	}

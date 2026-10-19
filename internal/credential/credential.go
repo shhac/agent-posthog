@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/lib-agent-cli/creds"
+
+	"github.com/shhac/agent-posthog/internal/config"
 )
 
 // keychainSentinel is stored in the index in place of the real key when the

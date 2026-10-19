@@ -9,11 +9,11 @@ import (
 	"os"
 
 	"github.com/shhac/lib-agent-cli/creds"
+	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/api"
 	"github.com/shhac/agent-posthog/internal/config"
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 

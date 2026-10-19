@@ -6,7 +6,7 @@ import (
 	"os"
 	"slices"
 
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
+	agenterrors "github.com/shhac/lib-agent-output"
 )
 
 func asObject(v any) map[string]any {

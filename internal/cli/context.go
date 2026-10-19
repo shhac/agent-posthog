@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/shhac/lib-agent-cli/creds"
+	agenterrors "github.com/shhac/lib-agent-output"
 
 	"github.com/shhac/agent-posthog/internal/api"
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/credential"
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
