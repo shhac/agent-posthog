@@ -193,7 +193,10 @@ Default formats:
   `--format json|yaml` collapses to one `{"data":[…],"@unresolved":[…]}`
   envelope, even for a single id.
 - `--format yaml` allowed for humans; every command honors `--format`,
-  including `auth`, `config`, and `usage`
+  including `auth`, `config`, and `usage`. YAML comes from the family encoder
+  (lib-agent-cli): ordered records keep their field order, exact numbers keep
+  their digits (a payload's `1.50` stays `1.50`), and strings YAML would read as
+  another type (`"on"`, `"007"`) are quoted
 - `--full` returns unshaped API payloads where possible
 - read output (lists, gets, queries) is null-pruned and secret-redacted;
   `--expose <field>` reveals a redacted field. Flag write receipts and exported
