@@ -34,8 +34,6 @@ const (
 const (
 	MetaKeyPagination = "@pagination"
 	MetaKeyQuery      = "@query"
-	MetaKeyCounts     = "@counts"
-	MetaKeySkipped    = "@skipped"
 )
 
 var (

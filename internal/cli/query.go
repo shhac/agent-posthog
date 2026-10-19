@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/shhac/lib-agent-cli/creds"
@@ -279,15 +277,4 @@ func writeQueryNDJSON(raw json.RawMessage) error {
 		}
 	}
 	return nil
-}
-
-func queryValuesFromPairs(pairs []string) url.Values {
-	q := url.Values{}
-	for _, pair := range pairs {
-		key, value, found := strings.Cut(pair, "=")
-		if found {
-			q.Add(key, value)
-		}
-	}
-	return q
 }

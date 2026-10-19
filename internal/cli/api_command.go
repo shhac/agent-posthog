@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -88,4 +89,15 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 
 func isQueryPath(path string) bool {
 	return strings.Contains(path, "/query/")
+}
+
+func queryValuesFromPairs(pairs []string) url.Values {
+	q := url.Values{}
+	for _, pair := range pairs {
+		key, value, found := strings.Cut(pair, "=")
+		if found {
+			q.Add(key, value)
+		}
+	}
+	return q
 }
