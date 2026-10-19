@@ -1,5 +1,10 @@
 package flagspec
 
+import (
+	"maps"
+	"slices"
+)
+
 // Patch is a minimal write: top-level flag fields plus the filters sections
 // that change. PostHog merges filters shallowly, so only sections present here
 // are replaced; a nil section value clears it.
@@ -92,4 +97,26 @@ func Result(current map[string]any, p *Patch) map[string]any {
 	}
 	result["filters"] = filters
 	return result
+}
+
+// Unapplied lists the patch entries the stored flag does not reflect, which
+// happens when PostHog normalizes or drops part of a write.
+func Unapplied(p *Patch, stored map[string]any) []string {
+	var paths []string
+	for _, key := range slices.Sorted(maps.Keys(p.Fields)) {
+		if !Equal(stored[key], p.Fields[key]) {
+			paths = append(paths, key)
+		}
+	}
+	filters := asMap(stored["filters"])
+	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
+		sent, got := p.Filters[key], filters[key]
+		if key == "groups" {
+			sent, got = normalizeGroups(sent), normalizeGroups(got)
+		}
+		if !Equal(got, sent) {
+			paths = append(paths, "filters."+key)
+		}
+	}
+	return paths
 }

@@ -187,19 +187,16 @@ func createFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalF
 	if err != nil {
 		return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 	}
-	r := &receipt{
-		Outcome:   outcomePlanned,
-		Operation: "create",
-		ProjectID: resolved.ProjectID,
-		Key:       spec.Key(),
-		Changes:   flagspec.Changes(nil, patch),
-		Warnings:  specWarnings(nil, patch),
-	}
+	r := newReceipt("create", resolved, map[string]any{"key": spec.Key()})
+	r.Changes = flagspec.Changes(nil, patch)
+	r.Warnings = specWarnings(nil, patch)
 	if patch.Fields["active"] != true {
 		r.Warnings = append(r.Warnings, fmt.Sprintf("The flag is created disabled; enable it with 'agent-posthog flags enable %s --yes'.", spec.Key()))
 	}
 	return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
-		return resolved.Client.Mutate(ctx, http.MethodPost, flagsPath(resolved.ProjectID), nil, patch.Body())
+		return checkStored(r, patch, func() (json.RawMessage, error) {
+			return resolved.Client.Mutate(ctx, http.MethodPost, flagsPath(resolved.ProjectID), nil, patch.Body())
+		})
 	})
 }
 

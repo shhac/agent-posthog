@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/shhac/agent-posthog/internal/api"
+	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
 func flagSession(t *testing.T) *cliSession {
@@ -183,4 +184,50 @@ func conflictError(t *testing.T, body string) error {
 	t.Cleanup(server.Close)
 	_, err := api.New(server.URL, "phx_mock").Patch(context.Background(), "/x/", nil, map[string]any{})
 	return err
+}
+
+func TestReceiptNamesHostProjectAndAlias(t *testing.T) {
+	s := stagingSession(t)
+	r := s.mustRun("--project", "staging", "flags", "create", "aliased", "--yes")
+	if r["project_id"] != float64(124) || r["project_alias"] != "staging" || !strings.HasPrefix(r["host"].(string), "http://127.0.0.1") {
+		t.Fatalf("receipt = %v", r)
+	}
+	plan := s.mustRun("--project", "staging", "flags", "enable", "aliased")
+	if !strings.Contains(plan["hint"].(string), "--if-version") {
+		t.Fatalf("plan hint should explain a re-run re-reads the flag: %v", plan)
+	}
+}
+
+func TestPatchCarriesVersionAndFlagAsRead(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"id":7,"key":"k","version":4,"active":false}`))
+	}))
+	t.Cleanup(server.Close)
+	resolved := &resolvedContext{Client: api.New(server.URL, "phx_mock"), ProjectID: 1}
+	flag := map[string]any{"id": json.Number("7"), "key": "k", "version": json.Number("3"), "active": true}
+	patch := flagspec.NewPatch()
+	patch.Fields["active"] = false
+	if _, err := patchFlag(resolved)(context.Background(), flag, patch); err != nil {
+		t.Fatal(err)
+	}
+	original, _ := body["original_flag"].(map[string]any)
+	if body["version"] != float64(3) || original["active"] != true || body["active"] != false {
+		t.Fatalf("PATCH body = %v", body)
+	}
+}
+
+func TestCheckStoredWarnsWhenPostHogNormalizes(t *testing.T) {
+	patch := flagspec.NewPatch()
+	patch.Fields["active"] = true
+	patch.Filters["groups"] = []any{map[string]any{"properties": []any{}, "rollout_percentage": json.Number("0")}}
+	r := &receipt{}
+	stored := `{"active":true,"filters":{"groups":[{"properties":[],"rollout_percentage":100}]}}`
+	if _, err := checkStored(r, patch, func() (json.RawMessage, error) { return json.RawMessage(stored), nil }); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0], "filters.groups") {
+		t.Fatalf("warnings = %v", r.Warnings)
+	}
 }

@@ -86,14 +86,9 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				id, _ := strconv.Atoi(args[0])
-				r := &receipt{
-					Outcome:   outcomePlanned,
-					Operation: "restore",
-					ProjectID: resolved.ProjectID,
-					ID:        id,
-					Changes:   []flagspec.Change{{Path: "deleted", Before: true, After: false}},
-					Warnings:  []string{"PostHog may give the restored flag a suffixed key if its key was reused."},
-				}
+				r := newReceipt("restore", resolved, map[string]any{"id": id})
+				r.Changes = []flagspec.Change{{Path: "deleted", Before: true, After: false}}
+				r.Warnings = []string{"PostHog may give the restored flag a suffixed key if its key was reused."}
 				return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
 					return resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, args[0]), nil, map[string]any{"deleted": false})
 				})

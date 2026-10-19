@@ -37,16 +37,18 @@ func (o writeOptions) apply() bool { return o.yes && !o.dryRun }
 // receipt reports a planned or applied write. Before/after values are written
 // exactly (no null pruning), since a null is often the change.
 type receipt struct {
-	Outcome     string            `json:"outcome"`
-	Operation   string            `json:"operation"`
-	ProjectID   int               `json:"project_id"`
-	ID          any               `json:"id,omitempty"`
-	Key         any               `json:"key"`
-	BaseVersion any               `json:"base_version"`
-	Version     any               `json:"version,omitempty"`
-	Changes     []flagspec.Change `json:"changes"`
-	Warnings    []string          `json:"warnings,omitempty"`
-	Hint        string            `json:"hint,omitempty"`
+	Outcome      string            `json:"outcome"`
+	Operation    string            `json:"operation"`
+	Host         string            `json:"host"`
+	ProjectID    int               `json:"project_id"`
+	ProjectAlias string            `json:"project_alias,omitempty"`
+	ID           any               `json:"id,omitempty"`
+	Key          any               `json:"key"`
+	BaseVersion  any               `json:"base_version"`
+	Version      any               `json:"version,omitempty"`
+	Changes      []flagspec.Change `json:"changes"`
+	Warnings     []string          `json:"warnings,omitempty"`
+	Hint         string            `json:"hint,omitempty"`
 }
 
 const (
@@ -55,7 +57,7 @@ const (
 	outcomeUnchanged = "unchanged"
 )
 
-const applyHint = "Nothing was written. Re-run with --yes to apply."
+const applyHint = "Nothing was written. Re-run with --yes to apply; that re-reads the flag, so add --if-version <base_version> to apply only if it is still unchanged."
 
 // flagUpdate builds the patch for one flag from its current definition.
 type flagUpdate func(flag map[string]any) (*flagspec.Patch, []string, error)
@@ -97,11 +99,11 @@ func updateFlagVia(ctx context.Context, resolved *resolvedContext, globals *Glob
 		return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 	}
 	patch.Prune(flag)
-	r := newReceipt(operation, resolved.ProjectID, flag)
+	r := newReceipt(operation, resolved, flag)
 	r.Changes = flagspec.Changes(flag, patch)
 	r.Warnings = warnings
 	return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
-		return send(ctx, flag, patch)
+		return checkStored(r, patch, func() (json.RawMessage, error) { return send(ctx, flag, patch) })
 	})
 }
 
@@ -124,16 +126,35 @@ func commitWrite(r *receipt, opts writeOptions, format string, send func() (json
 	return writeApplied(r, raw, format)
 }
 
-func newReceipt(operation string, projectID int, flag map[string]any) *receipt {
+func newReceipt(operation string, resolved *resolvedContext, flag map[string]any) *receipt {
 	return &receipt{
-		Outcome:     outcomePlanned,
-		Operation:   operation,
-		ProjectID:   projectID,
-		ID:          flag["id"],
-		Key:         flag["key"],
-		BaseVersion: flag["version"],
-		Changes:     []flagspec.Change{},
+		Outcome:      outcomePlanned,
+		Operation:    operation,
+		Host:         resolved.Host,
+		ProjectID:    resolved.ProjectID,
+		ProjectAlias: resolved.ProjectAlias,
+		ID:           flag["id"],
+		Key:          flag["key"],
+		BaseVersion:  flag["version"],
+		Changes:      []flagspec.Change{},
 	}
+}
+
+// checkStored sends a write and warns about any part of it the stored flag
+// does not reflect, so a normalization by PostHog is visible in the receipt.
+func checkStored(r *receipt, patch *flagspec.Patch, send func() (json.RawMessage, error)) (json.RawMessage, error) {
+	raw, err := send()
+	if err != nil {
+		return nil, err
+	}
+	stored, decodeErr := flagspec.DecodeObject(raw)
+	if decodeErr != nil {
+		return raw, nil
+	}
+	for _, path := range flagspec.Unapplied(patch, stored) {
+		r.Warnings = append(r.Warnings, "PostHog stored "+path+" differently than sent; check the flag with 'flags get'.")
+	}
+	return raw, nil
 }
 
 // writeApplied fills the receipt from the server's response, which may differ

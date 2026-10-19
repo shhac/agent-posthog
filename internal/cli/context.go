@@ -25,6 +25,8 @@ type resolvedContext struct {
 	EnvironmentID int
 	// ProjectAliases are the resolved profile's named projects.
 	ProjectAliases map[string]int
+	// ProjectAlias is the alias --project named, if it named one.
+	ProjectAlias string
 }
 
 func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Context, *resolvedContext) error) error {
@@ -91,6 +93,7 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 		ProjectID:      projectID,
 		EnvironmentID:  environmentID,
 		ProjectAliases: profile.ProjectAliases,
+		ProjectAlias:   aliasName(flags.Project),
 	}, nil
 }
 
@@ -115,6 +118,13 @@ func projectFromRef(ref, profileName string, aliases map[string]int) (int, error
 	}
 	return 0, agenterrors.New(fmt.Sprintf("unknown project alias %q in %s", ref, where), agenterrors.FixableByAgent).
 		WithHint("Run 'agent-posthog config alias list', or add one with 'agent-posthog config alias set " + ref + " <project-id>'.")
+}
+
+func aliasName(ref string) string {
+	if _, err := strconv.Atoi(ref); err == nil {
+		return ""
+	}
+	return ref
 }
 
 // projectRef resolves a project argument (ID or alias) against the resolved profile.
