@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // handlePublicFlags serves POST /flags, authenticated by a project token in the
@@ -24,6 +25,9 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	distinctID, _ := body["distinct_id"].(string)
+	if distinctID == "mock-slow" {
+		time.Sleep(300 * time.Millisecond)
+	}
 	if distinctID == "mock-quota" {
 		write(w, map[string]any{"flags": map[string]any{}, "errorsWhileComputingFlags": false, "quotaLimited": []any{"feature_flags"}})
 		return
@@ -39,7 +43,7 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 	failures := false
 	for _, id := range sortedIDs(s.flags[project]) {
 		flag := s.flags[project][id]
-		if flag["active"] != true || flag["deleted"] == true || !requested(flag, asList(body["flag_keys"])) || !contextsMatch(flag, asList(body["evaluation_contexts"])) {
+		if flag["active"] != true || flag["deleted"] == true || !requested(flag, asList(body["flag_keys"])) || flag["evaluation_runtime"] == "client" || !contextsMatch(flag, asList(body["evaluation_contexts"])) {
 			continue
 		}
 		result, err := evaluateFlag(flag, props)

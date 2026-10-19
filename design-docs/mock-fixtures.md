@@ -43,7 +43,10 @@ against one server:
   with a strict version check, and creates must be disabled
 - `legacy-flag` (30): predates versioning, so its `version` is null
 - project `126` requires a tag on every new flag
-- `/flags` for distinct ID `mock-quota` reports the project as quota-limited
+- `/flags` for distinct ID `mock-quota` reports the project as quota-limited;
+  `mock-slow` answers after 300ms; flags with `evaluation_runtime: client` are
+  not served (the CLI's requests count as server runtime); `flag_keys` and
+  `evaluation_contexts` filter the response
 - `copy_flags` without `copy_dependencies` drops flag dependencies with a warning
   and disables the copy
 - `secret-config` (28): remote config with encrypted payloads, which the CLI

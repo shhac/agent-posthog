@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +12,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/mockposthog"
 	"github.com/shhac/agent-posthog/internal/output"
-	"net/http/httptest"
 )
 
 func TestOrgsListAgainstMock(t *testing.T) {
@@ -318,12 +319,19 @@ type cliSession struct {
 
 func newMockSession(t *testing.T, token, envID string) *cliSession {
 	t.Helper()
+	return newWrappedMockSession(t, token, envID, func(h http.Handler) http.Handler { return h })
+}
+
+// newWrappedMockSession is newMockSession with the mock behind wrap, for tests
+// that need to observe or disturb traffic (dropped responses, concurrency).
+func newWrappedMockSession(t *testing.T, token, envID string, wrap func(http.Handler) http.Handler) *cliSession {
+	t.Helper()
 	// Isolate from the developer's real on-disk config: resolve() ranks
 	// profile.{Org,Project,Environment}ID ahead of the env vars set below, so a
 	// configured default profile would otherwise shadow the mock fixtures.
 	config.SetConfigDir(t.TempDir())
 	t.Cleanup(func() { config.SetConfigDir("") })
-	server := httptest.NewServer(mockposthog.NewServer())
+	server := httptest.NewServer(wrap(mockposthog.NewServer()))
 	t.Cleanup(server.Close)
 	t.Setenv("AGENT_POSTHOG_BASE_URL", server.URL)
 	t.Setenv("POSTHOG_PERSONAL_API_KEY", token)
