@@ -45,20 +45,39 @@ func New(baseURL, token string) *Client {
 	}
 }
 
-func (c *Client) Get(ctx context.Context, path string, query url.Values) (json.RawMessage, error) {
-	return c.do(ctx, http.MethodGet, path, query, nil)
+// HTTPError carries the raw status and body of a non-2xx response as the Cause
+// of the agent-facing error, so callers can classify responses (approval
+// policies, version conflicts) that the message alone cannot distinguish.
+type HTTPError struct {
+	Status int
+	Body   json.RawMessage
 }
 
+func (e *HTTPError) Error() string { return fmt.Sprintf("PostHog returned HTTP %d", e.Status) }
+
+func (c *Client) Get(ctx context.Context, path string, query url.Values) (json.RawMessage, error) {
+	return c.do(ctx, http.MethodGet, path, query, nil, true)
+}
+
+// Post is for POSTs that are safe to repeat, such as query endpoints. State-changing
+// POSTs go through Mutate.
 func (c *Client) Post(ctx context.Context, path string, query url.Values, body any) (json.RawMessage, error) {
-	return c.do(ctx, http.MethodPost, path, query, body)
+	return c.do(ctx, http.MethodPost, path, query, body, true)
 }
 
 func (c *Client) Patch(ctx context.Context, path string, query url.Values, body any) (json.RawMessage, error) {
-	return c.do(ctx, http.MethodPatch, path, query, body)
+	return c.Mutate(ctx, http.MethodPatch, path, query, body)
 }
 
 func (c *Client) Delete(ctx context.Context, path string, query url.Values) (json.RawMessage, error) {
-	return c.do(ctx, http.MethodDelete, path, query, nil)
+	return c.Mutate(ctx, http.MethodDelete, path, query, nil)
+}
+
+// Mutate sends a state-changing request. Only 429s are retried: a lost response
+// or a 5xx may follow a committed write, and replaying it could create or
+// overwrite twice.
+func (c *Client) Mutate(ctx context.Context, method, path string, query url.Values, body any) (json.RawMessage, error) {
+	return c.do(ctx, method, path, query, body, false)
 }
 
 func (c *Client) List(ctx context.Context, path string, query url.Values) (*Page, error) {
@@ -73,7 +92,7 @@ func (c *Client) List(ctx context.Context, path string, query url.Values) (*Page
 	return &page, nil
 }
 
-func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any) (json.RawMessage, error) {
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, idempotent bool) (json.RawMessage, error) {
 	if c.HTTPClient == nil {
 		c.HTTPClient = http.DefaultClient
 	}
@@ -105,6 +124,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
+			if !idempotent {
+				return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent).WithHint(outcomeUnknownHint)
+			}
 			if attempt < attempts-1 {
 				c.Sleep(backoff(attempt, 0))
 				continue
@@ -123,12 +145,18 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 				"url":    redactURL(req.URL.String()),
 			})
 		}
-		if retryable(resp.StatusCode) && attempt < attempts-1 {
+		retry := retryable(resp.StatusCode) && (idempotent || resp.StatusCode == http.StatusTooManyRequests)
+		if retry && attempt < attempts-1 {
 			c.Sleep(backoff(attempt, retryAfter(resp.Header.Get("Retry-After"))))
 			continue
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, mapError(resp.StatusCode, raw, retryAfter(resp.Header.Get("Retry-After")))
+			mapped := mapError(resp.StatusCode, raw, retryAfter(resp.Header.Get("Retry-After")))
+			if !idempotent && resp.StatusCode >= 500 {
+				mapped = mapped.WithHint(outcomeUnknownHint)
+				mapped.FixableBy = agenterrors.FixableByAgent
+			}
+			return nil, mapped
 		}
 		if len(raw) == 0 {
 			return json.RawMessage(`{}`), nil
@@ -180,15 +208,27 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 	return req, nil
 }
 
-func mapError(status int, raw []byte, retryAfter time.Duration) error {
+const outcomeUnknownHint = "The write may or may not have been applied. Re-read the resource before retrying."
+
+func mapError(status int, raw []byte, retryAfter time.Duration) *agenterrors.APIError {
+	err := classifyError(status, raw, retryAfter)
+	err.Cause = &HTTPError{Status: status, Body: append(json.RawMessage(nil), raw...)}
+	return err
+}
+
+func classifyError(status int, raw []byte, retryAfter time.Duration) *agenterrors.APIError {
 	detail := strings.TrimSpace(string(raw))
 	var payload struct {
 		Type   string `json:"type"`
 		Code   string `json:"code"`
 		Detail string `json:"detail"`
 		Attr   string `json:"attr"`
+		Error  string `json:"error"`
 	}
-	if err := json.Unmarshal(raw, &payload); err == nil && payload.Detail != "" {
+	if err := json.Unmarshal(raw, &payload); err == nil && payload.Detail == "" {
+		payload.Detail = payload.Error
+	}
+	if payload.Detail != "" {
 		detail = payload.Detail
 		if payload.Attr != "" {
 			detail = payload.Attr + ": " + detail

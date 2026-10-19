@@ -35,7 +35,7 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 			if !strings.HasPrefix(path, "/api/") {
 				return agenterrors.New("raw API paths must start with /api/", agenterrors.FixableByAgent)
 			}
-			if method == http.MethodPost && !strings.Contains(path, "/query/") && !yes {
+			if method == http.MethodPost && !isQueryPath(path) && !yes {
 				return agenterrors.New("raw POST outside query endpoints requires --yes", agenterrors.FixableByHuman).
 					WithHint("Many PostHog POST endpoints mutate state. Use a typed command when available.")
 			}
@@ -65,7 +65,11 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 							return err
 						}
 					}
-					raw, err = resolved.Client.Post(ctx, path, q, body)
+					if isQueryPath(path) {
+						raw, err = resolved.Client.Post(ctx, path, q, body)
+					} else {
+						raw, err = resolved.Client.Mutate(ctx, http.MethodPost, path, q, body)
+					}
 				}
 				if err != nil {
 					return err
@@ -81,4 +85,8 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 		cmd.Flags().BoolVar(&yes, "yes", false, "Allow raw POST outside query endpoints")
 	}
 	return cmd
+}
+
+func isQueryPath(path string) bool {
+	return strings.Contains(path, "/query/")
 }
