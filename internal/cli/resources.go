@@ -249,6 +249,7 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	registerFlagWrites(flags, globals)
 	registerFlagSpecCommands(flags, globals)
 	registerFlagEditCommands(flags, globals)
+	registerFlagEvalCommands(flags, globals)
 	root.AddCommand(flags)
 }
 

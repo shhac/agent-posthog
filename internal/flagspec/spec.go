@@ -39,21 +39,27 @@ type Spec struct {
 	fields map[string]any
 }
 
-// ParseSpec reads a spec from JSON or YAML.
-func ParseSpec(data []byte) (*Spec, error) {
+// ParseDocument reads a JSON or strict-YAML document with lossless numbers.
+func ParseDocument(data []byte) (any, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("spec is empty")
+		return nil, fmt.Errorf("document is empty")
 	}
-	var fields map[string]any
-	var err error
-	if trimmed[0] == '{' {
-		fields, err = DecodeObject(trimmed)
-	} else {
-		fields, err = yamlObject(trimmed)
+	if trimmed[0] == '{' || trimmed[0] == '[' {
+		return Decode(trimmed)
 	}
+	return yamlDocument(trimmed)
+}
+
+// ParseSpec reads a spec from JSON or YAML.
+func ParseSpec(data []byte) (*Spec, error) {
+	doc, err := ParseDocument(data)
 	if err != nil {
 		return nil, fmt.Errorf("spec: %w", err)
+	}
+	fields, ok := doc.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("spec: expected an object")
 	}
 	spec := &Spec{fields: fields}
 	if err := spec.validate(); err != nil {
@@ -263,10 +269,10 @@ func isInteger(v any) bool {
 
 var decimalInt = regexp.MustCompile(`^[-+]?(0|[1-9][0-9]*)$`)
 
-// yamlObject decodes a single YAML document strictly: string keys only, no
+// yamlDocument decodes a single YAML document strictly: string keys only, no
 // duplicate keys, no custom tags. Scalars keep their YAML types, and numbers
 // become json.Number so they survive the JSON round trip.
-func yamlObject(data []byte) (map[string]any, error) {
+func yamlDocument(data []byte) (any, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var doc yaml.Node
 	if err := dec.Decode(&doc); err != nil {
@@ -276,15 +282,7 @@ func yamlObject(data []byte) (map[string]any, error) {
 	if err := dec.Decode(&extra); err == nil {
 		return nil, fmt.Errorf("expected a single YAML document")
 	}
-	v, err := yamlValue(&doc)
-	if err != nil {
-		return nil, err
-	}
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("expected a mapping at the top level")
-	}
-	return m, nil
+	return yamlValue(&doc)
 }
 
 func yamlValue(node *yaml.Node) (any, error) {

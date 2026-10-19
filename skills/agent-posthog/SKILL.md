@@ -187,3 +187,50 @@ filters; `--clear-where` makes it match everyone; `--no-variant` drops the
 override. `variants set` drops payloads of removed variants and refuses while
 a condition still overrides a removed variant. Encrypted payloads are never
 edited.
+
+### Evaluate and test
+
+```bash
+agent-posthog flags evaluate beta-gate --distinct-id u_1 --props-json '{"app_env":"staging"}'
+agent-posthog flags evaluate beta-gate --distinct-id user_123 --engine diagnostic
+agent-posthog flags test beta-gate --cases cases.yaml        # or --cases-json '[...]'
+agent-posthog flags reach beta-gate                          # users matching each condition
+```
+
+`evaluate` reports `enabled`, `variant`, `payload`, `reason`, and the matched
+`condition`. The default `--engine public` calls PostHog's `/flags` as an SDK
+would, using the project token it reads from the project (never printed) and
+any `--props-json` overrides on top of stored properties. `--engine diagnostic`
+uses stored properties only. Cloud `/flags` hosts are derived (`us.posthog.com`
+→ `us.i.posthog.com`); set `--flags-host` or `AGENT_POSTHOG_FLAGS_HOST` for
+self-hosted proxies.
+
+A test suite is a list of cases; only the fields under `expect` are checked,
+and `payload` must match exactly:
+
+```yaml
+- name: contractor in staging is denied
+  props: {email: pat@contractor.com, app_env: staging}
+  expect: {enabled: false, condition_index: 0}
+- name: staging gets debug config
+  props: {app_env: staging}
+  expect: {variant: debug, payload: {logLevel: debug}}
+```
+
+It prints one line per case (`pass`, `fail` with mismatches, or `error`), then
+`@summary`, and exits 1 unless every case passes. An `error` means PostHog could
+not evaluate the flag; it is never a false result. Tests evaluate the **saved**
+flag: a disabled flag is false for everyone. `distinct_id` defaults to
+`agent-posthog-test:<name>`, keeping percentage rollouts stable.
+
+`reach` counts users whose properties pass each condition's filters before
+rollout; conditions overlap, so the counts do not add up to the audience.
+
+## Staging recipes
+
+**One project + a property.** Add a condition such as `app_env = staging` and
+have the app send that property when it evaluates flags (`personProperties` /
+`setPersonPropertiesForFlags`). An event property does not reach flag
+evaluation. Test with `--props-json '{"app_env":"staging"}'` and include a case
+with no `app_env` so a missing property cannot accidentally pass. The property
+is not a security boundary: clients choose what they send.
