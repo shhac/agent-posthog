@@ -67,3 +67,12 @@ func toInt(v any) int {
 		return n
 	}
 }
+
+func writeStatus(w http.ResponseWriter, status int, payload any) {
+	w.WriteHeader(status)
+	write(w, payload)
+}
+
+func write(w http.ResponseWriter, payload any) {
+	_ = json.NewEncoder(w).Encode(payload)
+}
