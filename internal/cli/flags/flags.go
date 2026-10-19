@@ -14,7 +14,7 @@ func Register(root *cobra.Command, globals *shared.GlobalFlags) {
 	flags := &cobra.Command{Use: "flags", Short: "Read, create, edit, and evaluate PostHog feature flags"}
 	var active, search string
 	list := shared.ListCommand(globals, shared.ListSpec{
-		Use: "list", Short: "List feature flags", Scope: shared.ScopeProject, Collection: []string{"feature_flags"},
+		Use: "list", Short: "List feature flags", Scope: shared.ScopeProject, Collection: "feature_flags",
 		Query: func(q url.Values) {
 			shared.SetIf(q, "active", active)
 			shared.SetIf(q, "search", search)

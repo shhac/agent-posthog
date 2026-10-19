@@ -23,7 +23,7 @@ func schemaEventsCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var search string
 	var excludeHidden, excludeStale bool
 	list := shared.ListCommand(globals, shared.ListSpec{
-		Use: "list", Short: "List event definitions", Scope: shared.ScopeProject, Collection: []string{"event_definitions"},
+		Use: "list", Short: "List event definitions", Scope: shared.ScopeProject, Collection: "event_definitions",
 		Query: func(q url.Values) {
 			if excludeHidden {
 				q.Set("exclude_hidden", "true")
@@ -67,7 +67,7 @@ func schemaPropertiesCommand(globals *shared.GlobalFlags) *cobra.Command {
 	properties := &cobra.Command{Use: "properties", Short: "List property definitions"}
 	var propType, eventName, search string
 	properties.AddCommand(shared.ListCommand(globals, shared.ListSpec{
-		Use: "list", Short: "List property definitions", Scope: shared.ScopeProject, Collection: []string{"property_definitions"},
+		Use: "list", Short: "List property definitions", Scope: shared.ScopeProject, Collection: "property_definitions",
 		Query: func(q url.Values) {
 			shared.SetIf(q, "type", propType)
 			if eventName != "" {

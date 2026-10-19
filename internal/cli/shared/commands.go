@@ -1,11 +1,11 @@
 package shared
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 
 	libcli "github.com/shhac/lib-agent-cli/cli"
@@ -20,7 +20,7 @@ import (
 type ListSpec struct {
 	Use, Short string
 	Scope      Scope
-	Collection []string
+	Collection string
 	Query      func(url.Values)
 	Filter     func([]json.RawMessage) []json.RawMessage
 }
@@ -33,7 +33,7 @@ func ListCommand(globals *GlobalFlags, spec ListSpec) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
-				path, err := resolved.Path(spec.Scope, spec.Collection...)
+				path, err := resolved.Path(spec.Scope, spec.Collection)
 				if err != nil {
 					return err
 				}
@@ -82,9 +82,9 @@ func EntityGetCommand(use, short string, globals *GlobalFlags, s Scope, fetch Fe
 }
 
 // GetByPath fetches <scope>/<collection>/<ref>/.
-func GetByPath(s Scope, collection ...string) FetchFunc {
+func GetByPath(s Scope, collection string) FetchFunc {
 	return func(ctx context.Context, resolved *Resolved, ref string) (any, error) {
-		path, err := resolved.Path(s, append(slices.Clone(collection), ref)...)
+		path, err := resolved.Path(s, collection, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -119,13 +119,28 @@ func SubresourceCommand(use, short string, globals *GlobalFlags, s Scope, segmen
 	}
 }
 
-// RegisterDomain adds a <name> list/get command group for one PostHog
-// collection, plus any extra subcommands.
-func RegisterDomain(root *cobra.Command, globals *GlobalFlags, name, short string, s Scope, collection string, extra ...*cobra.Command) {
-	cmd := &cobra.Command{Use: name, Short: short}
-	cmd.AddCommand(ListCommand(globals, ListSpec{Use: "list", Short: "List " + name, Scope: s, Collection: []string{collection}}))
-	cmd.AddCommand(EntityGetCommand("get <id>...", "Get one or more "+name, globals, s, GetByPath(s, collection)))
-	cmd.AddCommand(extra...)
+// Domain is a read-only command group: list, get by ID, and any extra
+// commands.
+type Domain struct {
+	Name    string
+	Aliases []string
+	Short   string
+	// Noun names the records in help ("List <noun>"); it defaults to Name.
+	Noun string
+	// IDArg is the get argument's placeholder; it defaults to <id>.
+	IDArg      string
+	Scope      Scope
+	Collection string
+	Extra      []*cobra.Command
+}
+
+// RegisterDomain adds a read-only command group to root.
+func RegisterDomain(root *cobra.Command, globals *GlobalFlags, d Domain) {
+	noun := cmp.Or(d.Noun, d.Name)
+	cmd := &cobra.Command{Use: d.Name, Aliases: d.Aliases, Short: d.Short}
+	cmd.AddCommand(ListCommand(globals, ListSpec{Use: "list", Short: "List " + noun, Scope: d.Scope, Collection: d.Collection}))
+	cmd.AddCommand(EntityGetCommand("get "+cmp.Or(d.IDArg, "<id>")+"...", "Get one or more "+noun, globals, d.Scope, GetByPath(d.Scope, d.Collection)))
+	cmd.AddCommand(d.Extra...)
 	root.AddCommand(cmd)
 }
 
