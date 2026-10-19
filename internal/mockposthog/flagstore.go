@@ -190,29 +190,13 @@ func (s *flagStore) patch(w http.ResponseWriter, r *http.Request, flag map[strin
 	delete(body, "original_flag")
 	delete(body, "version")
 
-	updated := cloneMap(flag)
-	for k, v := range body {
-		if k == "filters" {
-			merged := cloneMap(asObject(flag["filters"]))
-			for fk, fv := range asObject(v) {
-				merged[fk] = fv
-			}
-			updated["filters"] = merged
-			continue
-		}
-		updated[k] = v
-	}
-	if hasVersion && toInt(sentVersion) != toInt(flag["version"]) && len(original) > 0 {
-		for k := range body {
-			ov, inOriginal := original[k]
-			if inOriginal && !jsonEqual(updated[k], ov) && !jsonEqual(flag[k], ov) {
-				writeStatus(w, http.StatusConflict, map[string]any{
-					"type": "server_error", "code": "conflict",
-					"detail": "The feature flag was updated by agent@example.com since you started editing it. Please refresh and try again.",
-				})
-				return
-			}
-		}
+	updated := mergeFlagPatch(flag, body)
+	if hasVersion && toInt(sentVersion) != toInt(flag["version"]) && staleConflict(flag, updated, original, body) {
+		writeStatus(w, http.StatusConflict, map[string]any{
+			"type": "server_error", "code": "conflict",
+			"detail": "The feature flag was updated by agent@example.com since you started editing it. Please refresh and try again.",
+		})
+		return
 	}
 	storeNullDefaults(updated)
 	if updated["archived"] == true && updated["active"] == true {
@@ -231,6 +215,37 @@ func (s *flagStore) patch(w http.ResponseWriter, r *http.Request, flag map[strin
 
 // patchV2 mirrors PostHog's config version 2 path: a strict version check and
 // whole-document filters, with the classic shallow merge unavailable.
+// mergeFlagPatch applies a PATCH body the way PostHog does: fields replace,
+// filters merge one level deep.
+func mergeFlagPatch(flag, body map[string]any) map[string]any {
+	updated := cloneMap(flag)
+	for k, v := range body {
+		if k != "filters" {
+			updated[k] = v
+			continue
+		}
+		merged := cloneMap(asObject(flag["filters"]))
+		maps.Copy(merged, asObject(v))
+		updated["filters"] = merged
+	}
+	return updated
+}
+
+// staleConflict mirrors PostHog's field-level check: a stale write conflicts
+// only on a field the caller changed that someone else changed differently.
+func staleConflict(flag, updated, original, body map[string]any) bool {
+	if len(original) == 0 {
+		return false
+	}
+	for k := range body {
+		ov, inOriginal := original[k]
+		if inOriginal && !jsonEqual(updated[k], ov) && !jsonEqual(flag[k], ov) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *flagStore) patchV2(w http.ResponseWriter, body, flag map[string]any) {
 	if sent, ok := body["version"]; ok && toInt(sent) != toInt(flag["version"]) {
 		writeStatus(w, http.StatusConflict, map[string]any{"type": "server_error", "code": "conflict", "detail": "This feature flag has changed since the version you sent."})
@@ -260,143 +275,8 @@ func storeNullDefaults(flag map[string]any) {
 	}
 }
 
-// dependents lists flags whose conditions depend on flag (plus the legacy
-// fixture dependent of checkout-v2).
-func (s *flagStore) dependents(project int, flag map[string]any) []any {
-	out := []any{}
-	if toInt(flag["id"]) == 22 {
-		out = append(out, map[string]any{"id": 25, "key": "checkout-v2-dependent", "name": "Checkout dependent", "active": true})
-	}
-	for _, id := range sortedIDs(s.flags[project]) {
-		other := s.flags[project][id]
-		if other["deleted"] == true {
-			continue
-		}
-		for _, group := range asList(asObject(other["filters"])["groups"]) {
-			for _, prop := range asList(asObject(group)["properties"]) {
-				p := asObject(prop)
-				if p["type"] == "flag" && fmt.Sprint(p["key"]) == fmt.Sprint(flag["id"]) {
-					out = append(out, map[string]any{"id": other["id"], "key": other["key"], "active": other["active"]})
-				}
-			}
-		}
-	}
-	return out
-}
-
-func hasFlagDependency(flag map[string]any) bool {
-	for _, group := range asList(asObject(flag["filters"])["groups"]) {
-		for _, prop := range asList(asObject(group)["properties"]) {
-			if asObject(prop)["type"] == "flag" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func isV2(flag map[string]any) bool {
 	return toInt(asObject(flag["filters"])["version"]) == 2
-}
-
-func setRollout(w http.ResponseWriter, r *http.Request, flag map[string]any) {
-	body, ok := decodeBody(w, r)
-	if !ok {
-		return
-	}
-	if toInt(body["version"]) != toInt(flag["version"]) {
-		writeStatus(w, http.StatusConflict, map[string]any{
-			"type": "server_error", "code": "conflict",
-			"detail": fmt.Sprintf("This feature flag has changed since version %v; it is now at version %v. Nothing was written.", body["version"], flag["version"]),
-		})
-		return
-	}
-	groups := asList(asObject(flag["filters"])["groups"])
-	index := toInt(body["condition_index"])
-	if index < 0 || index >= len(groups) {
-		validationError(w, "condition_index", "The flag has no release condition at that index.")
-		return
-	}
-	asObject(groups[index])["rollout_percentage"] = body["rollout_percentage"]
-	flag["version"] = toInt(flag["version"]) + 1
-	write(w, flag)
-}
-
-func blastRadius(w http.ResponseWriter, r *http.Request) {
-	body, ok := decodeBody(w, r)
-	if !ok {
-		return
-	}
-	condition, present := body["condition"]
-	if !present {
-		validationError(w, "condition", "Missing condition for which to get blast radius")
-		return
-	}
-	affected := 100
-	if len(asList(asObject(condition)["properties"])) > 0 {
-		affected = 25
-	}
-	write(w, map[string]any{"affected": affected, "total": 100})
-}
-
-func (s *flagStore) copyFlags(w http.ResponseWriter, r *http.Request) {
-	body, ok := decodeBody(w, r)
-	if !ok {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key, _ := body["feature_flag_key"].(string)
-	source := findByKey(s.flags[toInt(body["from_project"])], key)
-	if source == nil {
-		writeStatus(w, http.StatusBadRequest, map[string]any{"error": "Feature flag to copy does not exist."})
-		return
-	}
-	success, failed := []any{}, []any{}
-	for _, target := range asList(body["target_project_ids"]) {
-		project := toInt(target)
-		if project == approvalProject {
-			failed = append(failed, map[string]any{"project_id": project, "error_message": "Approval required.", "approval_pending": true, "change_request_id": "cr_copy"})
-			continue
-		}
-		flags, ok := s.flags[project]
-		if !ok {
-			failed = append(failed, map[string]any{"project_id": project, "error_message": "Project not found."})
-			continue
-		}
-		existing := findByKey(flags, key)
-		active := source["active"] == true && body["disable_copied_flag"] != true
-		if existing == nil {
-			s.nextID++
-			existing = withFlagDefaults(map[string]any{"id": s.nextID, "key": key, "version": 0})
-			flags[s.nextID] = existing
-		}
-		existing["name"] = source["name"]
-		existing["filters"] = cloneMap(asObject(source["filters"]))
-		existing["active"] = active
-		existing["is_remote_configuration"] = source["is_remote_configuration"]
-		existing["version"] = toInt(existing["version"]) + 1
-		item := map[string]any{
-			"id": existing["id"], "key": key, "name": existing["name"], "active": active,
-			"team_id": project, "updated_existing": toInt(existing["version"]) > 1,
-		}
-		if body["copy_dependencies"] != true && hasFlagDependency(source) {
-			item["flag_dependency_warnings"] = []any{"Dropped a dependency on a flag the target project lacks; the copy is disabled."}
-			item["active"], existing["active"] = false, false
-		}
-		if body["copy_schedule"] == true {
-			item["schedule_copy_warning"] = "Existing schedules in the target project were kept."
-		}
-		success = append(success, item)
-	}
-	write(w, map[string]any{"success": success, "failed": failed})
-}
-
-func dependencyRequirements(w http.ResponseWriter) {
-	write(w, map[string]any{
-		"can_copy_dependencies": true, "dependency_count": 0, "copied_dependency_keys": []any{},
-		"reused_dependency_keys": []any{}, "warnings": []any{}, "reason": "",
-	})
 }
 
 func withFlagDefaults(flag map[string]any) map[string]any {
