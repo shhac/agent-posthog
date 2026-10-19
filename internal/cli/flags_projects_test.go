@@ -92,3 +92,33 @@ func TestCopyReportsApprovalAndRefusesSource(t *testing.T) {
 		t.Fatalf("err=%v\nstdout=%s\nstderr=%s", err, out, errOut)
 	}
 }
+
+func TestDiffNamesFlagDependenciesByKey(t *testing.T) {
+	s := stagingSession(t)
+	gate := `{"key":"dependent-gate","conditions":[{"where":["flag:base-gate = true","cohort in 5"]},{"where":[{"key":"base-gate","type":"flag","operator":"flag_evaluates_to","value":true}]}]}`
+	for _, project := range []string{"staging", "prod"} {
+		if project == "prod" {
+			s.mustRun("--project", project, "flags", "create", "padding-flag", "--yes")
+		}
+		s.mustRun("--project", project, "flags", "create", "base-gate", "--yes")
+		s.mustRun("--project", project, "flags", "apply", "--spec-json", gate, "--yes")
+	}
+	if dependencyID(t, s, "staging") == dependencyID(t, s, "prod") {
+		t.Fatal("fixture should give the dependency different IDs in each project")
+	}
+	diff := s.mustRun("--project", "staging", "flags", "diff", "dependent-gate", "--against", "prod")
+	if diff["identical"] != true {
+		t.Fatalf("same dependency by key should compare equal across projects: %v", diff)
+	}
+	warnings := mustJSON(diff["warnings"])
+	if strings.Count(warnings, "cohort IDs differ") != 1 {
+		t.Fatalf("warnings = %s", warnings)
+	}
+}
+
+func dependencyID(t *testing.T, s *mockSession, project string) any {
+	t.Helper()
+	flag := s.mustRun("--project", project, "flags", "get", "dependent-gate")["data"].([]any)[0].(map[string]any)
+	group := flag["filters"].(map[string]any)["groups"].([]any)[0].(map[string]any)
+	return group["properties"].([]any)[0].(map[string]any)["key"]
+}

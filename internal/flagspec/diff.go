@@ -38,7 +38,8 @@ func Changes(current map[string]any, p *Patch) []Change {
 	return out
 }
 
-// Diff lists the differences between two decoded JSON values.
+// Diff lists the differences between two decoded JSON values; an empty path
+// names top-level keys bare.
 func Diff(path string, before, after any) []Change {
 	return diffValues(path, before, after)
 }
@@ -61,7 +62,7 @@ func diffValues(path string, before, after any) []Change {
 		for _, k := range sortedSet(keys) {
 			bv, bin := bm[k]
 			av, ain := am[k]
-			out = append(out, diffValues(path+"."+k, presence(bv, bin), presence(av, ain))...)
+			out = append(out, diffValues(joinPath(path, k), presence(bv, bin), presence(av, ain))...)
 		}
 		return out
 	}
@@ -75,6 +76,13 @@ func diffValues(path string, before, after any) []Change {
 		return out
 	}
 	return []Change{{Path: path, Before: before, After: after}}
+}
+
+func joinPath(path, key string) string {
+	if path == "" {
+		return key
+	}
+	return path + "." + key
 }
 
 func presence(v any, ok bool) any {

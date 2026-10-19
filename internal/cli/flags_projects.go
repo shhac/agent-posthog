@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -20,10 +21,30 @@ func registerFlagProjectCommands(flags *cobra.Command, globals *GlobalFlags) {
 	flags.AddCommand(copyCommand(globals))
 }
 
-// comparableSpec exports a flag for comparison across projects: flag
-// dependencies are named by key, since IDs differ between projects.
+const cohortWarning = "Cohorts are compared by ID, and cohort IDs differ between projects; compare their definitions separately."
+
+// comparableSpec exports a flag for comparison across projects. Flag
+// dependencies are renamed from ID to key first, since IDs differ between
+// projects.
 func comparableSpec(ctx context.Context, resolved *resolvedContext, projectID int, flag map[string]any) (map[string]any, []string, error) {
-	exported, err := flagspec.Export(flag)
+	named, _ := flagspec.Clone(flag).(map[string]any)
+	var warnings []string
+	for _, group := range asList(asObject(named["filters"])["groups"]) {
+		for _, item := range asList(asObject(group)["properties"]) {
+			prop := asObject(item)
+			switch prop["type"] {
+			case flagspec.PropertyCohort:
+				warnings = appendOnce(warnings, cohortWarning)
+			case flagspec.PropertyFlag:
+				key, err := flagKeyByID(ctx, resolved, projectID, fmt.Sprint(prop["key"]))
+				if err != nil {
+					return nil, nil, err
+				}
+				prop["key"] = key
+			}
+		}
+	}
+	exported, err := flagspec.Export(named)
 	if err != nil {
 		return nil, nil, agenterrors.Wrap(err, agenterrors.FixableByHuman)
 	}
@@ -36,78 +57,25 @@ func comparableSpec(ctx context.Context, resolved *resolvedContext, projectID in
 		return nil, nil, err
 	}
 	delete(spec, "schema_version")
-	var warnings []string
-	for _, item := range asList(spec["conditions"]) {
-		where := asList(asObject(item)["where"])
-		for i, filter := range where {
-			prop, isExpr := filterProperty(filter)
-			switch prop["type"] {
-			case flagspec.PropertyCohort:
-				warnings = appendOnce(warnings, "Cohorts are compared by ID, and cohort IDs differ between projects; compare their definitions separately.")
-			case flagspec.PropertyFlag:
-				key, err := flagKeyByID(ctx, resolved, projectID, fmt.Sprint(prop["key"]))
-				if err != nil {
-					return nil, nil, err
-				}
-				prop["key"] = key
-				if isExpr {
-					where[i], _ = flagspec.FormatWhere(prop)
-				} else {
-					where[i] = prop
-				}
-			}
-		}
-	}
 	return spec, warnings, nil
 }
 
-func filterProperty(filter any) (map[string]any, bool) {
-	if expr, ok := filter.(string); ok {
-		prop, err := flagspec.ParseWhere(expr)
-		if err != nil {
-			return map[string]any{}, true
+func appendOnce(list []string, items ...string) []string {
+	for _, item := range items {
+		if !slices.Contains(list, item) {
+			list = append(list, item)
 		}
-		return prop, true
 	}
-	return asObject(filter), false
+	return list
 }
 
-func appendOnce(list []string, item string) []string {
-	for _, existing := range list {
-		if existing == item {
-			return list
-		}
+// otherSpec is the comparable spec of the same-key flag in another project,
+// or an empty spec when that project has none.
+func otherSpec(ctx context.Context, resolved *resolvedContext, projectID int, other map[string]any) (map[string]any, []string, error) {
+	if other == nil {
+		return map[string]any{}, nil, nil
 	}
-	return append(list, item)
-}
-
-// projectDiff compares a flag between two projects. A nil other means the
-// flag does not exist there.
-func projectDiff(ctx context.Context, resolved *resolvedContext, projectID int, flag map[string]any, otherProject int, other map[string]any) ([]any, []string, error) {
-	spec, warnings, err := comparableSpec(ctx, resolved, projectID, flag)
-	if err != nil {
-		return nil, nil, err
-	}
-	otherSpec := map[string]any{}
-	if other != nil {
-		var otherWarnings []string
-		otherSpec, otherWarnings, err = comparableSpec(ctx, resolved, otherProject, other)
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, w := range otherWarnings {
-			warnings = appendOnce(warnings, w)
-		}
-	}
-	differences := []any{}
-	for _, change := range flagspec.Diff("", spec, otherSpec) {
-		differences = append(differences, map[string]any{
-			"path":  strings.TrimPrefix(change.Path, "."),
-			"this":  change.Before,
-			"other": change.After,
-		})
-	}
-	return differences, warnings, nil
+	return comparableSpec(ctx, resolved, projectID, other)
 }
 
 func diffCommand(globals *GlobalFlags) *cobra.Command {
@@ -134,10 +102,16 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				differences, warnings, err := projectDiff(ctx, resolved, resolved.ProjectID, flag, otherProject, other)
+				spec, warnings, err := comparableSpec(ctx, resolved, resolved.ProjectID, flag)
 				if err != nil {
 					return err
 				}
+				againstSpec, againstWarnings, err := otherSpec(ctx, resolved, otherProject, other)
+				if err != nil {
+					return err
+				}
+				warnings = appendOnce(warnings, againstWarnings...)
+				differences := flagspec.Diff("", spec, againstSpec)
 				result := flagspec.NewOrdered()
 				result.Set("key", key)
 				result.Set("project", resolved.ProjectID)
@@ -158,14 +132,13 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 }
 
 // relabel names the two sides of each difference.
-func relabel(differences []any, this, other string) []any {
-	out := make([]any, 0, len(differences))
-	for _, d := range differences {
-		m := asObject(d)
+func relabel(changes []flagspec.Change, this, other string) []any {
+	out := make([]any, 0, len(changes))
+	for _, change := range changes {
 		entry := flagspec.NewOrdered()
-		entry.Set("path", m["path"])
-		entry.Set(this, m["this"])
-		entry.Set(other, m["other"])
+		entry.Set("path", change.Path)
+		entry.Set(this, change.Before)
+		entry.Set(other, change.After)
 		out = append(out, entry)
 	}
 	return out
@@ -278,10 +251,14 @@ func copyTargets(resolved *resolvedContext, targets []string) ([]int, error) {
 
 func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]any, targetIDs []int, overwrite bool) ([]any, []string, []string, error) {
 	key := fmt.Sprint(flag["key"])
-	warnings := []string{
+	source, warnings, err := comparableSpec(ctx, resolved, resolved.ProjectID, flag)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	warnings = appendOnce([]string{
 		"The plan is advisory: PostHog's copy cannot check that a target is unchanged since it was read.",
 		"Tags, evaluation contexts, and archived state are not copied; cohorts are matched by name in each target.",
-	}
+	}, warnings...)
 	var plan []any
 	var blocked []string
 	for _, target := range targetIDs {
@@ -296,15 +273,13 @@ func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]an
 			plan = append(plan, entry)
 			continue
 		}
-		entry.Set("action", "overwrite")
-		differences, diffWarnings, err := projectDiff(ctx, resolved, resolved.ProjectID, flag, target, existing)
+		targetSpec, targetWarnings, err := comparableSpec(ctx, resolved, target, existing)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		for _, w := range diffWarnings {
-			warnings = appendOnce(warnings, w)
-		}
-		entry.Set("differences", relabel(differences, "source", "target"))
+		warnings = appendOnce(warnings, targetWarnings...)
+		entry.Set("action", "overwrite")
+		entry.Set("differences", relabel(flagspec.Diff("", source, targetSpec), "source", "target"))
 		plan = append(plan, entry)
 		if !overwrite {
 			blocked = append(blocked, fmt.Sprint(target))
