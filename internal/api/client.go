@@ -9,12 +9,13 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	agenterrors "github.com/shhac/lib-agent-output"
+
+	"github.com/shhac/agent-posthog/internal/secret"
 )
 
 type Doer interface {
@@ -173,7 +174,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 
 // send performs one request and reads the whole response.
 func (c *Client) send(req *http.Request) (int, http.Header, []byte, error) {
-	c.debug(map[string]any{"debug": "request", "method": req.Method, "url": redactURL(req.URL.String())})
+	c.debug(map[string]any{"debug": "request", "method": req.Method, "url": secret.RedactURL(req.URL.String())})
 	httpClient := c.HTTPClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -187,7 +188,7 @@ func (c *Client) send(req *http.Request) (int, http.Header, []byte, error) {
 	if err != nil {
 		return 0, nil, nil, agenterrors.Wrap(err, agenterrors.FixableByRetry)
 	}
-	c.debug(map[string]any{"debug": "response", "status": resp.StatusCode, "url": redactURL(req.URL.String())})
+	c.debug(map[string]any{"debug": "response", "status": resp.StatusCode, "url": secret.RedactURL(req.URL.String())})
 	return resp.StatusCode, resp.Header, raw, nil
 }
 
@@ -379,20 +380,4 @@ func backoff(attempt int, retryAfter time.Duration) time.Duration {
 	}
 	ms := int(math.Pow(2, float64(attempt))) * 250
 	return time.Duration(ms) * time.Millisecond
-}
-
-// secretInURL matches PostHog keys (personal, project, share, and app tokens)
-// anywhere in a URL, even URL-encoded inside another parameter, plus the value
-// of query parameters named like secrets.
-var secretInURL = regexp.MustCompile(`(ph[xcsar]_)[A-Za-z0-9_-]+|((?:^|[?&])(?:token|api_key|personal_api_key|project_token|access_token|secret)=)[^&]*`)
-
-// redactURL keeps keys out of --debug output.
-func redactURL(value string) string {
-	return secretInURL.ReplaceAllStringFunc(value, func(match string) string {
-		m := secretInURL.FindStringSubmatch(match)
-		if m[1] != "" {
-			return m[1] + "..."
-		}
-		return m[2] + "..."
-	})
 }

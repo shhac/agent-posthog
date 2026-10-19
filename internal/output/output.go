@@ -9,10 +9,11 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
 	"sync"
 
 	out "github.com/shhac/lib-agent-output"
+
+	"github.com/shhac/agent-posthog/internal/secret"
 
 	// YAML support (and its yaml.v3 dependency) comes from the shared encoder in
 	// lib-agent-cli; the blank import registers it for out.FormatYAML, keeping the
@@ -187,27 +188,10 @@ func SetExpose(expose []string) { redactExpose = expose }
 // @redacted notes, and --expose handling.
 func postHogSecrets() out.RedactRule {
 	return func(field out.RedactField) bool {
-		if isSensitiveKey(field.Key) {
+		if secret.IsField(field.Key) {
 			return true
 		}
 		s, ok := field.Value.(string)
-		return ok && looksLikePostHogSecret(s)
+		return ok && secret.IsKey(s)
 	}
-}
-
-func isSensitiveKey(key string) bool {
-	switch key {
-	case "access_token", "api_key", "personal_api_key", "project_token", "secret", "token":
-		return true
-	default:
-		return false
-	}
-}
-
-func looksLikePostHogSecret(value string) bool {
-	return strings.HasPrefix(value, "phx_") ||
-		strings.HasPrefix(value, "phc_") ||
-		strings.HasPrefix(value, "phs_") ||
-		strings.HasPrefix(value, "pha_") ||
-		strings.HasPrefix(value, "phr_")
 }
