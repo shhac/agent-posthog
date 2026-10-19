@@ -7,19 +7,32 @@ and no direct access to PostHog secrets, and for setting up feature flags
 
 ## Features
 
-- Keychain-first credentials: personal API keys are never printed back.
+- Keychain-first credentials: personal API keys are never printed back. When
+  no keychain is available the key goes in a 0600 file; `auth list` reports
+  where each profile's key really is (`credential: keychain|file|missing`).
 - Multi-profile support: profiles carry host plus default organization, project,
   and environment IDs. The environment defaults to the project when unset — a
   project's default environment shares the project's ID, so most setups only set
   `--project`. Override `--env` only to target a non-default environment.
-- LLM-shaped output: lists and queries default to NDJSON. Entity gets (`get <id>...`) default to NDJSON (one line per id); pass `--format json` for a single pretty object. Multi-id gets interleave `{"@unresolved":{...}}` lines for missing ids (exit 0); command-level failures go to stderr with exit 1.
+- LLM-shaped output: lists and queries default to NDJSON, and every command
+  honors `--format json|yaml|jsonl`. Entity gets (`get <id>...`) print one
+  NDJSON line per id, in order; `--format json|yaml` wraps them in one
+  `{"data":[…],"@unresolved":[…]}` envelope. An id that is not found becomes an
+  `{"@unresolved":{...}}` line (exit 0); a command-level failure (auth,
+  permissions, network, or a missing org/project/environment setting, checked
+  before any request) goes to stderr with exit 1 and nothing on stdout. Gets,
+  like lists, prune nulls and redact secrets; `--expose <field>` reveals one.
 - Structured errors: stderr JSON `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
+  Reads retry rate limits and gateway errors within `--timeout`; a
+  `Retry-After` over 30 seconds comes back as a `retry` error instead of a wait.
+  `--debug` logs mask keys and tokens, including ones inside request URLs.
 - Feature flag management: create, apply specs, narrow edits, archive/delete,
   evaluate, scenario test suites, and diff/copy between projects. Every write
   prints a plan unless `--yes` is passed, and refuses stale overlapping edits.
-  Over MCP, writes stay off until a person runs `agent-posthog config
-  mcp-writes on`; after that a host-confirmed call applies (the bridge adds
-  `--yes`), and `--dry-run` previews.
+  Over MCP, every PostHog write (flag commands, `query cancel`, `api post`
+  outside query endpoints) stays off until a person runs `agent-posthog config mcp-writes on`; after
+  that a host-confirmed call applies (the bridge adds `--yes`), and
+  `--dry-run` previews.
 - Mock server: `mockposthog` provides deterministic E2E fixtures, including a
   stateful flag store.
 
@@ -87,10 +100,11 @@ POSTHOG_PERSONAL_API_KEY=phx_invalid ./agent-posthog orgs list
 POSTHOG_PERSONAL_API_KEY=phx_no_scope ./agent-posthog orgs list
 POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog --max-retries 0 api get /api/mock/rate_limit
 POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog api get /api/mock/validation_error
-POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog flags get missing-flag
-POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog flags get ambiguous-flag
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog --project 123 flags get missing-flag
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog --project 123 flags get ambiguous-flag
 POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog orgs list --limit 1
-POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog query get query_failed
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog --env 456 query get query_failed
+POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog --env 456 query wait query_failed   # exits 1
 POSTHOG_PERSONAL_API_KEY=phx_mock ./agent-posthog api get /api/projects/123/session_recordings/rec_1/sharing/
 ```
 

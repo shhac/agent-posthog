@@ -33,7 +33,8 @@ JSON payload).
   `--dry-run` forces a plan even when `--yes` is present.
 - Over MCP, writes are **off** until a person runs
   `agent-posthog config mcp-writes on` on the machine serving MCP (this covers
-  every PostHog write: flag commands, `query cancel`, and raw `api post`). A refused write is `fixable_by: human`;
+  every PostHog write: flag commands, `query cancel`, and `api post` outside
+  query endpoints). A refused write is `fixable_by: human`;
   ask the user, never work around it. Once on, the bridge adds `--yes` after the
   host confirms a tool call, so a confirmed call applies: preview with
   `--dry-run` first. Plans work either way.
@@ -53,6 +54,9 @@ agent-posthog auth update prod --env <env-id>
 agent-posthog usage
 ```
 
+`auth list` shows each profile's `credential`: `keychain`, `file` (no keychain
+available), or `missing` (ask the user to re-run `auth add --form`).
+
 For local testing:
 
 ```bash
@@ -68,6 +72,9 @@ agent-posthog schema events get "$pageview"
 agent-posthog schema events get <id1> <id2>
 agent-posthog schema properties list --event "$pageview"
 agent-posthog query hogql "select event, count() from events group by event order by count() desc limit 20"
+agent-posthog query hogql --async "select ..."     # returns query_status with an id
+agent-posthog query wait <query-id>                # exits 1 if the query failed
+agent-posthog query json --json '{"query":{"kind":"HogQLQuery","query":"select 1"}}'
 agent-posthog persons list --email user@example.com
 agent-posthog persons get <person-id>
 agent-posthog persons get <id1> <id2>
@@ -78,10 +85,18 @@ agent-posthog insights list
 agent-posthog dashboards run <dashboard-id>
 agent-posthog recordings list
 agent-posthog experiments list
+agent-posthog investigate user --email user@example.com
+agent-posthog investigate event --event "$pageview" --limit 20
+agent-posthog investigate flag checkout-v2
 ```
 
 Prefer `schema events list` and `schema properties list` before writing HogQL, so
 queries use real event/property names.
+
+`query json` and `api post` take a body as `--json '<inline>'` (use this over
+MCP) or `--body <file>`; `-` reads stdin, which is `query json`'s default.
+`query wait` prints a failed query's status on stdout, then exits 1 with
+PostHog's error. `api post` outside `/query/` paths needs `--yes`.
 
 ## Output
 
@@ -89,25 +104,31 @@ queries use real event/property names.
 result per id, in input order. Default output is NDJSON: one line per id —
 the record, or `{"@unresolved":{"id","reason","fixable_by","hint"?}}` for an id
 that couldn't be resolved (e.g. not found / bad id). `--format json|yaml`
-collapses to one `{"data":[…], "@unresolved":[…]}` envelope. A single
-`get <id>` is just the one-element case (NDJSON one line by default; was pretty
-JSON before — pass `--format json` for the object). Item-level misses stay on
-stdout and exit 0; only a command-level failure (auth, network) goes to stderr
-with exit 1 and empty stdout.
+collapses to one `{"data":[…], "@unresolved":[…]}` envelope, even for a single
+id. Item-level misses stay on stdout and exit 0; a command-level failure (auth,
+permissions, network, or a missing org/project/environment, checked before any
+request) goes to stderr with exit 1 and empty stdout.
 
-Lists, queries, and investigation commands default to NDJSON. Errors include
-`fixable_by` and usually a `hint`. Full error shape: stderr JSON
+Lists, queries, and investigation commands default to NDJSON; every command
+(including `auth`, `config`, and `usage`) honors `--format`. Read output prunes
+nulls and redacts secrets (tokens show as `[REDACTED]` with an `@redacted`
+note); `--expose <field>` reveals one only when the user needs it. Errors
+include `fixable_by` and usually a `hint`. Full error shape: stderr JSON
 `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
+The CLI waits out short rate limits itself; a `Retry-After` over 30 seconds
+comes back as `fixable_by: retry` with `retry_after_seconds`.
 
 Feature flag key lookup is CLI sugar: when a command accepts `<id-or-key>`, the
 CLI resolves keys by listing/searching flags and then fetching the numeric ID.
-A key that matches no flag (or matches multiple) yields an `@unresolved` line
-(exit 0) rather than a command-level stderr failure.
+In `flags get`, a key that matches no flag (or matches multiple) yields an
+`@unresolved` line (exit 0); single-flag commands (`export`, writes, `evaluate`)
+report the same miss on stderr with exit 1.
 
 ## Feature flag writes
 
 Writes read the flag, print a receipt, and only write with `--yes`:
-`{"outcome":"planned|applied|unchanged","changes":[{"path","before","after"}],"base_version","version"?}`.
+`{"outcome":"planned|applied|unchanged","host","project_id","key","changes":[{"path","before","after"}],"base_version","version"?,"warnings"?}`.
+Check `host` and `project_id` name the project you meant before passing `--yes`.
 Each PATCH carries the version and the flag as read, so PostHog refuses it if
 someone changed the same fields since. `--if-version N` refuses unless the flag
 is still at version N.
@@ -138,7 +159,7 @@ agent-posthog flags early-exit <id-or-key> on --yes
 ### Create, apply, export
 
 ```bash
-agent-posthog flags create beta-gate --where "email icontains @letsdothis.com" --yes
+agent-posthog flags create beta-gate --where "email icontains @example.com" --yes
 agent-posthog flags create checkout-config --type multivariate --variant debug=0 --variant default=100 --yes
 agent-posthog flags create site-config --type remote_config --payload-json '{"banner":"hi"}' --yes
 agent-posthog flags export checkout-config --format yaml > spec.yaml   # edit, then:

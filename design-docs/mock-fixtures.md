@@ -11,6 +11,10 @@ Sources checked on 2026-05-31:
 - https://posthog.com/docs/api/session-recordings
 - https://posthog.com/docs/api/experiments
 
+`mockposthog --routes` prints the route table and exits: one `METHOD path`
+per line, single-space separated and sorted, built from the same table the
+server routes by.
+
 ## Scenario controls
 
 Use request paths, query parameters, and fake token values to trigger edge cases:
@@ -22,9 +26,9 @@ Use request paths, query parameters, and fake token values to trigger edge cases
 - `flags get missing-flag`: key lookup miss
 - `flags get ambiguous-flag`: multiple key matches
 - `orgs list --limit 1`: paginated response with absolute `next` URL
-- `api post /api/environments/456/query/ --body async.json`: async query creation
+- `api post /api/environments/456/query/ --body async.json` (or `--json '...'`): async query creation
 - `query get query_pending`: incomplete async query
-- `query get query_failed`: completed async query with error
+- `query get query_failed`: completed async query with error (`query wait` exits 1 on it)
 - `query get query_complete`: completed async query with results
 - `query log query_complete`: archived query log details
 - `api get /api/projects/123/session_recordings/rec_1/sharing/`: sharing payload with redacted access token
@@ -34,7 +38,10 @@ so a test can create, edit, and evaluate a flag across several CLI invocations
 against one server:
 
 - projects `123` (default) and `124` (a separate staging project); each has a
-  project token (`phc_mock_project_<id>`) on `GET /api/projects/<id>/`
+  project token (`phc_mock_project_<id>`) as `api_token` on
+  `GET /api/projects/<id>/`, which public `/flags` evaluation reads. Project
+  `123`'s organization-scoped detail carries it too, so `projects get` tests
+  redaction (`--expose api_token` reveals it)
 - PATCH merges `filters` shallowly and detects stale writes from `version` +
   `original_flag` the way PostHog does (field overlap only)
 - `approval-flag` (26): any PATCH returns the approval-policy 409

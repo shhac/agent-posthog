@@ -50,8 +50,12 @@ PostHog documents separate private API limits:
 
 CLI behavior:
 
-- retry `429`, `502`, `503`, and `504` with bounded exponential backoff
-- respect `Retry-After` when present
+- retry reads on `429`, `502`, `503`, and `504` with bounded exponential
+  backoff; retry writes only on `429` (PostHog sends it before doing anything),
+  since a lost response or a `5xx` may follow a committed write
+- respect `Retry-After` when present, up to 30 seconds; a longer one is not
+  waited out but returned as `fixable_by: retry` with `retry_after_seconds`
+- every wait ends at the command's `--timeout` deadline
 - after retries, emit `fixable_by: retry`
 - include endpoint family and limit hints when known
 
@@ -85,11 +89,11 @@ CLI behavior:
 | `projects get` | `GET /api/organizations/:organization_id/projects/:id/` | org | `project:read` |
 | `environments list` | `GET /api/projects/:project_id/environments/` | project | `project:read` |
 | `environments get` | `GET /api/projects/:project_id/environments/:id/` | project | `project:read` |
-| `schema events` | `GET /api/projects/:project_id/event_definitions/` | project | `event_definition:read` |
+| `schema events list` | `GET /api/projects/:project_id/event_definitions/` | project | `event_definition:read` |
 | `schema events get` | `GET /api/projects/:project_id/event_definitions/:id/` or list-filter by name | project | `event_definition:read` |
-| `schema properties` | `GET /api/projects/:project_id/property_definitions/` with `event_names` when `--event` is provided | project | `property_definition:read` |
-| `query hogql` | `POST /api/environments/:environment_id/query/` | environment | `query:read` |
-| `query get` | `GET /api/environments/:environment_id/query/:id/` | environment | `query:read` |
+| `schema properties list` | `GET /api/projects/:project_id/property_definitions/` with `event_names` when `--event` is provided | project | `property_definition:read` |
+| `query hogql`, `query json` | `POST /api/environments/:environment_id/query/` | environment | `query:read` |
+| `query get`, `query wait` (polls) | `GET /api/environments/:environment_id/query/:id/` | environment | `query:read` |
 | `query log` | `GET /api/environments/:environment_id/query/:id/log/` | environment | `query:read` |
 | `query cancel` | `DELETE /api/environments/:environment_id/query/:id/` | environment | `query:read` |
 | `persons list` | `GET /api/environments/:environment_id/persons/` | environment | `person:read` |
@@ -97,7 +101,6 @@ CLI behavior:
 | `persons activity` | `GET /api/environments/:environment_id/persons/:id/activity/` | environment | `person:read` |
 | `insights list` | `GET /api/environments/:environment_id/insights/` | environment | `insight:read` |
 | `insights get` | `GET /api/environments/:environment_id/insights/:id/` | environment | `insight:read` |
-| `insights analyze` | `GET /api/environments/:environment_id/insights/:id/analyze/` | environment | `insight:read` |
 | `dashboards list` | `GET /api/environments/:environment_id/dashboards/` | environment | `dashboard:read` |
 | `dashboards get` | `GET /api/environments/:environment_id/dashboards/:id/` | environment | `dashboard:read` |
 | `dashboards run` | `GET /api/environments/:environment_id/dashboards/:id/run_insights/` | environment | `dashboard:read` |
@@ -119,6 +122,16 @@ CLI behavior:
 | `flags evaluate`, `flags test` (`--engine public`) | `GET /api/projects/:project_id/` (`api_token`), then `POST {flags host}/flags?v=2` with the project token | project | project read |
 | `flags reach` | `POST /api/projects/:project_id/feature_flags/user_blast_radius/` | project | `feature_flag:read` |
 | `flags copy` | `POST /api/organizations/:org_id/feature_flags/copy_flags/` (+ `copy_flags/dependency_requirements/` with `--copy-dependencies`) | organization | `feature_flag:write` |
+| `investigate user` | `GET /api/environments/:environment_id/persons/` (`email` / `distinct_id`) | environment | `person:read` |
+| `investigate event` | `POST /api/environments/:environment_id/query/` (HogQL with the event name in `values`, referenced as `{event}`) | environment | `query:read` |
+| `investigate flag` | flag `GET`, then `dependent_flags/` and `activity/` | project | `feature_flag:read` |
+| `api get`, `api post` | the given `/api/...` path | caller | whatever the endpoint needs |
+
+Commands check the scope they need before any request: a missing
+organization, project, or environment fails the command on stderr with exit 1,
+including every `get`. `query cancel`, flag writes, and `api post` outside
+`/query/` paths are writes: they are never replayed after a `5xx`, and the API
+client refuses them through MCP unless `config mcp-writes on` was run.
 
 Flag write and evaluation behavior was checked against PostHog source at
 `master` commit `c58dbfa6eeb72f5e735ed99cedd61ad939234ba8` (2026-10-19):
@@ -176,8 +189,8 @@ environment-scoped replacement, keep the current routing.
 CLI should search/list feature flags by key, require exactly one match, then call
 the documented ID-based endpoint.
 
-`schema events --search` is local filtering over returned event definitions.
-`schema properties --event <name>` maps to PostHog's event-name filtering
+`schema events list --search` is local filtering over returned event definitions.
+`schema properties list --event <name>` maps to PostHog's event-name filtering
 parameters rather than a literal `event` query parameter.
 
 ## Deprecated events API

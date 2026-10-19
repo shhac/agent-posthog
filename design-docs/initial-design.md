@@ -53,43 +53,57 @@ agent-posthog
 ├── orgs              list, get
 ├── projects          list, get
 ├── environments      list, get
-├── schema            events, properties, usage
-├── query             hogql, json, get, cancel, usage
-├── persons           list, get, activity, usage
-├── insights          list, get, analyze, usage
-├── dashboards        list, get, run, usage
-├── flags             list, get, create, update, disable, usage
-├── recordings        list, get, usage
-├── experiments       list, get, usage
-├── investigate       user, funnel, flag, dashboard, event, usage
+├── schema            events list|get, properties list
+├── query             hogql, json, get, wait, log, cancel
+├── persons           list, get, activity
+├── insights          list, get
+├── dashboards        list, get, run
+├── flags             list, get, dependent, activity, create, apply, apply-plan,
+│                     export, enable, disable, archive, unarchive, delete,
+│                     restore, early-exit, conditions, variants, payload,
+│                     evaluate, test, reach, diff, copy
+├── recordings        list, get
+├── experiments       list, get
+├── investigate       user, event, flag
 ├── api               get, post
-├── config            show, path, set, unset
+├── config            show, path, set, unset, alias, mcp-writes
+├── mcp               stdio or --http server; pair, usage
 ├── usage
-└── version
+└── completion
 ```
+
+`--version` prints the version.
 
 Top-level global flags:
 
 ```text
 -p, --profile <alias>      profile alias; default from config or AGENT_POSTHOG_PROFILE
     --org <uuid>           organization override
-    --project <id>         project override
+    --project <id|alias>   project override; an alias from 'config alias'
     --env <id>             environment override
     --host <url>           private API host override for tests/self-hosted
+    --api-key <key>        personal API key override; never printed or persisted
 -f, --format <fmt>         json, yaml, jsonl/ndjson
 -t, --timeout <ms>         request timeout
     --max-retries <n>      bounded retries for 429/5xx
 -d, --debug               JSON debug records to stderr, no secrets
     --full                disable compact shaping/truncation
+    --expose <field>       reveal a redacted field (repeatable; 'all')
+    --color <mode>         auto, always, never
 ```
 
 Environment variables:
 
 ```text
 AGENT_POSTHOG_PROFILE
-AGENT_POSTHOG_HOST
-AGENT_POSTHOG_BASE_URL      test/mock override
+AGENT_POSTHOG_BASE_URL      host override above the profile (tests, mock)
+AGENT_POSTHOG_HOST          host default below the profile
+AGENT_POSTHOG_ORGANIZATION_ID
+AGENT_POSTHOG_PROJECT_ID
+AGENT_POSTHOG_ENVIRONMENT_ID
+AGENT_POSTHOG_FLAGS_HOST    /flags host for flag evaluation (self-hosted proxies)
 POSTHOG_PERSONAL_API_KEY    direct auth escape hatch; never print
+AGENT_POSTHOG_PERSONAL_API_KEY
 POSTHOG_PROJECT_ID
 POSTHOG_ENVIRONMENT_ID
 POSTHOG_ORGANIZATION_ID
@@ -100,17 +114,21 @@ for quick local use, but mark direct env auth as less safe for LLM-guided setup.
 Resolution order is: explicit flags, `AGENT_POSTHOG_*` environment variables,
 profile defaults, PostHog-native environment variables, then built-in defaults
 such as `https://us.posthog.com`. The namespaced `AGENT_POSTHOG_*` variables win
-over profile metadata across host, organization, project, and environment so an
-agent can repoint a configured CLI (e.g. `AGENT_POSTHOG_BASE_URL` for a mock
-server) without editing the profile; the PostHog-native `POSTHOG_*` variables
-stay the lowest tier as a quick-local-use default below the profile.
+over profile metadata for organization, project, and environment, and
+`AGENT_POSTHOG_BASE_URL` does for host, so an agent can repoint a configured
+CLI (e.g. at a mock server) without editing the profile; `AGENT_POSTHOG_HOST`
+and the PostHog-native `POSTHOG_*` variables stay below the profile as
+quick-local-use defaults.
 
 ## Auth and profiles
 
-Use the `agent-stripe` pattern rather than the older `agent-dd` fallback:
-secrets are stored in OS Keychain; `credentials.json` is only a non-secret index.
-If Keychain storage fails, return a human-fixable error instead of writing the key
-to disk.
+Secrets go in the OS Keychain, and `credentials.json` is then only an index.
+Where no keychain is available, the key is kept in that 0600 file instead; the
+`auth add` receipt says which (`storage: keychain|file`), and `auth list`
+reports where each profile's key really is (`credential:
+keychain|file|missing`). If saving the profile fails after the key was stored,
+the key is removed again, and `auth remove` still removes a profile whose key
+is already gone.
 
 ```bash
 agent-posthog auth add prod --form --host https://us.posthog.com
@@ -152,9 +170,11 @@ Config file shape:
       "host": "https://us.posthog.com",
       "organization_id": "00000000-0000-0000-0000-000000000000",
       "project_id": 123,
-      "environment_id": 456
+      "environment_id": 456,
+      "project_aliases": {"staging": 124, "prod": 123}
     }
-  }
+  },
+  "mcp_writes": false
 }
 ```
 
@@ -165,16 +185,22 @@ Default formats:
 - list/search/query/investigation streams: NDJSON (`jsonl`)
 - entity gets (`get <id>...`): NDJSON by default — one line per id (the record,
   or `{"@unresolved":{"id","reason","fixable_by","hint"?}}` for missing ids).
-  Pass `--format json` for a single pretty object (one-id case), or
-  `--format json|yaml` to collapse to `{"data":[…],"@unresolved":[…]}` envelope.
-- `--format yaml` allowed for humans
+  `--format json|yaml` collapses to one `{"data":[…],"@unresolved":[…]}`
+  envelope, even for a single id.
+- `--format yaml` allowed for humans; every command honors `--format`,
+  including `auth`, `config`, and `usage`
 - `--full` returns unshaped API payloads where possible
-- compact output is null-pruned by default
+- read output (lists, gets, queries) is null-pruned and secret-redacted;
+  `--expose <field>` reveals a redacted field. Flag write receipts and exported
+  specs print exactly, since their nulls are meaningful
 
 **Get contract.** `get <id>...` takes 1..N ids and emits one stdout line per
 input in order. Item-level misses (not found, bad key) → `@unresolved` line on
-stdout, exit 0. Command-level failures (auth, network, zero args) → structured
-`{error}` on stderr, empty stdout, exit 1. This is the only use of stderr/exit 1.
+stdout, exit 0. Command-level failures (auth, permissions, network, zero args,
+or an organization/project/environment the command needs but the profile does
+not set, checked once before any fetch) → structured `{error}` on stderr, empty
+stdout, exit 1. This is the only use of stderr/exit 1. `--timeout` bounds the
+whole command.
 
 NDJSON should use data rows plus `@` meta rows:
 
@@ -206,6 +232,8 @@ Debug logs should be structured JSON records to stderr and must redact:
 - personal API keys (`phx_...`)
 - OAuth tokens (`pha_...`, `phr_...`)
 - project tokens and secure keys (`phc_...`, `phs_...`)
+- any of these in request URLs, including secret-named query parameters and
+  keys inside an encoded next-page URL
 - request bodies for auth setup
 
 ## Read commands
@@ -231,15 +259,15 @@ Schema is the highest-value LLM onboarding surface because it tells the agent wh
 events/properties exist before writing HogQL.
 
 ```bash
-agent-posthog schema events --search signup --exclude-hidden --limit 100
+agent-posthog schema events list --search signup --exclude-hidden --limit 100
 agent-posthog schema events get "$pageview"
-agent-posthog schema properties --type event --event "$pageview" --search browser
-agent-posthog schema properties --type person --verified true
+agent-posthog schema properties list --type event --event "$pageview" --search browser
+agent-posthog schema properties list --type person
 ```
 
-`schema events --search` is client-side filtering over the event definitions page
+`schema events list --search` is client-side filtering over the event definitions page
 because PostHog's documented endpoint does not expose a general search parameter.
-`schema properties --event` maps to PostHog's `event_names` parameter with event
+`schema properties list --event` maps to PostHog's `event_names` parameter with event
 name filtering enabled.
 
 ### Query
@@ -248,9 +276,12 @@ HogQL should be first-class and streamable.
 
 ```bash
 agent-posthog query hogql "select event, count() from events where timestamp > now() - interval 7 day group by event order by count() desc limit 20"
-agent-posthog query hogql --file query.sql --var key=value --format jsonl
+agent-posthog query hogql --file query.sql --format jsonl
+agent-posthog query hogql --async "select ..."
 agent-posthog query json --body query.json
+agent-posthog query json --json '{"query":{"kind":"HogQLQuery","query":"select 1"}}'
 agent-posthog query get <query-id>
+agent-posthog query wait <query-id>
 agent-posthog query cancel <query-id>
 ```
 
@@ -258,13 +289,20 @@ For tabular responses, emit one NDJSON row per result and include a meta row for
 columns/types. If the API returns async query IDs, surface them in `@query` and
 offer the exact follow-up command in an error or meta hint.
 
+`query json` reads its body from `--body <file|->` (stdin by default) or inline
+`--json`, for callers such as MCP that have no stdin or shared filesystem.
+`query wait` polls until the query completes or fails; a failed query prints
+its status on stdout and exits 1 with PostHog's error (`fixable_by: agent`), so
+an agent never reads a HogQL error as success. `query cancel` is a DELETE and
+counts as a write.
+
 ### Persons
 
 ```bash
 agent-posthog persons list --email user@example.com
 agent-posthog persons list --distinct-id user_123
 agent-posthog persons get <person-id>
-agent-posthog persons activity <person-id> --limit 50
+agent-posthog persons activity <person-id>
 ```
 
 Compact person output should include ID, uuid, name, selected distinct IDs, email
@@ -273,23 +311,22 @@ if present, created/last-seen timestamps, and a pruned properties map.
 ### Insights and dashboards
 
 ```bash
-agent-posthog insights list --search activation
+agent-posthog insights list
 agent-posthog insights get <insight-id>
-agent-posthog insights analyze <insight-id>
-agent-posthog dashboards list --search growth
+agent-posthog dashboards list
 agent-posthog dashboards get <dashboard-id>
 agent-posthog dashboards run <dashboard-id>
 ```
 
-`dashboards run` should stream each tile/insight result as its own row so large
-dashboards do not force one giant JSON blob into context. Per-tile failures should
-emit `type:"tile_error"` records rather than failing the whole dashboard run when
-PostHog returns partial results.
+`dashboards run` currently prints PostHog's `run_insights` response as one
+compacted JSON object (`--full` for the whole payload). Streaming each
+tile/insight result as its own row, with `type:"tile_error"` records for
+per-tile failures, is still the goal for large dashboards; it is not built.
 
 ### Feature flags
 
 ```bash
-agent-posthog flags list --active true --type experiment
+agent-posthog flags list --active true --search checkout
 agent-posthog flags get <id-or-key>
 agent-posthog flags dependent <id-or-key>
 agent-posthog flags activity <id-or-key>
@@ -343,12 +380,10 @@ These are opinionated LLM workflows that gather multiple resources and emit
 evidence records.
 
 ```bash
-agent-posthog investigate user --email user@example.com --since 14d
-agent-posthog investigate user --distinct-id user_123 --since 14d
-agent-posthog investigate event --event "$pageview" --since 24h --sample 20
-agent-posthog investigate funnel --events "$pageview,signup,checkout" --since 7d
-agent-posthog investigate flag checkout-v2 --distinct-id user_123
-agent-posthog investigate dashboard <dashboard-id> --since 7d
+agent-posthog investigate user --email user@example.com
+agent-posthog investigate user --distinct-id user_123 --limit 10
+agent-posthog investigate event --event "$pageview" --limit 20
+agent-posthog investigate flag checkout-v2
 ```
 
 Evidence record contract:
@@ -360,15 +395,21 @@ Evidence record contract:
 {"type":"next_step","command":"agent-posthog flags get checkout-v2 --full"}
 ```
 
-Initial workflows to prioritize:
+`investigate event` sends the event name in the HogQL query's `values` and
+refers to it as `{event}`, so a name is never spliced into SQL text.
 
-1. `investigate user`: resolve person by email/distinct ID, recent events,
-   cohorts/flags if available, and session recording links.
-2. `investigate event`: schema, recent samples, volume trend, top properties.
-3. `investigate flag`: flag definition, rollout conditions, dependent flags,
-   recent `$feature_flag_called` events, and optional user evaluation context.
-4. `investigate dashboard`: dashboard metadata, tile/insight results, stale or
-   failing query hints.
+Built so far: `user` resolves persons and suggests `persons activity`; `event`
+samples recent events; `flag` streams the definition, an inactive finding,
+dependent flags, and activity. Workflows still to build toward:
+
+1. `investigate user`: recent events, cohorts/flags if available, and session
+   recording links.
+2. `investigate event`: schema, volume trend, top properties.
+3. `investigate flag`: recent `$feature_flag_called` events and optional user
+   evaluation context.
+4. A dashboard investigation: dashboard metadata, tile/insight results, stale
+   or failing query hints.
+5. Time windows: none of these take a time flag yet (see Time flags).
 
 ## Raw API escape hatch
 
@@ -377,6 +418,7 @@ Like `agent-stripe api`, include a constrained raw endpoint command for gaps:
 ```bash
 agent-posthog api get /api/environments/456/persons/ --query email=a@example.com
 agent-posthog api post /api/environments/456/query/ --body query.json
+agent-posthog api post /api/environments/456/query/ --json '{"query":{"kind":"HogQLQuery","query":"select 1"}}'
 ```
 
 Rules:
@@ -384,9 +426,12 @@ Rules:
 - require paths to start with `/api/`
 - no custom `Authorization` header flag
 - redact secrets in debug
-- default `post` to JSON body files or stdin
+- `post` reads its body from `--body <file|->` (`-` is stdin) or inline
+  `--json`; with neither it sends `{}`
 - allow `post` by default only for query endpoints; require `--yes` for other raw
-  POST endpoints because many PostHog POST routes mutate state
+  POST endpoints because many PostHog POST routes mutate state. Those go through
+  the client's write path: never replayed after a `5xx`, and refused through MCP
+  unless `config mcp-writes on`
 - do not ship raw `patch`/`delete` until there is a specific need
 - support `--print-request` to show the resolved method, path, query, host, and
   redacted headers without sending the request
@@ -401,6 +446,10 @@ Investigation and query-helper commands should accept the same time grammar:
 
 Prefer explicit `--from` and `--to` on resource/query commands, and `--since` on
 investigation shortcuts where the default end is `now`.
+
+Not built yet: no command takes these flags today, so time windows go in HogQL
+(`where timestamp > now() - interval 7 day`). The one time input that exists is
+`flags evaluate --at` (and a test case's `at`), an ISO 8601 time.
 
 ## Skill
 
