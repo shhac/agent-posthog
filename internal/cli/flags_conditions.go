@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -90,6 +91,30 @@ func (c conditionFlags) validate() error {
 	return nil
 }
 
+// edit applies the flags the caller passed to one condition group.
+func (c conditionFlags) edit(group map[string]any, changed func(string) bool, resolve flagspec.FlagResolver) error {
+	switch {
+	case changed("where"):
+		props, err := flagspec.BuildProperties(stringsToAny(c.where), resolve)
+		if err != nil {
+			return err
+		}
+		group["properties"] = props
+	case c.clear:
+		group["properties"] = []any{}
+	}
+	if changed("rollout") {
+		group["rollout_percentage"] = rolloutNumber(c.rollout)
+	}
+	switch {
+	case changed("variant"):
+		group["variant"] = c.variant
+	case c.noVariant:
+		group["variant"] = nil
+	}
+	return nil
+}
+
 func addConditionFlags(cmd *cobra.Command, c *conditionFlags) {
 	cmd.Flags().StringArrayVar(&c.where, "where", nil, "Condition filter, e.g. 'app_env = staging'; repeat to AND (replaces existing filters)")
 	cmd.Flags().Float64Var(&c.rollout, "rollout", 100, "Percent of matching users served")
@@ -133,8 +158,7 @@ func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
 					if index < 0 || index > len(groups) {
 						return nil, nil, fmt.Errorf("--at %d is outside 0..%d", index, len(groups))
 					}
-					groups = append(groups[:index], append([]any{group}, groups[index:]...)...)
-					return groupsPatch(flag, groups)
+					return groupsPatch(flag, slices.Insert(groups, index, any(group)))
 				})
 			})
 		},
@@ -166,18 +190,19 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 				return requireIfVersion(args[0])
 			}
 			changed := func(name string) bool { return cmd.Flags().Changed(name) }
-			if !changed("where") && !c.clear && !changed("rollout") && !changed("variant") && !c.noVariant {
+			whereEdit := changed("where") || c.clear
+			variantEdit := changed("variant") || c.noVariant
+			rolloutEdit := changed("rollout")
+			switch {
+			case !whereEdit && !variantEdit && !rolloutEdit:
 				return agenterrors.New("nothing to change: pass --where, --clear-where, --rollout, --variant, or --no-variant", agenterrors.FixableByAgent)
-			}
-			if c.noVariant && changed("variant") {
+			case c.noVariant && changed("variant"):
 				return agenterrors.New("use --variant or --no-variant, not both", agenterrors.FixableByAgent)
-			}
-			if c.clear && changed("where") {
+			case c.clear && changed("where"):
 				return agenterrors.New("use --where or --clear-where, not both", agenterrors.FixableByAgent)
 			}
-			rolloutOnly := changed("rollout") && !changed("where") && !c.clear && !changed("variant") && !c.noVariant
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if rolloutOnly {
+				if rolloutEdit && !whereEdit && !variantEdit {
 					return setConditionRollout(ctx, resolved, globals, args[0], index, c.rollout, opts)
 				}
 				resolve := flagResolver(ctx, resolved, resolved.ProjectID)
@@ -189,25 +214,8 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 					if err := checkConditionIndex(groups, index); err != nil {
 						return nil, nil, err
 					}
-					group := asObject(groups[index])
-					switch {
-					case changed("where"):
-						props, err := flagspec.BuildProperties(stringsToAny(c.where), resolve)
-						if err != nil {
-							return nil, nil, err
-						}
-						group["properties"] = props
-					case c.clear:
-						group["properties"] = []any{}
-					}
-					if changed("rollout") {
-						group["rollout_percentage"] = rolloutNumber(c.rollout)
-					}
-					switch {
-					case changed("variant"):
-						group["variant"] = c.variant
-					case c.noVariant:
-						group["variant"] = nil
+					if err := c.edit(asObject(groups[index]), changed, resolve); err != nil {
+						return nil, nil, err
 					}
 					return groupsPatch(flag, groups)
 				})
@@ -271,7 +279,7 @@ func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
 					if err := checkConditionIndex(groups, index); err != nil {
 						return nil, nil, err
 					}
-					return groupsPatch(flag, append(groups[:index], groups[index+1:]...))
+					return groupsPatch(flag, slices.Delete(groups, index, index+1))
 				})
 			})
 		},
@@ -304,12 +312,11 @@ func conditionsMoveCommand(globals *GlobalFlags) *cobra.Command {
 					if err != nil {
 						return nil, nil, err
 					}
-					if from >= len(groups) || to >= len(groups) {
-						return nil, nil, fmt.Errorf("indexes must be below %d", len(groups))
+					moved, err := moveGroup(groups, from, to)
+					if err != nil {
+						return nil, nil, err
 					}
-					moved := groups[from]
-					groups = append(groups[:from], groups[from+1:]...)
-					groups = append(groups[:to], append([]any{moved}, groups[to:]...)...)
+					groups = moved
 					return groupsPatch(flag, groups)
 				})
 			})
@@ -317,6 +324,15 @@ func conditionsMoveCommand(globals *GlobalFlags) *cobra.Command {
 	}
 	addWriteFlags(cmd, &opts)
 	return cmd
+}
+
+// moveGroup moves the condition at from so it ends up at index to.
+func moveGroup(groups []any, from, to int) ([]any, error) {
+	if from >= len(groups) || to >= len(groups) {
+		return nil, fmt.Errorf("indexes must be below %d", len(groups))
+	}
+	moved := groups[from]
+	return slices.Insert(slices.Delete(groups, from, from+1), to, moved), nil
 }
 
 // editableGroups returns a copy of the flag's conditions after checking the
