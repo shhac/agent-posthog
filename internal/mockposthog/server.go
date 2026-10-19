@@ -370,3 +370,11 @@ func writeStatus(w http.ResponseWriter, status int, payload any) {
 func write(w http.ResponseWriter, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
+
+func approvalFlag() map[string]any {
+	return map[string]any{"id": 26, "key": approvalFlagKey, "name": "Approval gated", "active": false, "version": 1}
+}
+
+func policyFlag() map[string]any {
+	return map[string]any{"id": 27, "key": policyFlagKey, "name": "Policy conflicted", "active": false, "version": 1}
+}
