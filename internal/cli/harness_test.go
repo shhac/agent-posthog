@@ -131,3 +131,17 @@ func mustJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
+
+// stagingSession is a mock session with a "work" profile whose aliases name
+// project 124 staging and 123 prod.
+func stagingSession(t *testing.T) *cliSession {
+	t.Helper()
+	s := flagSession(t)
+	if err := config.StoreProfile("work", config.Profile{Host: "http://unused", OrganizationID: "org_1", ProjectID: 123}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_POSTHOG_PROFILE", "work")
+	s.mustRun("config", "alias", "set", "staging", "124")
+	s.mustRun("config", "alias", "set", "prod", "123")
+	return s
+}

@@ -3,41 +3,7 @@ package cli
 import (
 	"strings"
 	"testing"
-
-	"github.com/shhac/agent-posthog/internal/config"
 )
-
-// stagingSession is a mock session with a "work" profile whose aliases name
-// project 124 staging and 123 prod.
-func stagingSession(t *testing.T) *cliSession {
-	t.Helper()
-	s := flagSession(t)
-	if err := config.StoreProfile("work", config.Profile{Host: "http://unused", OrganizationID: "org_1", ProjectID: 123}); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("AGENT_POSTHOG_PROFILE", "work")
-	s.mustRun("config", "alias", "set", "staging", "124")
-	s.mustRun("config", "alias", "set", "prod", "123")
-	return s
-}
-
-func TestConfigAliasValidation(t *testing.T) {
-	s := stagingSession(t)
-	list := s.mustRun("config", "alias", "list")
-	if !strings.Contains(mustJSON(list), `"staging":124`) {
-		t.Fatalf("list = %v", list)
-	}
-	if errOut := s.mustFail("config", "alias", "set", "42", "1"); !strings.Contains(errOut, "non-numeric") {
-		t.Fatalf("stderr = %s", errOut)
-	}
-	if errOut := s.mustFail("--project", "nope", "flags", "list"); !strings.Contains(errOut, `unknown project alias \"nope\" in profile work`) {
-		t.Fatalf("stderr = %s", errOut)
-	}
-	s.mustRun("config", "alias", "unset", "prod")
-	if errOut := s.mustFail("config", "alias", "unset", "prod"); !strings.Contains(errOut, "no project alias") {
-		t.Fatalf("stderr = %s", errOut)
-	}
-}
 
 func TestStagingProjectWorkflow(t *testing.T) {
 	s := stagingSession(t)

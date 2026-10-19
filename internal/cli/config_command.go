@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"unicode"
@@ -44,9 +43,9 @@ func configSetCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Set an integer default config value",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var value int
-			if _, err := fmt.Sscanf(args[1], "%d", &value); err != nil {
-				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
+			value, err := strconv.Atoi(args[1])
+			if err != nil {
+				return agenterrors.New(args[0]+" takes a whole number", agenterrors.FixableByAgent)
 			}
 			if err := config.SetDefaultValue(args[0], value); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
@@ -82,11 +81,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 		Use:   "set <name> <project-id>",
 		Short: "Name a project ID in the current profile",
 		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			profile, err := aliasProfile(globals)
-			if err != nil {
-				return err
-			}
+		RunE: withAliasProfile(globals, func(profile string, args []string) error {
 			name := args[0]
 			if _, err := strconv.Atoi(name); err == nil || name == "" || strings.ContainsFunc(name, unicode.IsSpace) {
 				return agenterrors.New("alias names must be non-numeric words without spaces", agenterrors.FixableByAgent)
@@ -99,40 +94,44 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			return writeItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, globals.Format)
-		},
+		}),
 	})
 	alias.AddCommand(&cobra.Command{
 		Use:   "unset <name>",
 		Short: "Remove a project alias from the current profile",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			profile, err := aliasProfile(globals)
-			if err != nil {
-				return err
-			}
+		RunE: withAliasProfile(globals, func(profile string, args []string) error {
 			if err := config.UnsetProjectAlias(profile, args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			return writeItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, globals.Format)
-		},
+		}),
 	})
 	alias.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the current profile's project aliases",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			profile, err := aliasProfile(globals)
-			if err != nil {
-				return err
-			}
+		RunE: withAliasProfile(globals, func(profile string, _ []string) error {
 			aliases := config.Read().Profiles[profile].ProjectAliases
 			if aliases == nil {
 				aliases = map[string]int{}
 			}
 			return writeItem(map[string]any{"profile": profile, "aliases": aliases}, globals.Format)
-		},
+		}),
 	})
 	return alias
+}
+
+// withAliasProfile runs an alias command against the selected profile, which
+// must exist, since aliases live inside it.
+func withAliasProfile(globals *GlobalFlags, run func(profile string, args []string) error) func(*cobra.Command, []string) error {
+	return func(_ *cobra.Command, args []string) error {
+		profile, err := aliasProfile(globals)
+		if err != nil {
+			return err
+		}
+		return run(profile, args)
+	}
 }
 
 func aliasProfile(globals *GlobalFlags) (string, error) {
