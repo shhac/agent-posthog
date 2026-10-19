@@ -51,9 +51,9 @@ func configKeys() []libcli.ConfigKey {
 			},
 			Set: func(raw string) error {
 				switch raw {
-				case "on", "true":
+				case "on":
 					return config.SetMCPWrites(true)
-				case "off", "false":
+				case "off":
 					return config.SetMCPWrites(false)
 				}
 				return agenterrors.New("mcp_writes takes on or off", agenterrors.FixableByAgent)
