@@ -199,15 +199,9 @@ func createFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalF
 	if patch.Fields["active"] != true {
 		r.Warnings = append(r.Warnings, fmt.Sprintf("The flag is created disabled; enable it with 'agent-posthog flags enable %s --yes'.", spec.Key()))
 	}
-	if !opts.apply() {
-		r.Hint = applyHint
-		return writeExact(r, globals.Format)
-	}
-	raw, err := resolved.Client.Mutate(ctx, http.MethodPost, flagsPath(resolved.ProjectID), nil, patch.Body())
-	if err != nil {
-		return classifyWriteError(err)
-	}
-	return writeApplied(r, raw, globals.Format)
+	return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
+		return resolved.Client.Mutate(ctx, http.MethodPost, flagsPath(resolved.ProjectID), nil, patch.Body())
+	})
 }
 
 // specWarnings reviews the conditions a write leaves the flag with.

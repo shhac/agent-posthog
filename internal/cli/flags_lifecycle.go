@@ -94,15 +94,9 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 					Changes:   []flagspec.Change{{Path: "deleted", Before: true, After: false}},
 					Warnings:  []string{"PostHog may give the restored flag a suffixed key if its key was reused."},
 				}
-				if !opts.apply() {
-					r.Hint = applyHint
-					return writeExact(r, globals.Format)
-				}
-				raw, err := resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, args[0]), nil, map[string]any{"deleted": false})
-				if err != nil {
-					return classifyWriteError(err)
-				}
-				return writeApplied(r, raw, globals.Format)
+				return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
+					return resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, args[0]), nil, map[string]any{"deleted": false})
+				})
 			})
 		},
 	}

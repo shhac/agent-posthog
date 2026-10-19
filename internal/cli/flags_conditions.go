@@ -186,8 +186,8 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 					if err != nil {
 						return nil, nil, err
 					}
-					if index >= len(groups) {
-						return nil, nil, fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
+					if err := checkConditionIndex(groups, index); err != nil {
+						return nil, nil, err
 					}
 					group := asObject(groups[index])
 					switch {
@@ -224,41 +224,28 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 // setConditionRollout uses PostHog's strict endpoint, which refuses the write
 // if the flag changed at all since the version given.
 func setConditionRollout(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, ref string, index int, rollout float64, opts writeOptions) error {
-	if err := requireProject(resolved); err != nil {
-		return err
+	build := func(flag map[string]any) (*flagspec.Patch, []string, error) {
+		groups, _ := flagspec.Clone(asObject(flag["filters"])["groups"]).([]any)
+		if err := checkConditionIndex(groups, index); err != nil {
+			return nil, nil, err
+		}
+		asObject(groups[index])["rollout_percentage"] = rolloutNumber(rollout)
+		p := flagspec.NewPatch()
+		p.Filters["groups"] = groups
+		return p, nil, nil
 	}
-	flag, err := fetchFlag(ctx, resolved, resolved.ProjectID, ref)
-	if err != nil {
-		return err
+	send := func(ctx context.Context, flag map[string]any, _ *flagspec.Patch) (json.RawMessage, error) {
+		body := map[string]any{"condition_index": index, "rollout_percentage": rolloutNumber(rollout), "version": flag["version"]}
+		return resolved.Client.Mutate(ctx, http.MethodPost, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]))+"set_release_condition_rollout/", nil, body)
 	}
-	if err := checkVersion(flag, ref, opts); err != nil {
-		return err
-	}
-	groups := asList(asObject(flag["filters"])["groups"])
+	return updateFlagVia(ctx, resolved, globals, ref, "conditions set", opts, build, send)
+}
+
+func checkConditionIndex(groups []any, index int) error {
 	if index >= len(groups) {
-		return agenterrors.New(fmt.Sprintf("the flag has no condition %d (it has %d)", index, len(groups)), agenterrors.FixableByAgent)
+		return fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
 	}
-	r := newReceipt("conditions set", resolved.ProjectID, flag)
-	before, ok := asObject(groups[index])["rollout_percentage"]
-	if !ok {
-		before = flagspec.Absent
-	}
-	after := rolloutNumber(rollout)
-	if flagspec.Equal(before, after) {
-		r.Outcome = outcomeUnchanged
-		return writeExact(r, globals.Format)
-	}
-	r.Changes = []flagspec.Change{{Path: fmt.Sprintf("filters.groups[%d].rollout_percentage", index), Before: before, After: after}}
-	if !opts.apply() {
-		r.Hint = applyHint
-		return writeExact(r, globals.Format)
-	}
-	body := map[string]any{"condition_index": index, "rollout_percentage": after, "version": opts.ifVersion}
-	raw, err := resolved.Client.Mutate(ctx, http.MethodPost, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]))+"set_release_condition_rollout/", nil, body)
-	if err != nil {
-		return classifyWriteError(err)
-	}
-	return writeApplied(r, raw, globals.Format)
+	return nil
 }
 
 func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
@@ -281,8 +268,8 @@ func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
 					if err != nil {
 						return nil, nil, err
 					}
-					if index >= len(groups) {
-						return nil, nil, fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
+					if err := checkConditionIndex(groups, index); err != nil {
+						return nil, nil, err
 					}
 					return groupsPatch(flag, append(groups[:index], groups[index+1:]...))
 				})

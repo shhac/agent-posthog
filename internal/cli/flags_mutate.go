@@ -65,6 +65,24 @@ type flagUpdate func(flag map[string]any) (*flagspec.Patch, []string, error)
 // PATCH carries the version and the flag as read, so PostHog refuses it if
 // someone else changed the same fields in between.
 func updateFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, ref, operation string, opts writeOptions, build flagUpdate) error {
+	return updateFlagVia(ctx, resolved, globals, ref, operation, opts, build, patchFlag(resolved))
+}
+
+// flagSender delivers a planned patch for a flag.
+type flagSender func(ctx context.Context, flag map[string]any, patch *flagspec.Patch) (json.RawMessage, error)
+
+func patchFlag(resolved *resolvedContext) flagSender {
+	return func(ctx context.Context, flag map[string]any, patch *flagspec.Patch) (json.RawMessage, error) {
+		body := patch.Body()
+		body["version"] = flag["version"]
+		body["original_flag"] = flag
+		return resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"])), nil, body)
+	}
+}
+
+// updateFlagVia is updateFlag with a different way to deliver the patch, for
+// edits PostHog offers a stricter endpoint for.
+func updateFlagVia(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, ref, operation string, opts writeOptions, build flagUpdate, send flagSender) error {
 	if err := requireProject(resolved); err != nil {
 		return err
 	}
@@ -83,22 +101,28 @@ func updateFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalF
 	r := newReceipt(operation, resolved.ProjectID, flag)
 	r.Changes = flagspec.Changes(flag, patch)
 	r.Warnings = warnings
-	if patch.Empty() {
+	return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
+		return send(ctx, flag, patch)
+	})
+}
+
+// commitWrite is where every flag write turns into its outcome: unchanged when
+// nothing differs, a plan without --yes (or with --dry-run), otherwise the
+// write and the server's view of the result.
+func commitWrite(r *receipt, opts writeOptions, format string, send func() (json.RawMessage, error)) error {
+	if len(r.Changes) == 0 {
 		r.Outcome = outcomeUnchanged
-		return writeExact(r, globals.Format)
+		return writeExact(r, format)
 	}
 	if !opts.apply() {
 		r.Hint = applyHint
-		return writeExact(r, globals.Format)
+		return writeExact(r, format)
 	}
-	body := patch.Body()
-	body["version"] = flag["version"]
-	body["original_flag"] = flag
-	raw, err := resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"])), nil, body)
+	raw, err := send()
 	if err != nil {
 		return classifyWriteError(err)
 	}
-	return writeApplied(r, raw, globals.Format)
+	return writeApplied(r, raw, format)
 }
 
 func newReceipt(operation string, projectID int, flag map[string]any) *receipt {
