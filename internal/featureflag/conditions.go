@@ -157,15 +157,15 @@ func buildProperties(where []string, resolve flagspec.FlagResolver) ([]any, erro
 }
 
 func moveGroup(groups []any, from, to int) ([]any, error) {
-	if from >= len(groups) || to >= len(groups) {
-		return nil, fmt.Errorf("indexes must be below %d", len(groups))
+	if from < 0 || to < 0 || from >= len(groups) || to >= len(groups) {
+		return nil, fmt.Errorf("indexes must be from 0 to %d", len(groups)-1)
 	}
 	moved := groups[from]
 	return slices.Insert(slices.Delete(groups, from, from+1), to, moved), nil
 }
 
 func checkConditionIndex(groups []any, index int) error {
-	if index >= len(groups) {
+	if index < 0 || index >= len(groups) {
 		return fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
 	}
 	return nil

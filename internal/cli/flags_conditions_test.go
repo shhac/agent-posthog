@@ -130,3 +130,23 @@ func TestStrictRolloutRefusesRemoteConfigLikeOtherEdits(t *testing.T) {
 		}
 	}
 }
+
+func TestPositionalEditsNeedIfVersion(t *testing.T) {
+	s := gateSession(t)
+	before := mustJSON(groupsOf(t, s, "beta-gate"))
+	for _, args := range [][]string{
+		{"flags", "conditions", "set", "beta-gate", "0", "--rollout", "10", "--yes"},
+		{"flags", "conditions", "remove", "beta-gate", "0", "--yes"},
+		{"flags", "conditions", "move", "beta-gate", "0", "1", "--yes"},
+	} {
+		if errOut := s.mustFail(args...); !strings.Contains(errOut, "needs --if-version") {
+			t.Fatalf("%v: stderr = %s", args, errOut)
+		}
+	}
+	if errOut := s.mustFail("flags", "conditions", "remove", "--if-version", "1", "--yes", "--", "beta-gate", "-1"); !strings.Contains(errOut, "whole number from 0") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if after := mustJSON(groupsOf(t, s, "beta-gate")); after != before {
+		t.Fatalf("a refused edit changed the conditions: %s", after)
+	}
+}
