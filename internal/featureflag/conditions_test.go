@@ -40,11 +40,11 @@ func TestPositionalEditsRefuseOutOfRangeIndexes(t *testing.T) {
 	for name, build := range map[string]Build{
 		"remove -1":   RemoveCondition(-1),
 		"remove 1":    RemoveCondition(1),
-		"edit -1":     p.EditCondition(context.Background(), -1, ConditionEdit{Rollout: &rollout}),
+		"edit -1":     EditCondition(-1, ConditionEdit{Rollout: &rollout}),
 		"move -1 → 0": MoveCondition(-1, 0),
 		"move 0 → -1": MoveCondition(0, -1),
 	} {
-		if _, _, err := build(flag); err == nil {
+		if _, _, err := build(context.Background(), p, flag); err == nil {
 			t.Fatalf("%s: expected an error", name)
 		}
 	}

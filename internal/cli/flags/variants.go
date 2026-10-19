@@ -1,8 +1,6 @@
 package flags
 
 import (
-	"context"
-
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
@@ -31,9 +29,7 @@ func variantsSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err := flagspec.ValidateVariants(parsed); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				return editFlag(ctx, p, args[0], "variants set", opts, featureflag.SetVariants(parsed), globals.Format)
-			})
+			return opts.edit(cmd, globals, args[0], "variants set", featureflag.SetVariants(parsed))
 		},
 	}
 	addWriteFlags(cmd, &opts)

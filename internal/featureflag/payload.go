@@ -1,6 +1,7 @@
 package featureflag
 
 import (
+	"context"
 	"fmt"
 
 	agenterrors "github.com/shhac/lib-agent-output"
@@ -56,7 +57,7 @@ func UnsetPayload(variant string) Build {
 }
 
 func payloadEdit(variant string, edit func(payloads map[string]any, slot string) error) Build {
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	return func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		if flag["has_encrypted_payloads"] == true {
 			return nil, nil, fmt.Errorf("this flag has encrypted payloads, which agent-posthog does not change; edit them in PostHog")
 		}

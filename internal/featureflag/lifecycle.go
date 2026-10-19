@@ -24,9 +24,9 @@ var lifecycleChanges = map[string]struct {
 
 // Lifecycle builds the change for a lifecycle operation: enable, disable,
 // archive, unarchive, or delete.
-func (p Project) Lifecycle(ctx context.Context, operation string) Build {
+func Lifecycle(operation string) Build {
 	change, ok := lifecycleChanges[operation]
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	return func(ctx context.Context, p Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		if !ok {
 			return nil, nil, fmt.Errorf("unknown lifecycle operation %q", operation)
 		}
@@ -43,7 +43,7 @@ func (p Project) Lifecycle(ctx context.Context, operation string) Build {
 // properties match but whose rollout excludes the user returns false instead
 // of falling through.
 func EarlyExit(on bool) Build {
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	return func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		if err := flagspec.RequireV1(flagspec.Object(flag["filters"])); err != nil {
 			return nil, nil, err
 		}

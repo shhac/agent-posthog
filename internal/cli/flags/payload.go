@@ -66,9 +66,7 @@ func payloadSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err != nil {
 				return agenterrors.New("payload is not valid JSON: "+err.Error(), agenterrors.FixableByAgent)
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				return editFlag(ctx, p, args[0], "payload set", opts, featureflag.SetPayload(variant, value), globals.Format)
-			})
+			return opts.edit(cmd, globals, args[0], "payload set", featureflag.SetPayload(variant, value))
 		},
 	}
 	cmd.Flags().StringVar(&variant, "variant", "", "Variant key (multivariate flags)")
@@ -86,9 +84,7 @@ func payloadUnsetCommand(globals *shared.GlobalFlags) *cobra.Command {
 		Short: "Remove the payload for a boolean/remote_config flag, or for one --variant",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				return editFlag(ctx, p, args[0], "payload unset", opts, featureflag.UnsetPayload(variant), globals.Format)
-			})
+			return opts.edit(cmd, globals, args[0], "payload unset", featureflag.UnsetPayload(variant))
 		},
 	}
 	cmd.Flags().StringVar(&variant, "variant", "", "Variant key (multivariate flags)")

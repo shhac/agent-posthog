@@ -1,6 +1,7 @@
 package featureflag
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -11,7 +12,7 @@ import (
 // flagspec variant specs), keeping what PostHog stored for variants that stay
 // and dropping the payloads of those that go.
 func SetVariants(parsed []any) Build {
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	return func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		if flagspec.TypeOf(flag) != flagspec.TypeMultivariate {
 			return nil, nil, fmt.Errorf("the flag is not multivariate; convert it with 'flags apply' and type: multivariate")
 		}

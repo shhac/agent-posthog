@@ -60,12 +60,8 @@ func applyCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				pending, err := p.PlanApply(ctx, spec, opts.ifVersion)
-				if err != nil {
-					return err
-				}
-				return writeFlag(ctx, pending, opts, globals.Format)
+			return opts.run(cmd, globals, func(ctx context.Context, p featureflag.Project) (*featureflag.Pending, error) {
+				return p.PlanApply(ctx, spec, opts.ifVersion)
 			})
 		},
 	}
@@ -125,12 +121,8 @@ func createCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err := opts.refuseSavePlan("create"); err != nil {
 				return err
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				pending, err := p.PlanCreate(ctx, spec)
-				if err != nil {
-					return err
-				}
-				return writeFlag(ctx, pending, opts, globals.Format)
+			return opts.run(cmd, globals, func(ctx context.Context, p featureflag.Project) (*featureflag.Pending, error) {
+				return p.PlanCreate(ctx, spec)
 			})
 		},
 	}

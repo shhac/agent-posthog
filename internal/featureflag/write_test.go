@@ -11,7 +11,7 @@ import (
 func TestPlanThenCommitAppliesAndReportsTheNewVersion(t *testing.T) {
 	p := mockProject(t)
 	ctx := context.Background()
-	pending, err := p.Plan(ctx, "checkout-v2", "disable", NoVersion, p.Lifecycle(ctx, "disable"))
+	pending, err := p.Plan(ctx, "checkout-v2", "disable", NoVersion, Lifecycle("disable"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,11 +33,11 @@ func TestPlanThenCommitAppliesAndReportsTheNewVersion(t *testing.T) {
 func TestCommitRefusesAFlagChangedSinceThePlan(t *testing.T) {
 	p := mockProject(t)
 	ctx := context.Background()
-	stale, err := p.Plan(ctx, "checkout-v2", "disable", NoVersion, p.Lifecycle(ctx, "disable"))
+	stale, err := p.Plan(ctx, "checkout-v2", "disable", NoVersion, Lifecycle("disable"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	meanwhile, err := p.Plan(ctx, "checkout-v2", "archive", NoVersion, p.Lifecycle(ctx, "archive"))
+	meanwhile, err := p.Plan(ctx, "checkout-v2", "archive", NoVersion, Lifecycle("archive"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestCommitRefusesAFlagChangedSinceThePlan(t *testing.T) {
 func TestPlanRefusesAStaleIfVersion(t *testing.T) {
 	p := mockProject(t)
 	ctx := context.Background()
-	if _, err := p.Plan(ctx, "checkout-v2", "disable", 999, p.Lifecycle(ctx, "disable")); err == nil || !strings.Contains(err.Error(), "not 999") {
+	if _, err := p.Plan(ctx, "checkout-v2", "disable", 999, Lifecycle("disable")); err == nil || !strings.Contains(err.Error(), "not 999") {
 		t.Fatalf("err = %v", err)
 	}
 }

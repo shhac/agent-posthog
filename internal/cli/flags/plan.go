@@ -24,16 +24,8 @@ func applyPlanCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return shared.WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *shared.Resolved) error {
-				p, err := project(resolved)
-				if err != nil {
-					return err
-				}
-				pending, err := p.PlanSaved(ctx, plan)
-				if err != nil {
-					return err
-				}
-				return writeFlag(ctx, pending, opts, globals.Format)
+			return opts.run(cmd, globals, func(ctx context.Context, p featureflag.Project) (*featureflag.Pending, error) {
+				return p.PlanSaved(ctx, plan)
 			})
 		},
 	}

@@ -51,13 +51,22 @@ func (o writeOptions) requireVersion(ref string) error {
 
 const applyHint = "Nothing was written. Re-run with --yes to apply; that re-reads the flag, so add --if-version <base_version> to apply only if it is still unchanged."
 
-// editFlag plans the change build makes to the flag ref names and presents it.
-func editFlag(ctx context.Context, p featureflag.Project, ref, operation string, opts writeOptions, build featureflag.Build, format string) error {
-	pending, err := p.Plan(ctx, ref, operation, opts.ifVersion, build)
-	if err != nil {
-		return err
-	}
-	return writeFlag(ctx, pending, opts, format)
+// run plans a write against the current project and presents it.
+func (o writeOptions) run(cmd *cobra.Command, globals *shared.GlobalFlags, plan func(context.Context, featureflag.Project) (*featureflag.Pending, error)) error {
+	return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+		pending, err := plan(ctx, p)
+		if err != nil {
+			return err
+		}
+		return writeFlag(ctx, pending, o, globals.Format)
+	})
+}
+
+// edit plans the change build makes to the flag ref names and presents it.
+func (o writeOptions) edit(cmd *cobra.Command, globals *shared.GlobalFlags, ref, operation string, build featureflag.Build) error {
+	return o.run(cmd, globals, func(ctx context.Context, p featureflag.Project) (*featureflag.Pending, error) {
+		return p.Plan(ctx, ref, operation, o.ifVersion, build)
+	})
 }
 
 // writeFlag turns a planned flag write into its outcome: unchanged when

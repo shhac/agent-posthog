@@ -38,14 +38,13 @@ func CheckRollout(pct float64) error {
 }
 
 // AddCondition inserts c at index at, or appends it when at is negative.
-func (p Project) AddCondition(ctx context.Context, c Condition, at int) Build {
-	resolve := p.Resolver(ctx)
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+func AddCondition(c Condition, at int) Build {
+	return func(ctx context.Context, p Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		condition := map[string]any{"where": flagspec.Strings(c.Where), "rollout": rolloutNumber(c.Rollout)}
 		if c.Variant != "" {
 			condition["variant"] = c.Variant
 		}
-		group, err := flagspec.BuildGroup(condition, resolve)
+		group, err := flagspec.BuildGroup(condition, p.Resolver(ctx))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -65,16 +64,15 @@ func (p Project) AddCondition(ctx context.Context, c Condition, at int) Build {
 }
 
 // EditCondition changes the condition at index.
-func (p Project) EditCondition(ctx context.Context, index int, e ConditionEdit) Build {
-	resolve := p.Resolver(ctx)
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+func EditCondition(index int, e ConditionEdit) Build {
+	return func(ctx context.Context, p Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		groups, err := editableGroupsAt(flag, index)
 		if err != nil {
 			return nil, nil, err
 		}
 		group := flagspec.Object(groups[index])
 		if e.Where != nil {
-			props, err := buildProperties(*e.Where, resolve)
+			props, err := buildProperties(*e.Where, p.Resolver(ctx))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -97,7 +95,7 @@ func (p Project) EditCondition(ctx context.Context, index int, e ConditionEdit) 
 // through PostHog's strict endpoint, which refuses the write if the flag
 // changed at all since the version read.
 func (p Project) PlanConditionRollout(ctx context.Context, ref string, ifVersion, index int, rollout float64) (*Pending, error) {
-	build := func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	build := func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		groups, err := editableGroupsAt(flag, index)
 		if err != nil {
 			return nil, nil, err
@@ -116,7 +114,7 @@ func (p Project) PlanConditionRollout(ctx context.Context, ref string, ifVersion
 
 // RemoveCondition removes the condition at index.
 func RemoveCondition(index int) Build {
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	return func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		groups, err := editableGroupsAt(flag, index)
 		if err != nil {
 			return nil, nil, err
@@ -127,7 +125,7 @@ func RemoveCondition(index int) Build {
 
 // MoveCondition moves the condition at from so it ends up at index to.
 func MoveCondition(from, to int) Build {
-	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
+	return func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
 		groups, err := editableGroups(flag)
 		if err != nil {
 			return nil, nil, err

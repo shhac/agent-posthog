@@ -37,9 +37,9 @@ const (
 // NoVersion skips the version check in Plan.
 const NoVersion = -1
 
-// Build computes the patch for one flag from its current definition, with
-// any warnings the change calls for.
-type Build func(flag map[string]any) (*flagspec.Patch, []string, error)
+// Build computes the patch for one flag of p from its current definition,
+// with any warnings the change calls for.
+type Build func(ctx context.Context, p Project, flag map[string]any) (*flagspec.Patch, []string, error)
 
 // Sender delivers a planned patch for a flag.
 type Sender func(ctx context.Context, flag map[string]any, patch *flagspec.Patch) (json.RawMessage, error)
@@ -74,7 +74,7 @@ func (p Project) PlanVia(ctx context.Context, ref, operation string, ifVersion i
 	if err := checkVersion(flag, ref, ifVersion); err != nil {
 		return nil, err
 	}
-	patch, warnings, err := build(flag)
+	patch, warnings, err := build(ctx, p, flag)
 	if err != nil {
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
 	}
@@ -97,9 +97,8 @@ func (p Project) PlanApply(ctx context.Context, spec *flagspec.Spec, ifVersion i
 	if !found {
 		return p.planCreate(ctx, spec)
 	}
-	resolve := p.Resolver(ctx)
-	return p.Plan(ctx, id, "apply", ifVersion, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-		patch, err := flagspec.Build(flag, spec, resolve)
+	return p.Plan(ctx, id, "apply", ifVersion, func(ctx context.Context, p Project, flag map[string]any) (*flagspec.Patch, []string, error) {
+		patch, err := flagspec.Build(flag, spec, p.Resolver(ctx))
 		if err != nil {
 			return nil, nil, err
 		}

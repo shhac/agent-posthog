@@ -118,9 +118,7 @@ func conditionsAddCommand(globals *shared.GlobalFlags) *cobra.Command {
 				index = at
 			}
 			condition := featureflag.Condition{Where: c.where, Rollout: c.rollout, Variant: c.variant}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				return editFlag(ctx, p, args[0], "conditions add", opts, p.AddCondition(ctx, condition, index), globals.Format)
-			})
+			return opts.edit(cmd, globals, args[0], "conditions add", featureflag.AddCondition(condition, index))
 		},
 	}
 	addConditionFlags(cmd, &c)
@@ -160,16 +158,12 @@ func conditionsSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if edit.Where == nil && edit.Rollout == nil && edit.Variant == nil {
 				return agenterrors.New("nothing to change: pass --where, --clear-where, --rollout, --variant, or --no-variant", agenterrors.FixableByAgent)
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				if edit.Where == nil && edit.Variant == nil {
-					pending, err := p.PlanConditionRollout(ctx, args[0], opts.ifVersion, index, *edit.Rollout)
-					if err != nil {
-						return err
-					}
-					return writeFlag(ctx, pending, opts, globals.Format)
-				}
-				return editFlag(ctx, p, args[0], "conditions set", opts, p.EditCondition(ctx, index, edit), globals.Format)
-			})
+			if edit.Where == nil && edit.Variant == nil {
+				return opts.run(cmd, globals, func(ctx context.Context, p featureflag.Project) (*featureflag.Pending, error) {
+					return p.PlanConditionRollout(ctx, args[0], opts.ifVersion, index, *edit.Rollout)
+				})
+			}
+			return opts.edit(cmd, globals, args[0], "conditions set", featureflag.EditCondition(index, edit))
 		},
 	}
 	addConditionFlags(cmd, &c)
@@ -193,9 +187,7 @@ func conditionsRemoveCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				return editFlag(ctx, p, args[0], "conditions remove", opts, featureflag.RemoveCondition(index), globals.Format)
-			})
+			return opts.edit(cmd, globals, args[0], "conditions remove", featureflag.RemoveCondition(index))
 		},
 	}
 	addWriteFlags(cmd, &opts)
@@ -220,9 +212,7 @@ func conditionsMoveCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				return editFlag(ctx, p, args[0], "conditions move", opts, featureflag.MoveCondition(from, to), globals.Format)
-			})
+			return opts.edit(cmd, globals, args[0], "conditions move", featureflag.MoveCondition(from, to))
 		},
 	}
 	addWriteFlags(cmd, &opts)
