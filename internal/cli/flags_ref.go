@@ -91,6 +91,14 @@ func flagIDsByKey(ctx context.Context, resolved *resolvedContext, projectID int,
 	return matches, nil
 }
 
+// currentFlag reads the flag a command targets in the current project.
+func currentFlag(ctx context.Context, resolved *resolvedContext, ref string) (map[string]any, error) {
+	if err := requireProject(resolved); err != nil {
+		return nil, err
+	}
+	return fetchFlag(ctx, resolved, resolved.ProjectID, ref)
+}
+
 // fetchFlag resolves and reads a flag with lossless number decoding, for
 // commands that write back what they read.
 func fetchFlag(ctx context.Context, resolved *resolvedContext, projectID int, ref string) (map[string]any, error) {

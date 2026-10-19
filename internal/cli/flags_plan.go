@@ -34,7 +34,7 @@ type savedPlan struct {
 }
 
 func savePlan(r *receipt, patch *flagspec.Patch, opts writeOptions, format string) error {
-	if opts.yes && !opts.dryRun {
+	if opts.apply() {
 		return agenterrors.New("use --save-plan or --yes, not both; apply a saved plan with 'flags apply-plan'", agenterrors.FixableByAgent)
 	}
 	if len(r.Changes) == 0 {

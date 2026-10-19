@@ -47,6 +47,16 @@ func (o writeOptions) refuseSavePlan(operation string) error {
 
 func (o writeOptions) apply() bool { return o.yes && !o.dryRun }
 
+// requireVersion is for edits that address a condition by position: the
+// caller's version proves the index still names the condition they read.
+func (o writeOptions) requireVersion(ref string) error {
+	if o.ifVersion != noVersion {
+		return nil
+	}
+	return agenterrors.New("this edit addresses a condition by position, so it needs --if-version", agenterrors.FixableByAgent).
+		WithHint("Run 'agent-posthog flags conditions list " + ref + "' and pass the version it shows.")
+}
+
 // receipt reports a planned or applied write. Before/after values are written
 // exactly (no null pruning), since a null is often the change.
 type receipt struct {
@@ -97,10 +107,7 @@ func patchFlag(resolved *resolvedContext) flagSender {
 // updateFlagVia is updateFlag with a different way to deliver the patch, for
 // edits PostHog offers a stricter endpoint for.
 func updateFlagVia(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, ref, operation string, opts writeOptions, build flagUpdate, send flagSender) error {
-	if err := requireProject(resolved); err != nil {
-		return err
-	}
-	flag, err := fetchFlag(ctx, resolved, resolved.ProjectID, ref)
+	flag, err := currentFlag(ctx, resolved, ref)
 	if err != nil {
 		return err
 	}

@@ -35,10 +35,7 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				flag, err := fetchFlag(ctx, resolved, resolved.ProjectID, args[0])
+				flag, err := currentFlag(ctx, resolved, args[0])
 				if err != nil {
 					return err
 				}
@@ -123,8 +120,10 @@ func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
 			if err := c.validate(); err != nil {
 				return err
 			}
-			if cmd.Flags().Changed("at") && opts.ifVersion == noVersion {
-				return requireIfVersion(args[0])
+			if cmd.Flags().Changed("at") {
+				if err := opts.requireVersion(args[0]); err != nil {
+					return err
+				}
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				resolve := flagResolver(ctx, resolved, resolved.ProjectID)
@@ -176,8 +175,8 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 			if err := c.validate(); err != nil {
 				return err
 			}
-			if opts.ifVersion == noVersion {
-				return requireIfVersion(args[0])
+			if err := opts.requireVersion(args[0]); err != nil {
+				return err
 			}
 			changed := func(name string) bool { return cmd.Flags().Changed(name) }
 			whereEdit := changed("where") || c.clear
@@ -260,8 +259,8 @@ func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if opts.ifVersion == noVersion {
-				return requireIfVersion(args[0])
+			if err := opts.requireVersion(args[0]); err != nil {
+				return err
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				return updateFlag(ctx, resolved, globals, args[0], "conditions remove", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
@@ -296,8 +295,8 @@ func conditionsMoveCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if opts.ifVersion == noVersion {
-				return requireIfVersion(args[0])
+			if err := opts.requireVersion(args[0]); err != nil {
+				return err
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				return updateFlag(ctx, resolved, globals, args[0], "conditions move", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
@@ -350,11 +349,6 @@ func groupsPatch(flag map[string]any, groups []any) (*flagspec.Patch, []string, 
 	p := flagspec.NewPatch()
 	p.Filters["groups"] = groups
 	return p, flagspec.ConditionWarnings(groups, flagType), nil
-}
-
-func requireIfVersion(ref string) error {
-	return agenterrors.New("this edit addresses a condition by position, so it needs --if-version", agenterrors.FixableByAgent).
-		WithHint("Run 'agent-posthog flags conditions list " + ref + "' and pass the version it shows.")
 }
 
 func parseIndex(arg string) (int, error) {

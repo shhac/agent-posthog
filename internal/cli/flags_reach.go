@@ -18,10 +18,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				flag, err := fetchFlag(ctx, resolved, resolved.ProjectID, args[0])
+				flag, err := currentFlag(ctx, resolved, args[0])
 				if err != nil {
 					return err
 				}
