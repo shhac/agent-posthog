@@ -33,10 +33,10 @@ func (o *Ordered) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		k, _ := json.Marshal(key)
+		k, _ := marshalUnescaped(key)
 		buf.Write(k)
 		buf.WriteByte(':')
-		v, err := json.Marshal(o.values[key])
+		v, err := marshalUnescaped(o.values[key])
 		if err != nil {
 			return nil, err
 		}
@@ -44,6 +44,18 @@ func (o *Ordered) MarshalJSON() ([]byte, error) {
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
+}
+
+// marshalUnescaped is json.Marshal without HTML escaping, the CLI family's
+// convention, so URLs in payloads print as written.
+func marshalUnescaped(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 func (o *Ordered) MarshalYAML() (any, error) {
@@ -268,7 +280,7 @@ func DecodePayload(stored any) (any, error) {
 
 // EncodePayload JSON-encodes a payload value for filters.payloads.
 func EncodePayload(value any) (string, error) {
-	data, err := json.Marshal(value)
+	data, err := marshalUnescaped(value)
 	if err != nil {
 		return "", err
 	}

@@ -64,7 +64,7 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 					line.Set("index", i)
 					line.Set("version", flag["version"])
 					line.Set("condition", condition)
-					if err := writeExact(line, string(output.FormatNDJSON)); err != nil {
+					if err := writeExactLine(line); err != nil {
 						return err
 					}
 				}

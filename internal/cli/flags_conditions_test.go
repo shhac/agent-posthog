@@ -148,3 +148,21 @@ func mustJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
+
+func TestFlagOutputKeepsURLsUnescaped(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "create", "link-gate", "--payload-json", `{"url":"https://x.example/?a=1&b=<2>"}`, "--yes")
+	for _, args := range [][]string{
+		{"flags", "payload", "get", "link-gate", "--format", "json"},
+		{"flags", "export", "link-gate"},
+		{"flags", "payload", "set", "link-gate", "--json", `{"url":"https://y.example/?a&b"}`},
+	} {
+		out, errOut, err := s.run(args...)
+		if err != nil {
+			t.Fatalf("%v: %v %s", args, err, errOut)
+		}
+		if strings.Contains(out, `\u0026`) || strings.Contains(out, `\u003c`) {
+			t.Fatalf("%v escaped HTML: %q", args, out)
+		}
+	}
+}

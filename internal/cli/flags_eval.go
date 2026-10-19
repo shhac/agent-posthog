@@ -14,7 +14,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/api"
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/flagspec"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 // Evaluation engines. public calls PostHog's /flags endpoint, as an SDK would,
@@ -488,7 +487,7 @@ func runCases(ctx context.Context, e *evaluator, cases []testCase) error {
 			counts["fail"]++
 		}
 		line.Set("actual", e.record(c.In, r))
-		if err := writeExact(line, string(output.FormatNDJSON)); err != nil {
+		if err := writeExactLine(line); err != nil {
 			return err
 		}
 	}
@@ -502,7 +501,7 @@ func runCases(ctx context.Context, e *evaluator, cases []testCase) error {
 	}
 	wrapper := flagspec.NewOrdered()
 	wrapper.Set("@summary", summary)
-	if err := writeExact(wrapper, string(output.FormatNDJSON)); err != nil {
+	if err := writeExactLine(wrapper); err != nil {
 		return err
 	}
 	if bad := counts["fail"] + counts["error"]; bad > 0 {
@@ -558,11 +557,11 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 					line.Set("matching", counts["affected"])
 					line.Set("total", counts["total"])
 					line.Set("rollout", group["rollout_percentage"])
-					if err := writeExact(line, string(output.FormatNDJSON)); err != nil {
+					if err := writeExactLine(line); err != nil {
 						return err
 					}
 				}
-				return writeExact(map[string]string{"@note": "matching counts users whose properties pass a condition's filters, before its rollout; conditions overlap, so do not sum them"}, string(output.FormatNDJSON))
+				return writeExactLine(map[string]string{"@note": "matching counts users whose properties pass a condition's filters, before its rollout; conditions overlap, so do not sum them"})
 			})
 		},
 	}

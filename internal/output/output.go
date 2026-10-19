@@ -92,6 +92,12 @@ func Print(data any, format Format, prune bool) {
 	_ = out.Print(Stdout(), cleaned, format, nil)
 }
 
+// PrintExact encodes data with neither pruning nor redaction, for output whose
+// nulls and values are the point (flag write receipts, exported specs).
+func PrintExact(data any, format Format) error {
+	return out.Print(Stdout(), data, format, nil)
+}
+
 func WriteRawJSON(raw json.RawMessage, format Format, prune bool) {
 	var data any
 	if err := json.Unmarshal(raw, &data); err != nil {

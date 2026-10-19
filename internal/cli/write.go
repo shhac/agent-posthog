@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 
+	"github.com/shhac/agent-posthog/internal/flagspec"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
@@ -142,4 +143,28 @@ func compactValue(value any) any {
 	default:
 		return v
 	}
+}
+
+// writeExact encodes v without the pruning and redaction the general output
+// path applies, for receipts and specs that must carry nulls and payload
+// contents as they are. YAML goes through flagspec so numbers stay exact.
+func writeExact(v any, flagFormat string) error {
+	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
+	if err != nil {
+		return err
+	}
+	if format != output.FormatYAML {
+		return output.PrintExact(v, format)
+	}
+	data, err := flagspec.MarshalYAML(v)
+	if err != nil {
+		return err
+	}
+	_, err = output.Stdout().Write(data)
+	return err
+}
+
+// writeExactLine writes v as one exact NDJSON line.
+func writeExactLine(v any) error {
+	return output.PrintExact(v, output.FormatNDJSON)
 }

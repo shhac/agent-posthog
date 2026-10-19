@@ -13,7 +13,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/api"
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/flagspec"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 // writeOptions are the flags every flag write takes. Without --yes (or with
@@ -190,30 +189,4 @@ func classifyWriteError(err error) error {
 	default:
 		return err
 	}
-}
-
-// writeExact encodes v without the pruning and redaction the general output
-// path applies, for receipts and specs that must carry nulls and payload
-// contents as they are.
-func writeExact(v any, flagFormat string) error {
-	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
-	if err != nil {
-		return err
-	}
-	var data []byte
-	switch format {
-	case output.FormatYAML:
-		data, err = flagspec.MarshalYAML(v)
-	case output.FormatNDJSON:
-		data, err = json.Marshal(v)
-		data = append(data, '\n')
-	default:
-		data, err = json.MarshalIndent(v, "", "  ")
-		data = append(data, '\n')
-	}
-	if err != nil {
-		return err
-	}
-	_, err = output.Stdout().Write(data)
-	return err
 }
