@@ -60,6 +60,10 @@ make mock
 make mock-dev ARGS="orgs list"
 ```
 
+`make smoke-mock` runs the read checklist and a flag lifecycle smoke test
+(create, apply, positional edits, the strict rollout endpoint, `/flags`
+scenarios, archive, and delete) against the mock PostHog.
+
 `make lint` runs `golangci-lint` when installed. `make fmt` runs `gofmt` and
 `goimports`.
 
