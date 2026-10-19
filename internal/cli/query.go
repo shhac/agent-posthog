@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shhac/lib-agent-cli/creds"
 	"github.com/spf13/cobra"
 
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
@@ -128,11 +129,7 @@ func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any)
 		if err != nil {
 			return err
 		}
-		format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
-		if err != nil {
-			return err
-		}
-		return writeQueryResult(raw, format)
+		return writeQueryResult(raw, globals.Format)
 	})
 }
 
@@ -148,40 +145,25 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 				if err := requireEnvironment(resolved); err != nil {
 					return err
 				}
-				deadline := time.Now().Add(maxWait)
-				var raw json.RawMessage
-				for {
-					var err error
-					raw, err = resolved.Client.Get(ctx, fmt.Sprintf("/api/environments/%d/query/%s/", resolved.EnvironmentID, args[0]), nil)
-					if err != nil {
+				fetch := func(ctx context.Context) (json.RawMessage, error) {
+					return resolved.Client.Get(ctx, fmt.Sprintf("/api/environments/%d/query/%s/", resolved.EnvironmentID, args[0]), nil)
+				}
+				raw, status, err := waitForQuery(ctx, fetch, interval, maxWait)
+				if err != nil {
+					return agenterrors.Wrap(err, agenterrors.FixableByRetry).
+						WithHint("Run 'agent-posthog query get " + args[0] + "' to inspect the current query status.")
+				}
+				if status.Error {
+					if err := writeRaw(raw, globals.Format); err != nil {
 						return err
 					}
-					status, ok := queryStatus(raw)
-					if !ok {
-						return writeRaw(raw, globals.Format)
-					}
-					if status.Error {
-						return writeRaw(raw, globals.Format)
-					}
-					if status.Complete {
-						format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
-						if err != nil {
-							return err
-						}
-						return writeQueryResult(raw, format)
-					}
-					if time.Now().Add(interval).After(deadline) {
-						return agenterrors.New("query did not complete before --max-wait", agenterrors.FixableByRetry).
-							WithHint("Run 'agent-posthog query get " + args[0] + "' to inspect the current query status.")
-					}
-					timer := time.NewTimer(interval)
-					select {
-					case <-ctx.Done():
-						timer.Stop()
-						return ctx.Err()
-					case <-timer.C:
-					}
+					return agenterrors.New("query failed: "+creds.FirstNonEmpty(status.Message, "PostHog reported an error"), agenterrors.FixableByAgent).
+						WithHint("Fix the HogQL and run it again; the full status is on stdout.")
 				}
+				if !status.Known || !status.Complete {
+					return writeRaw(raw, globals.Format)
+				}
+				return writeQueryResult(raw, globals.Format)
 			})
 		},
 	}
@@ -191,24 +173,58 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 }
 
 type parsedQueryStatus struct {
+	Known    bool
 	Complete bool
 	Error    bool
+	Message  string
 }
 
-func queryStatus(raw json.RawMessage) (parsedQueryStatus, bool) {
+func queryStatus(raw json.RawMessage) parsedQueryStatus {
 	var payload struct {
 		QueryStatus *struct {
-			Complete bool `json:"complete"`
-			Error    bool `json:"error"`
+			Complete     bool   `json:"complete"`
+			Error        bool   `json:"error"`
+			ErrorMessage string `json:"error_message"`
 		} `json:"query_status"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.QueryStatus == nil {
-		return parsedQueryStatus{}, false
+		return parsedQueryStatus{}
 	}
-	return parsedQueryStatus{Complete: payload.QueryStatus.Complete, Error: payload.QueryStatus.Error}, true
+	q := payload.QueryStatus
+	return parsedQueryStatus{Known: true, Complete: q.Complete, Error: q.Error, Message: q.ErrorMessage}
 }
 
-func writeQueryResult(raw json.RawMessage, format output.Format) error {
+// waitForQuery polls until the query status is missing, failed, or complete,
+// or maxWait runs out.
+func waitForQuery(ctx context.Context, fetch func(context.Context) (json.RawMessage, error), interval, maxWait time.Duration) (json.RawMessage, parsedQueryStatus, error) {
+	deadline := time.Now().Add(maxWait)
+	for {
+		raw, err := fetch(ctx)
+		if err != nil {
+			return nil, parsedQueryStatus{}, err
+		}
+		status := queryStatus(raw)
+		if !status.Known || status.Error || status.Complete {
+			return raw, status, nil
+		}
+		if time.Now().Add(interval).After(deadline) {
+			return nil, status, fmt.Errorf("query did not complete before --max-wait")
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, status, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func writeQueryResult(raw json.RawMessage, flagFormat string) error {
+	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
+	if err != nil {
+		return err
+	}
 	data := queryResultPayload(raw)
 	if format != output.FormatNDJSON {
 		output.WriteRawJSON(data, format, true)
