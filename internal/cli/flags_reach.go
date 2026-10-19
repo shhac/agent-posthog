@@ -43,7 +43,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 						aggregation = filters["aggregation_group_type_index"]
 					}
 					body := map[string]any{"condition": group, "group_type_index": aggregation}
-					raw, err := resolved.Client.Post(ctx, flagsPath(resolved.ProjectID)+"user_blast_radius/", nil, body)
+					raw, err := resolved.Client.Post(ctx, flagsPath(resolved.ProjectID, "user_blast_radius"), nil, body)
 					if err != nil {
 						return err
 					}

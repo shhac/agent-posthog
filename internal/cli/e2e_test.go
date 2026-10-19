@@ -384,3 +384,16 @@ func TestLocalCommandsHonorFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestGetCommandsFailFastWhenTheScopeIsMissing(t *testing.T) {
+	s := newMockSession(t, "phx_mock", "456")
+	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "")
+	t.Setenv("AGENT_POSTHOG_ENVIRONMENT_ID", "")
+	out, errOut, err := s.run("flags", "get", "checkout-v2", "other")
+	if err == nil || out != "" || !strings.Contains(errOut, "missing project id") {
+		t.Fatalf("a missing project is a command-level failure, like list: err=%v out=%s err=%s", err, out, errOut)
+	}
+	if out, _, _ := s.run("--project", "123", "flags", "get", "missing-flag"); !strings.Contains(out, "@unresolved") {
+		t.Fatalf("an unknown key stays an item-level miss: %s", out)
+	}
+}

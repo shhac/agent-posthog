@@ -12,14 +12,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func flagsPath(projectID int) string {
-	return fmt.Sprintf("/api/projects/%d/feature_flags/", projectID)
-}
-
-func flagPath(projectID int, id string) string {
-	return fmt.Sprintf("/api/projects/%d/feature_flags/%s/", projectID, id)
-}
-
 // resolveFlagID maps a flag reference to its numeric ID. "id:<n>" and
 // "key:<k>" say which one is meant; a bare number is an ID and anything else a
 // key, so a flag whose key is a number is reached with "key:".

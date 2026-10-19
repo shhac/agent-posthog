@@ -1,498 +1,58 @@
 package cli
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"net/url"
-	"strconv"
-	"strings"
 
-	libcli "github.com/shhac/lib-agent-cli/cli"
 	"github.com/spf13/cobra"
-
-	agenterrors "github.com/shhac/agent-posthog/internal/errors"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerOrgs(root *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{Use: "orgs", Short: "List and get PostHog organizations"}
-	cmd.AddCommand(listCommand("list", "List organizations", globals, func(ctx *resolvedContext) (string, url.Values, error) {
-		return "/api/organizations/", url.Values{}, nil
-	}))
-	cmd.AddCommand(entityGetCommand("get <org-id>...", "Get one or more organizations", globals, func(ctx *resolvedContext, id string) (string, error) {
-		return "/api/organizations/" + id + "/", nil
-	}))
+	cmd.AddCommand(listCommand(globals, listSpec{use: "list", short: "List organizations", scope: scopeAPI, collection: []string{"organizations"}}))
+	cmd.AddCommand(entityGetCommand("get <org-id>...", "Get one or more organizations", globals, scopeAPI, getByPath(scopeAPI, "organizations")))
 	root.AddCommand(cmd)
 }
 
 func registerProjects(root *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{Use: "projects", Short: "List and get PostHog projects"}
-	cmd.AddCommand(listCommand("list", "List projects", globals, func(ctx *resolvedContext) (string, url.Values, error) {
-		if err := requireOrg(ctx); err != nil {
-			return "", nil, err
-		}
-		return "/api/organizations/" + ctx.OrgID + "/projects/", url.Values{}, nil
-	}))
-	cmd.AddCommand(entityGetCommand("get <project-id>...", "Get one or more projects", globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireOrg(ctx); err != nil {
-			return "", err
-		}
-		return "/api/organizations/" + ctx.OrgID + "/projects/" + id + "/", nil
-	}))
+	cmd.AddCommand(listCommand(globals, listSpec{use: "list", short: "List projects", scope: scopeOrg, collection: []string{"projects"}}))
+	cmd.AddCommand(entityGetCommand("get <project-id>...", "Get one or more projects", globals, scopeOrg, getByPath(scopeOrg, "projects")))
 	root.AddCommand(cmd)
 }
 
 func registerEnvironments(root *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{Use: "environments", Aliases: []string{"envs"}, Short: "List and get PostHog environments"}
-	cmd.AddCommand(listCommand("list", "List environments", globals, func(ctx *resolvedContext) (string, url.Values, error) {
-		if err := requireProject(ctx); err != nil {
-			return "", nil, err
-		}
-		return fmt.Sprintf("/api/projects/%d/environments/", ctx.ProjectID), url.Values{}, nil
-	}))
-	cmd.AddCommand(entityGetCommand("get <environment-id>...", "Get one or more environments", globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireProject(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/projects/%d/environments/%s/", ctx.ProjectID, id), nil
-	}))
+	cmd.AddCommand(listCommand(globals, listSpec{use: "list", short: "List environments", scope: scopeProject, collection: []string{"environments"}}))
+	cmd.AddCommand(entityGetCommand("get <environment-id>...", "Get one or more environments", globals, scopeProject, getByPath(scopeProject, "environments")))
 	root.AddCommand(cmd)
-}
-
-func registerSchema(root *cobra.Command, globals *GlobalFlags) {
-	schema := &cobra.Command{Use: "schema", Short: "Inspect event and property definitions"}
-	events := &cobra.Command{Use: "events", Short: "List and get event definitions"}
-	var search string
-	var excludeHidden, excludeStale bool
-	var eventListOpts listOptions
-	eventsList := &cobra.Command{
-		Use:   "list",
-		Short: "List event definitions",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				q := baseValues(0)
-				if excludeHidden {
-					q.Set("exclude_hidden", "true")
-				}
-				if excludeStale {
-					q.Set("exclude_stale", "true")
-				}
-				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/projects/%d/event_definitions/", resolved.ProjectID), q, eventListOpts)
-				if err != nil {
-					return err
-				}
-				return writeListResource(filterRaw(items, search), nextURL, globals.Format, globals.Full)
-			})
-		},
-	}
-	eventsList.Flags().StringVar(&search, "search", "", "Client-side substring filter on event name")
-	eventsList.Flags().BoolVar(&excludeHidden, "exclude-hidden", false, "Exclude hidden event definitions")
-	eventsList.Flags().BoolVar(&excludeStale, "exclude-stale", false, "Exclude stale event definitions")
-	addListPagingFlags(eventsList, &eventListOpts, 100)
-	events.AddCommand(eventsList)
-	events.AddCommand(&cobra.Command{
-		Use:   "get <event-id-or-name>...",
-		Short: "Get one or more event definitions by ID or name",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var resolved *resolvedContext
-			return libcli.EntityGet(output.Stdout(), globals.Format, args, func(id string) (any, error) {
-				if resolved == nil {
-					var err error
-					resolved, err = resolve(globals)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if err := requireProject(resolved); err != nil {
-					return nil, err
-				}
-				ctx := cmd.Context()
-				if _, err := strconv.Atoi(id); err == nil {
-					raw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/event_definitions/%s/", resolved.ProjectID, id), nil)
-					if err != nil {
-						return nil, err
-					}
-					return decodeRaw(raw), nil
-				}
-				q := baseValues(200)
-				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/projects/%d/event_definitions/", resolved.ProjectID), q)
-				if err != nil {
-					return nil, err
-				}
-				record, err := resolveByField(page.Results, "name", id, "event definition")
-				if err != nil {
-					return nil, err
-				}
-				return output.Clean(record), nil
-			})
-		},
-	})
-	schema.AddCommand(events)
-
-	properties := &cobra.Command{Use: "properties", Short: "List property definitions"}
-	var propType, eventName, propSearch string
-	var propListOpts listOptions
-	properties.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List property definitions",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				q := baseValues(0)
-				if propType != "" {
-					q.Set("type", propType)
-				}
-				if eventName != "" {
-					q.Set("event_names", eventName)
-					q.Set("filter_by_event_names", "true")
-				}
-				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/projects/%d/property_definitions/", resolved.ProjectID), q, propListOpts)
-				if err != nil {
-					return err
-				}
-				return writeListResource(filterRaw(items, propSearch), nextURL, globals.Format, globals.Full)
-			})
-		},
-	})
-	properties.PersistentFlags().StringVar(&propType, "type", "", "Property type filter, such as event or person")
-	properties.PersistentFlags().StringVar(&eventName, "event", "", "Event name filter")
-	properties.PersistentFlags().StringVar(&propSearch, "search", "", "Client-side substring filter on property name")
-	addListPagingFlags(properties.Commands()[0], &propListOpts, 100)
-	schema.AddCommand(properties)
-	root.AddCommand(schema)
 }
 
 func registerPersons(root *cobra.Command, globals *GlobalFlags) {
 	cmd := &cobra.Command{Use: "persons", Short: "List and get PostHog persons"}
 	var email, distinctID string
-	var opts listOptions
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "List persons",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireEnvironment(resolved); err != nil {
-					return err
-				}
-				q := baseValues(0)
-				if email != "" {
-					q.Set("email", email)
-				}
-				if distinctID != "" {
-					q.Set("distinct_id", distinctID)
-				}
-				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/environments/%d/persons/", resolved.EnvironmentID), q, opts)
-				if err != nil {
-					return err
-				}
-				return writeListResource(items, nextURL, globals.Format, globals.Full)
-			})
+	list := listCommand(globals, listSpec{
+		use: "list", short: "List persons", scope: scopeEnvironment, collection: []string{"persons"},
+		query: func(q url.Values) {
+			setIf(q, "email", email)
+			setIf(q, "distinct_id", distinctID)
 		},
-	}
+	})
 	list.Flags().StringVar(&email, "email", "", "Email filter")
 	list.Flags().StringVar(&distinctID, "distinct-id", "", "Distinct ID filter")
-	addListPagingFlags(list, &opts, 100)
 	cmd.AddCommand(list)
-	cmd.AddCommand(entityGetCommand("get <person-id>...", "Get one or more persons", globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireEnvironment(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/environments/%d/persons/%s/", ctx.EnvironmentID, id), nil
-	}))
-	cmd.AddCommand(getCommand("activity <person-id>", "Get person activity", globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireEnvironment(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/environments/%d/persons/%s/activity/", ctx.EnvironmentID, id), nil
+	cmd.AddCommand(entityGetCommand("get <person-id>...", "Get one or more persons", globals, scopeEnvironment, getByPath(scopeEnvironment, "persons")))
+	cmd.AddCommand(subresourceCommand("activity <person-id>", "Get person activity", globals, scopeEnvironment, func(id string) []string {
+		return []string{"persons", id, "activity"}
 	}))
 	root.AddCommand(cmd)
-}
-
-func registerFlags(root *cobra.Command, globals *GlobalFlags) {
-	flags := &cobra.Command{Use: "flags", Short: "Read, create, edit, and evaluate PostHog feature flags"}
-	var active string
-	var search string
-	var opts listOptions
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "List feature flags",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				q := baseValues(0)
-				if active != "" {
-					q.Set("active", active)
-				}
-				if search != "" {
-					q.Set("search", search)
-				}
-				items, nextURL, err := collectList(ctx, resolved, fmt.Sprintf("/api/projects/%d/feature_flags/", resolved.ProjectID), q, opts)
-				if err != nil {
-					return err
-				}
-				return writeListResource(items, nextURL, globals.Format, globals.Full)
-			})
-		},
-	}
-	list.Flags().StringVar(&active, "active", "", "Active filter: true or false")
-	list.Flags().StringVar(&search, "search", "", "Search feature flags")
-	addListPagingFlags(list, &opts, 100)
-	flags.AddCommand(list)
-	flags.AddCommand(flagEntityGetCommand(globals))
-	flags.AddCommand(flagGetCommand(globals, "dependent <id-or-key>", "List dependent feature flags", "dependent_flags"))
-	flags.AddCommand(flagGetCommand(globals, "activity <id-or-key>", "Get feature flag activity", "activity"))
-	registerFlagWrites(flags, globals)
-	registerFlagSpecCommands(flags, globals)
-	registerFlagConditionCommands(flags, globals)
-	registerFlagVariantCommands(flags, globals)
-	registerFlagPayloadCommands(flags, globals)
-	registerFlagEvalCommands(flags, globals)
-	registerFlagProjectCommands(flags, globals)
-	root.AddCommand(flags)
-}
-
-func flagGetCommand(globals *GlobalFlags, use, short, suffix string) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				id, err := resolveFlagID(ctx, resolved, args[0])
-				if err != nil {
-					return err
-				}
-				path := fmt.Sprintf("/api/projects/%d/feature_flags/%s/", resolved.ProjectID, id)
-				if suffix != "" {
-					path += suffix + "/"
-				}
-				raw, err := resolved.Client.Get(ctx, path, nil)
-				if err != nil {
-					return err
-				}
-				return writeRawResource(raw, globals.Format, globals.Full)
-			})
-		},
-	}
 }
 
 func registerGenericDomains(root *cobra.Command, globals *GlobalFlags) {
-	registerEnvironmentDomain(root, globals, "insights", "PostHog insights", "insights")
-	registerEnvironmentDomain(root, globals, "dashboards", "PostHog dashboards", "dashboards")
-	registerEnvironmentDomain(root, globals, "recordings", "PostHog session recordings", "session_recordings")
-	registerProjectDomain(root, globals, "experiments", "PostHog experiments", "experiments")
-}
-
-func registerEnvironmentDomain(root *cobra.Command, globals *GlobalFlags, name, short, apiName string) {
-	cmd := &cobra.Command{Use: name, Short: short}
-	cmd.AddCommand(listCommand("list", "List "+name, globals, func(ctx *resolvedContext) (string, url.Values, error) {
-		if err := requireEnvironment(ctx); err != nil {
-			return "", nil, err
-		}
-		return fmt.Sprintf("/api/environments/%d/%s/", ctx.EnvironmentID, apiName), url.Values{}, nil
-	}))
-	cmd.AddCommand(entityGetCommand("get <id>...", "Get one or more "+name, globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireEnvironment(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/environments/%d/%s/%s/", ctx.EnvironmentID, apiName, id), nil
-	}))
-	if name == "dashboards" {
-		cmd.AddCommand(getCommand("run <id>", "Run dashboard insights", globals, func(ctx *resolvedContext, id string) (string, error) {
-			if err := requireEnvironment(ctx); err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("/api/environments/%d/dashboards/%s/run_insights/", ctx.EnvironmentID, id), nil
+	registerDomain(root, globals, "insights", "PostHog insights", scopeEnvironment, "insights")
+	registerDomain(root, globals, "dashboards", "PostHog dashboards", scopeEnvironment, "dashboards",
+		subresourceCommand("run <id>", "Run dashboard insights", globals, scopeEnvironment, func(id string) []string {
+			return []string{"dashboards", id, "run_insights"}
 		}))
-	}
-	root.AddCommand(cmd)
-}
-
-func registerProjectDomain(root *cobra.Command, globals *GlobalFlags, name, short, apiName string) {
-	cmd := &cobra.Command{Use: name, Short: short}
-	cmd.AddCommand(listCommand("list", "List "+name, globals, func(ctx *resolvedContext) (string, url.Values, error) {
-		if err := requireProject(ctx); err != nil {
-			return "", nil, err
-		}
-		return fmt.Sprintf("/api/projects/%d/%s/", ctx.ProjectID, apiName), url.Values{}, nil
-	}))
-	cmd.AddCommand(entityGetCommand("get <id>...", "Get one or more "+name, globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireProject(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/projects/%d/%s/%s/", ctx.ProjectID, apiName, id), nil
-	}))
-	root.AddCommand(cmd)
-}
-
-func listCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedContext) (string, url.Values, error)) *cobra.Command {
-	var opts listOptions
-	cmd := &cobra.Command{
-		Use:   use,
-		Short: short,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				path, q, err := pathFn(resolved)
-				if err != nil {
-					return err
-				}
-				items, nextURL, err := collectList(ctx, resolved, path, q, opts)
-				if err != nil {
-					return err
-				}
-				return writeListResource(items, nextURL, globals.Format, globals.Full)
-			})
-		},
-	}
-	addListPagingFlags(cmd, &opts, 100)
-	return cmd
-}
-
-func getCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedContext, string) (string, error)) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				path, err := pathFn(resolved, args[0])
-				if err != nil {
-					return err
-				}
-				raw, err := resolved.Client.Get(ctx, path, nil)
-				if err != nil {
-					return err
-				}
-				return writeRawResource(raw, globals.Format, globals.Full)
-			})
-		},
-	}
-}
-
-func filterRaw(items []json.RawMessage, search string) []json.RawMessage {
-	if search == "" {
-		return items
-	}
-	out := make([]json.RawMessage, 0, len(items))
-	search = strings.ToLower(search)
-	for _, raw := range items {
-		if strings.Contains(strings.ToLower(string(raw)), search) {
-			out = append(out, raw)
-		}
-	}
-	return out
-}
-
-// entityGetCommand wraps the family get contract (1..N ids, NDJSON by default)
-// around the existing URL-based path builder used across posthog entity commands.
-func entityGetCommand(use, short string, globals *GlobalFlags, pathFn func(*resolvedContext, string) (string, error)) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var resolved *resolvedContext
-			return libcli.EntityGet(output.Stdout(), globals.Format, args, func(id string) (any, error) {
-				if resolved == nil {
-					var err error
-					resolved, err = resolve(globals)
-					if err != nil {
-						return nil, err
-					}
-				}
-				path, err := pathFn(resolved, id)
-				if err != nil {
-					return nil, err
-				}
-				raw, err := resolved.Client.Get(cmd.Context(), path, nil)
-				if err != nil {
-					return nil, err
-				}
-				return decodeRaw(raw), nil
-			})
-		},
-	}
-}
-
-// flagEntityGetCommand supports `flags get <id-or-key>...` with key resolution
-// and the family multi-get contract.
-func flagEntityGetCommand(globals *GlobalFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "get <id-or-key>...",
-		Short: "Get one or more feature flags by ID or key",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var resolved *resolvedContext
-			return libcli.EntityGet(output.Stdout(), globals.Format, args, func(idOrKey string) (any, error) {
-				if resolved == nil {
-					var err error
-					resolved, err = resolve(globals)
-					if err != nil {
-						return nil, err
-					}
-				}
-				if err := requireProject(resolved); err != nil {
-					return nil, err
-				}
-				ctx := cmd.Context()
-				id, err := resolveFlagID(ctx, resolved, idOrKey)
-				if err != nil {
-					return nil, err
-				}
-				raw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/feature_flags/%s/", resolved.ProjectID, id), nil)
-				if err != nil {
-					return nil, err
-				}
-				return decodeRaw(raw), nil
-			})
-		},
-	}
-}
-
-// decodeRaw unmarshals a JSON blob for EntityGet, cleaned like every other
-// read (nils pruned, secrets redacted), since EntityGet's printer does not.
-// Falls back to the raw bytes on decode failure to preserve the graceful
-// degradation property: never hard-fail on output that doesn't parse.
-func decodeRaw(raw json.RawMessage) any {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return raw
-	}
-	return output.Clean(v)
-}
-
-// resolveByField looks up a single record by the given field value in a list.
-// It returns a FixableByAgent error if zero or multiple records match, keeping
-// misses as item-level unresolved rather than aborting the batch.
-func resolveByField(items []json.RawMessage, field, value, label string) (any, error) {
-	var matches []any
-	for _, raw := range items {
-		var m map[string]any
-		if err := json.Unmarshal(raw, &m); err != nil {
-			continue
-		}
-		if fmt.Sprint(m[field]) == value {
-			matches = append(matches, m)
-		}
-	}
-	if len(matches) == 0 {
-		return nil, agenterrors.New("No "+label+" matched "+value, agenterrors.FixableByAgent)
-	}
-	if len(matches) > 1 {
-		return nil, agenterrors.New("Multiple "+label+" records matched "+value, agenterrors.FixableByAgent).
-			WithHint("Use the numeric ID instead.")
-	}
-	return matches[0], nil
+	registerDomain(root, globals, "recordings", "PostHog session recordings", scopeEnvironment, "session_recordings")
+	registerDomain(root, globals, "experiments", "PostHog experiments", scopeProject, "experiments")
 }

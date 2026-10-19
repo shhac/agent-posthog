@@ -237,7 +237,7 @@ func setConditionRollout(ctx context.Context, resolved *resolvedContext, globals
 	}
 	send := func(ctx context.Context, flag map[string]any, _ *flagspec.Patch) (json.RawMessage, error) {
 		body := map[string]any{"condition_index": index, "rollout_percentage": rolloutNumber(rollout), "version": flag["version"]}
-		return resolved.Client.Mutate(ctx, http.MethodPost, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]))+"set_release_condition_rollout/", nil, body)
+		return resolved.Client.Mutate(ctx, http.MethodPost, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]), "set_release_condition_rollout"), nil, body)
 	}
 	return updateFlagVia(ctx, resolved, globals, ref, "conditions set", opts, build, send)
 }

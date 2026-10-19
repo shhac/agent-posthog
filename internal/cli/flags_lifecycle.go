@@ -78,7 +78,7 @@ func lifecycleWarnings(operation string, flag map[string]any) []string {
 func dependencyWarnings(ctx context.Context, resolved *resolvedContext, operation string, flag map[string]any) []string {
 	switch operation {
 	case "disable", "archive", "delete":
-		raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]))+"dependent_flags/", nil)
+		raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]), "dependent_flags"), nil)
 		if err != nil {
 			return []string{"Could not check which flags depend on this one."}
 		}

@@ -227,7 +227,7 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 }
 
 func copyFlagsPath(orgID string) string {
-	return "/api/organizations/" + orgID + "/feature_flags/copy_flags/"
+	return apiPath("organizations", orgID, "feature_flags", "copy_flags")
 }
 
 // copyTarget is a resolved destination project and the alias that named it.

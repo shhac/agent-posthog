@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -39,7 +40,7 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 				if distinctID != "" {
 					q.Set("distinct_id", distinctID)
 				}
-				page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/environments/%d/persons/", resolved.EnvironmentID), q)
+				page, err := resolved.Client.List(ctx, apiPath("environments", strconv.Itoa(resolved.EnvironmentID), "persons"), q)
 				if err != nil {
 					return err
 				}
@@ -91,7 +92,7 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 				}
 				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = {event} order by timestamp desc limit %d", limit)
 				body := hogQLBody(sql, map[string]any{"event": event})
-				raw, err := resolved.Client.Post(ctx, fmt.Sprintf("/api/environments/%d/query/", resolved.EnvironmentID), nil, body)
+				raw, err := resolved.Client.Post(ctx, apiPath("environments", strconv.Itoa(resolved.EnvironmentID), "query"), nil, body)
 				if err != nil {
 					return err
 				}
@@ -122,7 +123,7 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				writer := output.NewNDJSONWriter(output.Stdout())
-				flagRaw, err := resolved.Client.Get(ctx, fmt.Sprintf("/api/projects/%d/feature_flags/%s/", resolved.ProjectID, id), nil)
+				flagRaw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, id), nil)
 				if err != nil {
 					return err
 				}
@@ -140,8 +141,8 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 					name string
 					path string
 				}{
-					{name: "dependent_flags", path: fmt.Sprintf("/api/projects/%d/feature_flags/%s/dependent_flags/", resolved.ProjectID, id)},
-					{name: "activity", path: fmt.Sprintf("/api/projects/%d/feature_flags/%s/activity/", resolved.ProjectID, id)},
+					{name: "dependent_flags", path: flagPath(resolved.ProjectID, id, "dependent_flags")},
+					{name: "activity", path: flagPath(resolved.ProjectID, id, "activity")},
 				} {
 					page, err := resolved.Client.List(ctx, evidence.path, nil)
 					if err != nil {

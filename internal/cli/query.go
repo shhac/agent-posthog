@@ -21,17 +21,11 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 	query.AddCommand(queryHogQLCommand(globals))
 	query.AddCommand(queryJSONCommand(globals))
 	query.AddCommand(queryWaitCommand(globals))
-	query.AddCommand(getCommand("get <query-id>", "Get async query status", globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireEnvironment(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/environments/%d/query/%s/", ctx.EnvironmentID, id), nil
+	query.AddCommand(subresourceCommand("get <query-id>", "Get async query status", globals, scopeEnvironment, func(id string) []string {
+		return []string{"query", id}
 	}))
-	query.AddCommand(getCommand("log <query-id>", "Get async query log", globals, func(ctx *resolvedContext, id string) (string, error) {
-		if err := requireEnvironment(ctx); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("/api/environments/%d/query/%s/log/", ctx.EnvironmentID, id), nil
+	query.AddCommand(subresourceCommand("log <query-id>", "Get async query log", globals, scopeEnvironment, func(id string) []string {
+		return []string{"query", id, "log"}
 	}))
 	query.AddCommand(&cobra.Command{
 		Use:   "cancel <query-id>",
@@ -39,10 +33,11 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireEnvironment(resolved); err != nil {
+				path, err := resolved.path(scopeEnvironment, "query", args[0])
+				if err != nil {
 					return err
 				}
-				raw, err := resolved.Client.Delete(ctx, fmt.Sprintf("/api/environments/%d/query/%s/", resolved.EnvironmentID, args[0]), nil)
+				raw, err := resolved.Client.Delete(ctx, path, nil)
 				if err != nil {
 					return err
 				}
@@ -127,10 +122,11 @@ func hogQLBody(sql string, values map[string]any) map[string]any {
 
 func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any) error {
 	return withClient(cmdCtx, globals, func(ctx context.Context, resolved *resolvedContext) error {
-		if err := requireEnvironment(resolved); err != nil {
+		path, err := resolved.path(scopeEnvironment, "query")
+		if err != nil {
 			return err
 		}
-		raw, err := resolved.Client.Post(ctx, fmt.Sprintf("/api/environments/%d/query/", resolved.EnvironmentID), nil, body)
+		raw, err := resolved.Client.Post(ctx, path, nil, body)
 		if err != nil {
 			return err
 		}
@@ -147,11 +143,12 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireEnvironment(resolved); err != nil {
+				path, err := resolved.path(scopeEnvironment, "query", args[0])
+				if err != nil {
 					return err
 				}
 				fetch := func(ctx context.Context) (json.RawMessage, error) {
-					return resolved.Client.Get(ctx, fmt.Sprintf("/api/environments/%d/query/%s/", resolved.EnvironmentID, args[0]), nil)
+					return resolved.Client.Get(ctx, path, nil)
 				}
 				raw, status, err := waitForQuery(ctx, fetch, interval, maxWait)
 				if err != nil {

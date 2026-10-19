@@ -3,10 +3,9 @@ package cli
 import (
 	"os"
 
-	"github.com/spf13/cobra"
-
 	libcli "github.com/shhac/lib-agent-cli/cli"
 	agentmcp "github.com/shhac/lib-agent-mcp"
+	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/credential"
