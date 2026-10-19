@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 
 	clidialog "github.com/shhac/lib-agent-cli/dialog"
 	agenterrors "github.com/shhac/lib-agent-output"
@@ -69,18 +71,7 @@ func registerAuthAdd(parent *cobra.Command, globals *GlobalFlags) {
 				_ = credential.Remove(alias)
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
-			cfg := config.Read()
-			stored := cfg.Profiles[alias]
-			return writeItem(map[string]any{
-				"status":          "added",
-				"profile":         alias,
-				"default":         cfg.DefaultProfile == alias,
-				"storage":         storage,
-				"host":            stored.Host,
-				"organization_id": stored.OrganizationID,
-				"project_id":      stored.ProjectID,
-				"environment_id":  stored.EnvironmentID,
-			}, globals.Format)
+			return writeItem(profileRecord(config.Read(), alias, map[string]any{"status": "added", "storage": storage}), globals.Format)
 		},
 	}
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "PostHog personal API key (required unless --form is used)")
@@ -103,7 +94,7 @@ func registerAuthUpdate(parent *cobra.Command, globals *GlobalFlags) {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias := args[0]
-			if !cmd.Flags().Changed("host") && !cmd.Flags().Changed("org") && !cmd.Flags().Changed("project") && !cmd.Flags().Changed("env") && !clearOrg && !clearProject && !clearEnv && !setDefault {
+			if !clearOrg && !clearProject && !clearEnv && !setDefault && !slices.ContainsFunc([]string{"host", "org", "project", "env"}, cmd.Flags().Changed) {
 				return agenterrors.New("no profile updates requested", agenterrors.FixableByAgent).
 					WithHint("Use --host, --org, --project, --env, --clear-org, --clear-project, --clear-env, or --default.")
 			}
@@ -139,17 +130,7 @@ func registerAuthUpdate(parent *cobra.Command, globals *GlobalFlags) {
 					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 				}
 			}
-			cfg := config.Read()
-			profile := cfg.Profiles[alias]
-			return writeItem(map[string]any{
-				"status":          "updated",
-				"profile":         alias,
-				"default":         cfg.DefaultProfile == alias,
-				"host":            profile.Host,
-				"organization_id": profile.OrganizationID,
-				"project_id":      profile.ProjectID,
-				"environment_id":  profile.EnvironmentID,
-			}, globals.Format)
+			return writeItem(profileRecord(config.Read(), alias, map[string]any{"status": "updated"}), globals.Format)
 		},
 	}
 	cmd.Flags().StringVar(&host, "host", "", "Default PostHog private API host")
@@ -217,16 +198,8 @@ func registerAuthList(parent *cobra.Command, globals *GlobalFlags) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Read()
 			rows := make([]json.RawMessage, 0, len(cfg.Profiles))
-			for alias, profile := range cfg.Profiles {
-				row, _ := json.Marshal(map[string]any{
-					"profile":         alias,
-					"default":         alias == cfg.DefaultProfile,
-					"credential":      credential.Storage(alias),
-					"host":            profile.Host,
-					"organization_id": profile.OrganizationID,
-					"project_id":      profile.ProjectID,
-					"environment_id":  profile.EnvironmentID,
-				})
+			for alias := range cfg.Profiles {
+				row, _ := json.Marshal(profileRecord(cfg, alias, map[string]any{"credential": credential.Storage(alias)}))
 				rows = append(rows, row)
 			}
 			return writeListResource(rows, "", globals.Format, true)
@@ -256,6 +229,21 @@ func registerAuthRemove(parent *cobra.Command, globals *GlobalFlags) {
 		},
 	}
 	parent.AddCommand(cmd)
+}
+
+// profileRecord reports a profile's non-secret settings, plus extra fields.
+func profileRecord(cfg *config.Config, alias string, extra map[string]any) map[string]any {
+	profile := cfg.Profiles[alias]
+	record := map[string]any{
+		"profile":         alias,
+		"default":         cfg.DefaultProfile == alias,
+		"host":            profile.Host,
+		"organization_id": profile.OrganizationID,
+		"project_id":      profile.ProjectID,
+		"environment_id":  profile.EnvironmentID,
+	}
+	maps.Copy(record, extra)
+	return record
 }
 
 // promptSecretDialog opens a masked native prompt seeded with initial, so a
