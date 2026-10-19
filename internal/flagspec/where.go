@@ -3,6 +3,7 @@ package flagspec
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -96,33 +97,50 @@ func parsePerson(expr, key, op, value string) (map[string]any, error) {
 	if value == "" {
 		return nil, fmt.Errorf("where %q: missing value", expr)
 	}
-	parsed := parseValue(value)
-	switch kind {
-	case "number":
-		if _, ok := parsed.(json.Number); !ok {
-			return nil, fmt.Errorf("where %q: %s needs a number", expr, op)
-		}
-	case "string":
-		parsed = stringValue(parsed)
-		if _, ok := parsed.(string); !ok {
-			return nil, fmt.Errorf("where %q: %s needs a string", expr, op)
-		}
-	case "scalar-or-list":
-		if list, ok := parsed.([]any); ok {
-			if len(list) == 0 {
-				return nil, fmt.Errorf("where %q: empty list", expr)
-			}
-			for _, item := range list {
-				if !isScalar(item) {
-					return nil, fmt.Errorf("where %q: list items must be strings, numbers, or booleans", expr)
-				}
-			}
-		} else if !isScalar(parsed) {
-			return nil, fmt.Errorf("where %q: value must be a string, number, boolean, or JSON list", expr)
-		}
+	parsed, err := operatorValue(expr, op, kind, parseValue(value))
+	if err != nil {
+		return nil, err
 	}
 	prop["value"] = parsed
 	return prop, nil
+}
+
+// operatorValue checks a value against the kind its operator takes, turning
+// numbers and booleans into strings for the string operators.
+func operatorValue(expr, op, kind string, value any) (any, error) {
+	switch kind {
+	case "number":
+		if _, ok := value.(json.Number); !ok {
+			return nil, fmt.Errorf("where %q: %s needs a number", expr, op)
+		}
+	case "string":
+		value = stringValue(value)
+		if _, ok := value.(string); !ok {
+			return nil, fmt.Errorf("where %q: %s needs a string", expr, op)
+		}
+	case "scalar-or-list":
+		if err := checkScalarOrList(expr, value); err != nil {
+			return nil, err
+		}
+	}
+	return value, nil
+}
+
+func checkScalarOrList(expr string, value any) error {
+	list, ok := value.([]any)
+	if !ok {
+		if !isScalar(value) {
+			return fmt.Errorf("where %q: value must be a string, number, boolean, or JSON list", expr)
+		}
+		return nil
+	}
+	if len(list) == 0 {
+		return fmt.Errorf("where %q: empty list", expr)
+	}
+	if !slices.ContainsFunc(list, func(item any) bool { return !isScalar(item) }) {
+		return nil
+	}
+	return fmt.Errorf("where %q: list items must be strings, numbers, or booleans", expr)
 }
 
 func parseCohort(expr, op, value string) (map[string]any, error) {

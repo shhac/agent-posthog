@@ -25,19 +25,22 @@ var (
 func ParseRef(ref string) (id, key string, err error) {
 	switch {
 	case strings.HasPrefix(ref, "key:"):
-		key = strings.TrimPrefix(ref, "key:")
+		return keyRef(ref, strings.TrimPrefix(ref, "key:"))
 	case strings.HasPrefix(ref, "id:"):
 		id = strings.TrimPrefix(ref, "id:")
-		if _, convErr := strconv.Atoi(id); convErr != nil {
+		if _, err := strconv.Atoi(id); err != nil {
 			return "", "", agenterrors.New("flag reference "+ref+" needs a numeric ID after id:", agenterrors.FixableByAgent)
 		}
 		return id, "", nil
-	default:
-		if _, convErr := strconv.Atoi(ref); convErr == nil {
-			return ref, "", nil
-		}
-		key = ref
 	}
+	if _, err := strconv.Atoi(ref); err == nil {
+		return ref, "", nil
+	}
+	return keyRef(ref, ref)
+}
+
+// keyRef is a reference by key, which must not be empty.
+func keyRef(ref, key string) (id, k string, err error) {
 	if key == "" {
 		return "", "", agenterrors.New("flag reference "+ref+" is empty", agenterrors.FixableByAgent)
 	}

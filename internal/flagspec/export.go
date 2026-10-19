@@ -38,10 +38,16 @@ func Export(flag map[string]any) (agentoutput.Ordered, error) {
 		spec = append(spec, agentoutput.Field{Key: "variants", Value: exportVariants(List(Object(filters["multivariate"])["variants"]))})
 	}
 
-	payloads := Object(filters["payloads"])
+	return exportPayloads(spec, flag, flagType)
+}
+
+// exportPayloads adds the flag's payloads, decoded: one payload for boolean and
+// remote_config flags, one per variant for multivariate flags. Encrypted
+// payloads cannot be read back, so the spec is marked incomplete instead.
+func exportPayloads(spec agentoutput.Ordered, flag map[string]any, flagType string) (agentoutput.Ordered, error) {
+	payloads := Object(Object(flag["filters"])["payloads"])
 	if flag["has_encrypted_payloads"] == true && len(payloads) > 0 {
-		spec = append(spec, agentoutput.Field{Key: "incomplete", Value: []any{"encrypted payloads omitted"}})
-		return spec, nil
+		return append(spec, agentoutput.Field{Key: "incomplete", Value: []any{"encrypted payloads omitted"}}), nil
 	}
 	decoded := map[string]any{}
 	for _, key := range slices.Sorted(maps.Keys(payloads)) {
@@ -91,6 +97,20 @@ func exportCommon(flag map[string]any, withType bool) agentoutput.Ordered {
 	return spec
 }
 
+// exportWhere writes each filter as a where expression, or as the property
+// object itself when no expression says the same thing.
+func exportWhere(props []any) []any {
+	where := make([]any, 0, len(props))
+	for _, p := range props {
+		if expr, ok := FormatWhere(Object(p)); ok {
+			where = append(where, expr)
+			continue
+		}
+		where = append(where, p)
+	}
+	return where
+}
+
 // ExportConditions renders condition groups in spec form.
 func ExportConditions(groups []any) []any {
 	out := make([]any, 0, len(groups))
@@ -98,16 +118,7 @@ func ExportConditions(groups []any) []any {
 		group := Object(item)
 		condition := agentoutput.Ordered{}
 		if props := List(group["properties"]); len(props) > 0 {
-			where := make([]any, 0, len(props))
-			for _, p := range props {
-				prop := Object(p)
-				if expr, ok := FormatWhere(prop); ok {
-					where = append(where, expr)
-				} else {
-					where = append(where, p)
-				}
-			}
-			condition = append(condition, agentoutput.Field{Key: "where", Value: where})
+			condition = append(condition, agentoutput.Field{Key: "where", Value: exportWhere(props)})
 		}
 		if rollout, ok := group["rollout_percentage"]; ok {
 			condition = append(condition, agentoutput.Field{Key: "rollout", Value: rollout})
