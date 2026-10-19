@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -90,8 +89,9 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 				if err := writer.WriteItem(entityRecord("event", event, map[string]any{"name": event})); err != nil {
 					return err
 				}
-				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = '%s' order by timestamp desc limit %d", escapeHogQLString(event), limit)
-				raw, err := resolved.Client.Post(ctx, fmt.Sprintf("/api/environments/%d/query/", resolved.EnvironmentID), nil, map[string]any{"query": map[string]any{"kind": "HogQLQuery", "query": sql}})
+				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = {event} order by timestamp desc limit %d", limit)
+				body := hogQLBody(sql, map[string]any{"event": event})
+				raw, err := resolved.Client.Post(ctx, fmt.Sprintf("/api/environments/%d/query/", resolved.EnvironmentID), nil, body)
 				if err != nil {
 					return err
 				}
@@ -159,10 +159,6 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 			})
 		},
 	}
-}
-
-func escapeHogQLString(value string) string {
-	return strings.ReplaceAll(value, "'", "''")
 }
 
 func entityRecord(entity string, id any, data any) map[string]any {

@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -48,5 +51,27 @@ func TestWaitForQueryPollsUntilDoneOrOutOfTime(t *testing.T) {
 		return json.RawMessage(`{"results":[]}`), nil
 	}, time.Millisecond, time.Second); status.Known {
 		t.Fatal("a payload without query_status is returned as unknown")
+	}
+}
+
+func TestInvestigateEventPassesTheNameAsAValue(t *testing.T) {
+	var body map[string]any
+	s := newWrappedMockSession(t, "phx_mock", "456", func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/query/") {
+				data, _ := io.ReadAll(r.Body)
+				_ = json.Unmarshal(data, &body)
+				r.Body = io.NopCloser(bytes.NewReader(data))
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+	name := `it's a \' trap` + "\n"
+	if _, errOut, err := s.run("investigate", "event", "--event", name); err != nil {
+		t.Fatalf("%v %s", err, errOut)
+	}
+	query := body["query"].(map[string]any)
+	if query["values"].(map[string]any)["event"] != name || strings.Contains(query["query"].(string), "trap") {
+		t.Fatalf("the event name must travel as a value, not inside the SQL: %v", query)
 	}
 }

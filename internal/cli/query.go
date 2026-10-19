@@ -76,12 +76,7 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 			} else {
 				sql = args[0]
 			}
-			body := map[string]any{
-				"query": map[string]any{
-					"kind":  "HogQLQuery",
-					"query": sql,
-				},
-			}
+			body := hogQLBody(sql, nil)
 			if async {
 				body["async"] = true
 			}
@@ -118,6 +113,16 @@ func queryJSONCommand(globals *GlobalFlags) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&bodyFile, "body", "-", "JSON body file or - for stdin")
 	return cmd
+}
+
+// hogQLBody builds a HogQL query request. values fill {placeholder}s in sql,
+// so user input never has to be escaped into the query text.
+func hogQLBody(sql string, values map[string]any) map[string]any {
+	query := map[string]any{"kind": "HogQLQuery", "query": sql}
+	if len(values) > 0 {
+		query["values"] = values
+	}
+	return map[string]any{"query": query}
 }
 
 func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any) error {
