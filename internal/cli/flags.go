@@ -29,7 +29,8 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	registerFlagVariantCommands(flags, globals)
 	registerFlagPayloadCommands(flags, globals)
 	registerFlagEvalCommands(flags, globals)
-	registerFlagProjectCommands(flags, globals)
+	flags.AddCommand(diffCommand(globals))
+	flags.AddCommand(copyCommand(globals))
 	root.AddCommand(flags)
 }
 
