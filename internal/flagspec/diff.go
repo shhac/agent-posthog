@@ -25,7 +25,7 @@ func Changes(current map[string]any, p *Patch) []Change {
 	var out []Change
 	for _, key := range slices.Sorted(maps.Keys(p.Fields)) {
 		before, ok := current[key]
-		out = append(out, diffValues(key, presence(before, ok), p.Fields[key])...)
+		out = append(out, Diff(key, presence(before, ok), p.Fields[key])...)
 	}
 	filters := asMap(current["filters"])
 	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
@@ -34,7 +34,7 @@ func Changes(current map[string]any, p *Patch) []Change {
 		if key == "groups" {
 			before, after = normalizeGroups(before), normalizeGroups(after)
 		}
-		out = append(out, diffValues("filters."+key, presence(before, ok), after)...)
+		out = append(out, Diff("filters."+key, presence(before, ok), after)...)
 	}
 	return out
 }
@@ -42,10 +42,6 @@ func Changes(current map[string]any, p *Patch) []Change {
 // Diff lists the differences between two decoded JSON values; an empty path
 // names top-level keys bare.
 func Diff(path string, before, after any) []Change {
-	return diffValues(path, before, after)
-}
-
-func diffValues(path string, before, after any) []Change {
 	if Equal(before, after) {
 		return nil
 	}
@@ -63,7 +59,7 @@ func diffValues(path string, before, after any) []Change {
 		for _, k := range slices.Sorted(maps.Keys(keys)) {
 			bv, bin := bm[k]
 			av, ain := am[k]
-			out = append(out, diffValues(joinPath(path, k), presence(bv, bin), presence(av, ain))...)
+			out = append(out, Diff(joinPath(path, k), presence(bv, bin), presence(av, ain))...)
 		}
 		return out
 	}
@@ -72,7 +68,7 @@ func diffValues(path string, before, after any) []Change {
 	if bok && aok && len(bs) == len(as) {
 		var out []Change
 		for i := range bs {
-			out = append(out, diffValues(fmt.Sprintf("%s[%d]", path, i), bs[i], as[i])...)
+			out = append(out, Diff(fmt.Sprintf("%s[%d]", path, i), bs[i], as[i])...)
 		}
 		return out
 	}

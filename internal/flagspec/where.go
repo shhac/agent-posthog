@@ -23,13 +23,14 @@ var symbolicOperators = map[string]string{
 	"<=": "lte",
 }
 
-var operatorSymbols = map[string]string{
-	"exact":  "=",
-	"is_not": "!=",
-	"gt":     ">",
-	"gte":    ">=",
-	"lt":     "<",
-	"lte":    "<=",
+var operatorSymbols = invert(symbolicOperators)
+
+func invert(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[v] = k
+	}
+	return out
 }
 
 var personOperators = map[string]string{
