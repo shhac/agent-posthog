@@ -329,12 +329,12 @@ payload edits and remote-config conditions. Flags in PostHog's config version
 2 format round-trip as a whole `filters_document`, which PostHog validates;
 narrow edits refuse them. Evaluation errors are never reported as `false`.
 
-Decided not to add a config-level write opt-in: raw `api post --yes` already
-treats MCP host confirmation as consent, and gating typed flag writes alone
-would not make a connection read-only. Consequence, stated in README and
-SKILL.md: existing MCP connections gained flag writes; a confirmed call
-applies, and `--dry-run` is the preview. TestMCPFlagWritesPreviewOnlyWithDryRun
-pins that behavior. Copying flags with encrypted payloads is supported
+Writes through MCP need a local opt-in: the `mcp` command marks its tool-call
+subprocesses (`AGENT_POSTHOG_VIA_MCP`), and every PostHog write path (flag
+commands and raw `api post`) refuses under that mark unless a person ran
+`config mcp-writes on`. Connecting an agent therefore grants reads; plans and
+`--dry-run` always work. TestMCPFlagWritesNeedLocalOptIn pins this through the
+real bridge. Copying flags with encrypted payloads is supported
 (PostHog re-encrypts server side); plans never include the payloads.
 
 ## Investigation commands

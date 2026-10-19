@@ -34,6 +34,7 @@ func registerConfig(root *cobra.Command, globals *GlobalFlags) {
 	cfg.AddCommand(configSetCommand())
 	cfg.AddCommand(configUnsetCommand())
 	cfg.AddCommand(aliasCommand(globals))
+	cfg.AddCommand(mcpWritesCommand())
 	root.AddCommand(cfg)
 }
 
@@ -146,4 +147,24 @@ func aliasProfile(globals *GlobalFlags) (string, error) {
 			WithHint("Run 'agent-posthog auth list'.")
 	}
 	return profile, nil
+}
+
+func mcpWritesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp-writes <on|off|status>",
+		Short: "Allow or block PostHog writes from commands run through the MCP server (off by default)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			switch args[0] {
+			case "on", "off":
+				if err := config.SetMCPWrites(args[0] == "on"); err != nil {
+					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
+				}
+			case "status":
+			default:
+				return agenterrors.New("mcp-writes takes on, off, or status", agenterrors.FixableByAgent)
+			}
+			return writeItem(map[string]any{"mcp_writes": config.Read().MCPWrites}, "")
+		},
+	}
 }

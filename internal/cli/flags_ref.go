@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 	"github.com/shhac/agent-posthog/internal/flagspec"
@@ -19,27 +20,50 @@ func flagPath(projectID int, id string) string {
 	return fmt.Sprintf("/api/projects/%d/feature_flags/%s/", projectID, id)
 }
 
-// resolveFlagID maps a flag reference to its numeric ID. A numeric reference is
-// an ID; anything else is a key, matched exactly, falling back to archived
-// flags because PostHog hides them from the default list. A flag whose key is
-// itself numeric must be addressed by its ID.
+// resolveFlagID maps a flag reference to its numeric ID. "id:<n>" and
+// "key:<k>" say which one is meant; a bare number is an ID and anything else a
+// key, so a flag whose key is a number is reached with "key:".
 func resolveFlagID(ctx context.Context, resolved *resolvedContext, idOrKey string) (string, error) {
 	return resolveFlagIDIn(ctx, resolved, resolved.ProjectID, idOrKey)
 }
 
-func resolveFlagIDIn(ctx context.Context, resolved *resolvedContext, projectID int, idOrKey string) (string, error) {
-	if _, err := strconv.Atoi(idOrKey); err == nil {
-		return idOrKey, nil
+func resolveFlagIDIn(ctx context.Context, resolved *resolvedContext, projectID int, ref string) (string, error) {
+	id, key, err := parseFlagRef(ref)
+	if err != nil || id != "" {
+		return id, err
 	}
-	id, found, err := lookupFlagByKey(ctx, resolved, projectID, idOrKey)
+	id, found, err := lookupFlagByKey(ctx, resolved, projectID, key)
 	if err != nil {
 		return "", err
 	}
 	if !found {
-		return "", agenterrors.New("No feature flag matched key "+idOrKey, agenterrors.FixableByAgent).
-			WithHint("Run 'agent-posthog flags list --search " + idOrKey + "' to inspect matches.")
+		return "", agenterrors.New("No feature flag matched key "+key, agenterrors.FixableByAgent).
+			WithHint("Run 'agent-posthog flags list --search " + key + "' to inspect matches.")
 	}
 	return id, nil
+}
+
+// parseFlagRef splits a reference into an ID or a key.
+func parseFlagRef(ref string) (id, key string, err error) {
+	switch {
+	case strings.HasPrefix(ref, "key:"):
+		key = strings.TrimPrefix(ref, "key:")
+	case strings.HasPrefix(ref, "id:"):
+		id = strings.TrimPrefix(ref, "id:")
+		if _, convErr := strconv.Atoi(id); convErr != nil {
+			return "", "", agenterrors.New("flag reference "+ref+" needs a numeric ID after id:", agenterrors.FixableByAgent)
+		}
+		return id, "", nil
+	default:
+		if _, convErr := strconv.Atoi(ref); convErr == nil {
+			return ref, "", nil
+		}
+		key = ref
+	}
+	if key == "" {
+		return "", "", agenterrors.New("flag reference "+ref+" is empty", agenterrors.FixableByAgent)
+	}
+	return "", key, nil
 }
 
 // keyLookupPages bounds how far a key lookup pages before giving up.

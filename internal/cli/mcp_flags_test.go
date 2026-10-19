@@ -19,6 +19,8 @@ type mcpSession struct {
 	enc    *json.Encoder
 	rd     *bufio.Reader
 	nextID int
+	bin    string
+	env    []string
 }
 
 func startMCP(t *testing.T) *mcpSession {
@@ -33,8 +35,7 @@ func startMCP(t *testing.T) *mcpSession {
 	server := httptest.NewServer(mockposthog.NewServer())
 	t.Cleanup(server.Close)
 
-	cmd := exec.Command(bin, "mcp")
-	cmd.Env = append(os.Environ(),
+	env := append(os.Environ(),
 		"XDG_CONFIG_HOME="+t.TempDir(),
 		"AGENT_POSTHOG_PROFILE=",
 		"AGENT_POSTHOG_BASE_URL="+server.URL,
@@ -42,6 +43,8 @@ func startMCP(t *testing.T) *mcpSession {
 		"AGENT_POSTHOG_ORGANIZATION_ID=org_1",
 		"AGENT_POSTHOG_PROJECT_ID=123",
 	)
+	cmd := exec.Command(bin, "mcp")
+	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +61,7 @@ func startMCP(t *testing.T) *mcpSession {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 	})
-	s := &mcpSession{t: t, enc: json.NewEncoder(stdin), rd: bufio.NewReader(stdout)}
+	s := &mcpSession{t: t, enc: json.NewEncoder(stdin), rd: bufio.NewReader(stdout), bin: bin, env: env}
 	s.request("initialize", map[string]any{"protocolVersion": "2025-06-18"})
 	_ = s.enc.Encode(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"})
 	return s
@@ -89,13 +92,29 @@ func (s *mcpSession) request(method string, params any) map[string]any {
 	return result
 }
 
-// flags calls the coarse flags tool and returns its first record.
-func (s *mcpSession) flags(args []any, options map[string]any) map[string]any {
+// call invokes a coarse group tool and returns the raw tool result.
+func (s *mcpSession) call(tool string, args []any, options map[string]any) map[string]any {
 	s.t.Helper()
 	if options == nil {
 		options = map[string]any{}
 	}
-	result := s.request("tools/call", map[string]any{"name": "flags", "arguments": map[string]any{"args": args, "options": options}})
+	return s.request("tools/call", map[string]any{"name": tool, "arguments": map[string]any{"args": args, "options": options}})
+}
+
+// localCLI runs the binary outside MCP, as the person at the machine would.
+func (s *mcpSession) localCLI(args ...string) {
+	s.t.Helper()
+	cmd := exec.Command(s.bin, args...)
+	cmd.Env = s.env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		s.t.Fatalf("%v: %v\n%s", args, err, out)
+	}
+}
+
+// flags calls the coarse flags tool and returns its first record.
+func (s *mcpSession) flags(args []any, options map[string]any) map[string]any {
+	s.t.Helper()
+	result := s.call("flags", args, options)
 	if result["isError"] == true {
 		s.t.Fatalf("flags %v: %v", args, result)
 	}
@@ -106,10 +125,11 @@ func (s *mcpSession) flags(args []any, options map[string]any) map[string]any {
 	return records[0].(map[string]any)
 }
 
-// TestMCPFlagWritesPreviewOnlyWithDryRun pins how flag writes behave through
-// the MCP bridge: the host's confirmation becomes an injected --yes, so a
-// write applies unless the agent asks for --dry-run.
-func TestMCPFlagWritesPreviewOnlyWithDryRun(t *testing.T) {
+// TestMCPFlagWritesNeedLocalOptIn pins how flag writes behave through the
+// MCP bridge. The host's confirmation becomes an injected --yes, so writes
+// are off until a person runs 'config mcp-writes on' locally; --dry-run plans
+// always work.
+func TestMCPFlagWritesNeedLocalOptIn(t *testing.T) {
 	s := startMCP(t)
 
 	tools, _ := s.request("tools/list", nil)["tools"].([]any)
@@ -127,13 +147,22 @@ func TestMCPFlagWritesPreviewOnlyWithDryRun(t *testing.T) {
 	if plan["outcome"] != "planned" {
 		t.Fatalf("dry-run through MCP = %v", plan)
 	}
+	refused := s.call("flags", []any{"disable", "checkout-v2"}, nil)
+	if refused["isError"] != true || !strings.Contains(mustJSON(refused), "config mcp-writes on") {
+		t.Fatalf("writes must be off through MCP by default: %v", refused)
+	}
+	raw := s.call("api", []any{"post", "/api/projects/123/feature_flags/"}, nil)
+	if raw["isError"] != true || !strings.Contains(mustJSON(raw), "config mcp-writes on") {
+		t.Fatalf("raw API writes must be off through MCP too: %v", raw)
+	}
 	if got := s.flags([]any{"get", "checkout-v2"}, nil); got["active"] != true {
-		t.Fatalf("dry-run wrote the flag: %v", got)
+		t.Fatalf("a refused write changed the flag: %v", got)
 	}
 
+	s.localCLI("config", "mcp-writes", "on")
 	applied := s.flags([]any{"disable", "checkout-v2"}, nil)
 	if applied["outcome"] != "applied" {
-		t.Fatalf("confirmed call should apply via the injected --yes: %v", applied)
+		t.Fatalf("once enabled, a confirmed call applies via the injected --yes: %v", applied)
 	}
 	if got := s.flags([]any{"get", "checkout-v2"}, nil); got["active"] != false {
 		t.Fatalf("flag not disabled: %v", got)

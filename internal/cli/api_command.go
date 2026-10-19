@@ -68,6 +68,9 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 					if isQueryPath(path) {
 						raw, err = resolved.Client.Post(ctx, path, q, body)
 					} else {
+						if allowErr := requireWriteAllowed(); allowErr != nil {
+							return allowErr
+						}
 						raw, err = resolved.Client.Mutate(ctx, http.MethodPost, path, q, body)
 					}
 				}

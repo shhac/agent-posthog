@@ -141,3 +141,54 @@ func TestScenarioDistinctIDsAreStable(t *testing.T) {
 		t.Fatalf("distinct ids = %s / %s", cases[0].In.DistinctID, again[0].In.DistinctID)
 	}
 }
+
+func TestExplicitIDAndKeyReferences(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "apply", "--spec-json", `{"key":"2024","conditions":[{}]}`, "--yes")
+	if got := s.flag("key:2024"); got["key"] != "2024" {
+		t.Fatalf("key:2024 = %v", got)
+	}
+	if got := s.flag("id:22"); got["key"] != "checkout-v2" {
+		t.Fatalf("id:22 = %v", got)
+	}
+	if r := s.mustRun("flags", "disable", "key:checkout-v2"); r["key"] != "checkout-v2" {
+		t.Fatalf("writes take key: too: %v", r)
+	}
+	for ref, want := range map[string]string{"id:abc": "numeric ID after id:", "key:": "is empty"} {
+		if errOut := s.mustFail("flags", "enable", ref); !strings.Contains(errOut, want) {
+			t.Fatalf("%s: stderr = %s", ref, errOut)
+		}
+	}
+	s.mustRun("flags", "delete", "id:22", "--yes")
+	if r := s.mustRun("flags", "restore", "id:22", "--yes"); r["outcome"] != "applied" {
+		t.Fatalf("restore id:22 = %v", r)
+	}
+}
+
+func TestWritesThroughMCPNeedLocalOptIn(t *testing.T) {
+	s := flagSession(t)
+	t.Setenv(viaMCPEnv, "1")
+	if r := s.mustRun("flags", "disable", "checkout-v2", "--dry-run", "--yes"); r["outcome"] != "planned" {
+		t.Fatalf("plans must work without the opt-in: %v", r)
+	}
+	if errOut := s.mustFail("flags", "disable", "checkout-v2", "--yes"); !strings.Contains(errOut, `"fixable_by":"human"`) {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if errOut := s.mustFail("api", "post", "/api/projects/123/feature_flags/", "--yes"); !strings.Contains(errOut, "mcp-writes") {
+		t.Fatalf("raw writes must be gated too: %s", errOut)
+	}
+	if s.flag("checkout-v2")["active"] != true {
+		t.Fatal("a refused write changed the flag")
+	}
+	s.mustRun("config", "mcp-writes", "on")
+	if r := s.mustRun("flags", "disable", "checkout-v2", "--yes"); r["outcome"] != "applied" {
+		t.Fatalf("after opt-in = %v", r)
+	}
+}
+
+func TestRawPostReportsWriteErrors(t *testing.T) {
+	s := flagSession(t)
+	if errOut := s.mustFail("api", "post", "/api/projects/999/feature_flags/", "--yes"); !strings.Contains(errOut, "Project not found") {
+		t.Fatalf("a failed raw write must surface its error: %s", errOut)
+	}
+}

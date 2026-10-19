@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 
 	libcli "github.com/shhac/lib-agent-cli/cli"
@@ -80,9 +82,19 @@ func newRootCmd(version string) *cobra.Command {
 	exposeGroups(root,
 		"api", "dashboards", "environments", "experiments", "flags", "insights", "investigate", "orgs", "persons", "projects", "query", "recordings", "schema")
 
-	root.AddCommand(agentmcp.Command(root,
+	mcpCmd := agentmcp.Command(root,
 		agentmcp.WithHiddenFlags("color", "expose"),
-		agentmcp.WithOAuthKeyringService(credential.MCPKeychainService())))
+		agentmcp.WithOAuthKeyringService(credential.MCPKeychainService()))
+	serve := mcpCmd.RunE
+	mcpCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		// Tool calls run as subprocesses that inherit this, so writes they make
+		// are subject to 'config mcp-writes'.
+		if err := os.Setenv(viaMCPEnv, "1"); err != nil {
+			return err
+		}
+		return serve(cmd, args)
+	}
+	root.AddCommand(mcpCmd)
 
 	return root
 }

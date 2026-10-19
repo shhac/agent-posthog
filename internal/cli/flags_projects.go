@@ -202,6 +202,9 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 				if len(blocked) > 0 {
 					return agenterrors.New("Not copied: "+hint, agenterrors.FixableByAgent)
 				}
+				if err := requireWriteAllowed(); err != nil {
+					return err
+				}
 				request["copy_schedule"] = copySchedule
 				request["disable_copied_flag"] = disable
 				request["copy_dependencies"] = copyDependencies

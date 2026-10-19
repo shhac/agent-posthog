@@ -31,11 +31,12 @@ JSON payload).
 - Treat feature flag mutations as high stakes. Every flag write prints a plan
   and changes nothing unless you pass `--yes`; show the user the plan first.
   `--dry-run` forces a plan even when `--yes` is present.
-- Over MCP, the `flags` tool can write: any existing agent-posthog MCP
-  connection gained flag writes with this feature. The bridge adds `--yes` once
-  the host confirms a tool call (the tool is marked destructive so hosts ask),
-  so a confirmed call applies. Preview with `--dry-run` first. There is no
-  read-only switch for MCP connections.
+- Over MCP, writes are **off** until a person runs
+  `agent-posthog config mcp-writes on` on the machine serving MCP (this covers
+  flag commands and raw `api post`). A refused write is `fixable_by: human`;
+  ask the user, never work around it. Once on, the bridge adds `--yes` after the
+  host confirms a tool call, so a confirmed call applies: preview with
+  `--dry-run` first. Plans work either way.
 
 ## Setup
 
@@ -124,8 +125,9 @@ agent-posthog flags early-exit <id-or-key> on --yes
   leaves the flag disabled.
 - An approval policy refusal is `fixable_by: human` and names the change
   request; a stale-version conflict is `fixable_by: agent`: re-read and decide again.
-- A numeric argument is a flag ID; a flag whose key is numeric must be
-  addressed by its ID.
+- Flag references: `id:<n>` or `key:<k>` say which you mean. A bare number is
+  an ID and anything else a key, so reach a flag whose key is a number with
+  `key:2024`. `restore` takes an ID only (deleted flags are not listed).
 
 ### Create, apply, export
 

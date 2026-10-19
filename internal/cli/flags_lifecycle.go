@@ -75,22 +75,24 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   "restore <id>",
+		Long:  "Restores by numeric ID (or id:<n>); deleted flags cannot be found by key.",
 		Short: "Restore a soft-deleted feature flag by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := strconv.Atoi(args[0]); err != nil {
+			ref, _, err := parseFlagRef(args[0])
+			if err != nil || ref == "" {
 				return agenterrors.New("restore needs the numeric flag ID; deleted flags cannot be looked up by key", agenterrors.FixableByAgent)
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				if err := requireProject(resolved); err != nil {
 					return err
 				}
-				id, _ := strconv.Atoi(args[0])
+				id, _ := strconv.Atoi(ref)
 				r := newReceipt("restore", resolved, map[string]any{"id": id})
 				r.Changes = []flagspec.Change{{Path: "deleted", Before: true, After: false}}
 				r.Warnings = []string{"PostHog may give the restored flag a suffixed key if its key was reused."}
 				return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
-					return resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, args[0]), nil, map[string]any{"deleted": false})
+					return resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, ref), nil, map[string]any{"deleted": false})
 				})
 			})
 		},

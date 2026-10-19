@@ -15,6 +15,9 @@ type Config struct {
 	DefaultProfile string             `json:"default_profile,omitempty"`
 	Defaults       Defaults           `json:"defaults,omitempty"`
 	Profiles       map[string]Profile `json:"profiles"`
+	// MCPWrites lets commands run through the MCP server change PostHog. It is
+	// off until a person turns it on, so connecting an agent grants reads only.
+	MCPWrites bool `json:"mcp_writes,omitempty"`
 }
 
 type Defaults struct {
@@ -204,6 +207,14 @@ func UnsetProjectAlias(alias, name string) error {
 		}
 		delete(profile.ProjectAliases, name)
 		cfg.Profiles[alias] = profile
+		return nil
+	})
+}
+
+// SetMCPWrites turns writes through the MCP server on or off.
+func SetMCPWrites(enabled bool) error {
+	return updateConfig(func(cfg *Config) error {
+		cfg.MCPWrites = enabled
 		return nil
 	})
 }
