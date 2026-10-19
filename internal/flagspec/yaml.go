@@ -16,6 +16,10 @@ import (
 
 var decimalInt = regexp.MustCompile(`^[-+]?(0|[1-9][0-9]*)$`)
 
+// jsonNumber matches YAML number text that is already a valid JSON number, so
+// it can be kept verbatim; anything else (.5, +1.5, 1_000.0) is re-rendered.
+var jsonNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$`)
+
 // yamlDocument decodes a single YAML document strictly: string keys only, no
 // duplicate keys, no custom tags. Scalars keep their YAML types, and numbers
 // become json.Number so they survive the JSON round trip.
@@ -104,7 +108,7 @@ func yamlScalar(node *yaml.Node) (any, error) {
 		if math.IsInf(f, 0) || math.IsNaN(f) {
 			return nil, fmt.Errorf("line %d: numbers must be finite", node.Line)
 		}
-		if _, err := strconv.ParseFloat(node.Value, 64); err == nil {
+		if jsonNumber.MatchString(node.Value) {
 			return json.Number(node.Value), nil
 		}
 		return json.Number(strconv.FormatFloat(f, 'g', -1, 64)), nil
