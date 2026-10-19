@@ -27,6 +27,9 @@ type Profile struct {
 	OrganizationID string `json:"organization_id,omitempty"`
 	ProjectID      int    `json:"project_id,omitempty"`
 	EnvironmentID  int    `json:"environment_id,omitempty"`
+	// ProjectAliases name this profile's projects (say staging and prod), so
+	// --project staging stays tied to the profile's host and organization.
+	ProjectAliases map[string]int `json:"project_aliases,omitempty"`
 }
 
 var (
@@ -169,6 +172,38 @@ func UpdateProfile(alias string, update func(Profile) Profile) error {
 			return fmt.Errorf("profile %q is not configured", alias)
 		}
 		cfg.Profiles[alias] = normalizeProfile(update(profile))
+		return nil
+	})
+}
+
+// SetProjectAlias names a project ID within a profile.
+func SetProjectAlias(alias, name string, projectID int) error {
+	return updateConfig(func(cfg *Config) error {
+		profile, ok := cfg.Profiles[alias]
+		if !ok {
+			return fmt.Errorf("profile %q is not configured", alias)
+		}
+		if profile.ProjectAliases == nil {
+			profile.ProjectAliases = map[string]int{}
+		}
+		profile.ProjectAliases[name] = projectID
+		cfg.Profiles[alias] = profile
+		return nil
+	})
+}
+
+// UnsetProjectAlias removes a project alias from a profile.
+func UnsetProjectAlias(alias, name string) error {
+	return updateConfig(func(cfg *Config) error {
+		profile, ok := cfg.Profiles[alias]
+		if !ok {
+			return fmt.Errorf("profile %q is not configured", alias)
+		}
+		if _, ok := profile.ProjectAliases[name]; !ok {
+			return fmt.Errorf("profile %q has no project alias %q", alias, name)
+		}
+		delete(profile.ProjectAliases, name)
+		cfg.Profiles[alias] = profile
 		return nil
 	})
 }

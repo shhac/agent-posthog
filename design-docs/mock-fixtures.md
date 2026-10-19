@@ -45,7 +45,7 @@ against one server:
   `is_set`, `is_not_set`, and rollouts of 0 or 100; anything else marks that
   flag `failed`. Distinct ID `user_123` carries the fixture person's properties;
   `mock-error` returns `errorsWhileComputingFlags: true`.
-- `copy_flags` to project `125` comes back approval-pending inside the HTTP 200
+- project `125` is readable but `copy_flags` to it comes back approval-pending inside the HTTP 200
 
 ## Fixture values
 

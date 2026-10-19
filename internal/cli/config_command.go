@@ -2,14 +2,19 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"unicode"
 
+	"github.com/shhac/lib-agent-cli/creds"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/config"
 	agenterrors "github.com/shhac/agent-posthog/internal/errors"
 )
 
-func registerConfig(root *cobra.Command) {
+func registerConfig(root *cobra.Command, globals *GlobalFlags) {
 	cfg := &cobra.Command{
 		Use:   "config",
 		Short: "Inspect and update non-secret agent-posthog config",
@@ -30,6 +35,7 @@ func registerConfig(root *cobra.Command) {
 	})
 	cfg.AddCommand(configSetCommand())
 	cfg.AddCommand(configUnsetCommand())
+	cfg.AddCommand(aliasCommand(globals))
 	root.AddCommand(cfg)
 }
 
@@ -64,4 +70,81 @@ func configUnsetCommand() *cobra.Command {
 			return writeItem(map[string]any{"status": "unset", "key": args[0]}, "")
 		},
 	}
+}
+
+// aliasCommand manages per-profile project aliases, so a separate staging
+// project can be addressed as --project staging.
+func aliasCommand(globals *GlobalFlags) *cobra.Command {
+	alias := &cobra.Command{
+		Use:   "alias",
+		Short: "Name projects within a profile (e.g. staging, prod) for --project",
+	}
+	alias.AddCommand(&cobra.Command{
+		Use:   "set <name> <project-id>",
+		Short: "Name a project ID in the current profile",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			profile, err := aliasProfile(globals)
+			if err != nil {
+				return err
+			}
+			name := args[0]
+			if _, err := strconv.Atoi(name); err == nil || name == "" || strings.ContainsFunc(name, unicode.IsSpace) {
+				return agenterrors.New("alias names must be non-numeric words without spaces", agenterrors.FixableByAgent)
+			}
+			id, err := strconv.Atoi(args[1])
+			if err != nil || id <= 0 {
+				return agenterrors.New("project ID must be a positive number", agenterrors.FixableByAgent)
+			}
+			if err := config.SetProjectAlias(profile, name, id); err != nil {
+				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
+			}
+			return writeItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, "")
+		},
+	})
+	alias.AddCommand(&cobra.Command{
+		Use:   "unset <name>",
+		Short: "Remove a project alias from the current profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			profile, err := aliasProfile(globals)
+			if err != nil {
+				return err
+			}
+			if err := config.UnsetProjectAlias(profile, args[0]); err != nil {
+				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
+			}
+			return writeItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, "")
+		},
+	})
+	alias.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List the current profile's project aliases",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			profile, err := aliasProfile(globals)
+			if err != nil {
+				return err
+			}
+			aliases := config.Read().Profiles[profile].ProjectAliases
+			if aliases == nil {
+				aliases = map[string]int{}
+			}
+			return writeItem(map[string]any{"profile": profile, "aliases": aliases}, "")
+		},
+	})
+	return alias
+}
+
+func aliasProfile(globals *GlobalFlags) (string, error) {
+	profile := creds.FirstNonEmpty(globals.Profile, os.Getenv("AGENT_POSTHOG_PROFILE"), config.Read().DefaultProfile)
+	if profile == "" {
+		return "", agenterrors.New("project aliases belong to a profile, and none is selected", agenterrors.FixableByAgent).
+			WithHint("Pass -p <profile>, or create one with 'agent-posthog auth add <profile> --form'.")
+	}
+	if _, ok := config.Read().Profiles[profile]; !ok {
+		return "", agenterrors.New("profile "+profile+" is not configured", agenterrors.FixableByAgent).
+			WithHint("Run 'agent-posthog auth list'.")
+	}
+	return profile, nil
 }

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -22,6 +23,8 @@ type resolvedContext struct {
 	OrgID         string
 	ProjectID     int
 	EnvironmentID int
+	// ProjectAliases are the resolved profile's named projects.
+	ProjectAliases map[string]int
 }
 
 func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Context, *resolvedContext) error) error {
@@ -56,7 +59,11 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	// var stays the lowest tier as a quick-local-use default.
 	host := creds.FirstNonEmpty(flags.Host, os.Getenv("AGENT_POSTHOG_BASE_URL"), profile.Host, os.Getenv("AGENT_POSTHOG_HOST"), config.DefaultHost)
 	orgID := creds.FirstNonEmpty(flags.OrgID, os.Getenv("AGENT_POSTHOG_ORGANIZATION_ID"), profile.OrganizationID, os.Getenv("POSTHOG_ORGANIZATION_ID"))
-	projectID := creds.FirstNonZero(flags.ProjectID, envInt("AGENT_POSTHOG_PROJECT_ID"), profile.ProjectID, envInt("POSTHOG_PROJECT_ID"))
+	flagProject, err := projectFromRef(flags.Project, profileName, profile.ProjectAliases)
+	if err != nil {
+		return nil, err
+	}
+	projectID := creds.FirstNonZero(flagProject, envInt("AGENT_POSTHOG_PROJECT_ID"), profile.ProjectID, envInt("POSTHOG_PROJECT_ID"))
 	environmentID := creds.FirstNonZero(flags.EnvironmentID, envInt("AGENT_POSTHOG_ENVIRONMENT_ID"), profile.EnvironmentID, envInt("POSTHOG_ENVIRONMENT_ID"))
 	// A project's default environment is assigned environment_id == project_id, so
 	// an unset environment falls back to the project rather than erroring. Projects
@@ -83,13 +90,45 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	client.Debug = flags.Debug
 	client.DebugOut = output.Stderr()
 	return &resolvedContext{
-		Client:        client,
-		Profile:       profileName,
-		Host:          host,
-		OrgID:         orgID,
-		ProjectID:     projectID,
-		EnvironmentID: environmentID,
+		Client:         client,
+		Profile:        profileName,
+		Host:           host,
+		OrgID:          orgID,
+		ProjectID:      projectID,
+		EnvironmentID:  environmentID,
+		ProjectAliases: profile.ProjectAliases,
 	}, nil
+}
+
+// projectFromRef turns a --project value into an ID: a number is an ID, any
+// other value must be an alias in the resolved profile.
+func projectFromRef(ref, profileName string, aliases map[string]int) (int, error) {
+	if ref == "" {
+		return 0, nil
+	}
+	if id, err := strconv.Atoi(ref); err == nil {
+		if id <= 0 {
+			return 0, agenterrors.New("project ID must be positive", agenterrors.FixableByAgent)
+		}
+		return id, nil
+	}
+	if id, ok := aliases[ref]; ok {
+		return id, nil
+	}
+	where := "profile " + profileName
+	if profileName == "" {
+		where = "the active configuration (no profile selected)"
+	}
+	return 0, agenterrors.New(fmt.Sprintf("unknown project alias %q in %s", ref, where), agenterrors.FixableByAgent).
+		WithHint("Run 'agent-posthog config alias list', or add one with 'agent-posthog config alias set " + ref + " <project-id>'.")
+}
+
+// projectRef resolves a project argument (ID or alias) against the resolved profile.
+func (r *resolvedContext) projectRef(ref string) (int, error) {
+	if ref == "" {
+		return 0, agenterrors.New("missing project", agenterrors.FixableByAgent)
+	}
+	return projectFromRef(ref, r.Profile, r.ProjectAliases)
 }
 
 func requireOrg(ctx *resolvedContext) error {

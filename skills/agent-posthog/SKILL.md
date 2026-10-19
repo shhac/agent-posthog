@@ -234,3 +234,23 @@ have the app send that property when it evaluates flags (`personProperties` /
 evaluation. Test with `--props-json '{"app_env":"staging"}'` and include a case
 with no `app_env` so a missing property cannot accidentally pass. The property
 is not a security boundary: clients choose what they send.
+
+**Separate staging project.** PostHog flags belong to a project, not an
+environment, so staging needs its own project. Name both in your profile:
+
+```bash
+agent-posthog config alias set staging <staging-project-id>
+agent-posthog config alias set prod <prod-project-id>
+agent-posthog --project staging flags apply --file spec.yaml --yes
+agent-posthog --project staging flags test beta-gate --cases cases.yaml
+agent-posthog --project staging flags diff beta-gate --against prod
+agent-posthog --project staging flags copy beta-gate --to prod          # plan
+agent-posthog --project staging flags copy beta-gate --to prod --yes    # copy
+```
+
+`copy` uses PostHog's own copy: it plans per target (`create` or `overwrite`
+with the differences), refuses to overwrite without `--overwrite`, matches
+cohorts by name, and does not copy tags, evaluation contexts, or archived state.
+Its plan is advisory, since PostHog cannot check a target is unchanged since
+the plan. Targets that fail or wait on approval come back in `failed[]` and
+exit 1. `--project` takes an ID or an alias from the current profile.

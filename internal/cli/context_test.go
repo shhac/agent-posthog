@@ -22,7 +22,7 @@ func TestResolvePrecedence(t *testing.T) {
 	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "3")
 	t.Setenv("AGENT_POSTHOG_ENVIRONMENT_ID", "4")
 
-	resolved, err := resolve(&GlobalFlags{Host: "https://flag.example", OrgID: "flag_org", ProjectID: 5, EnvironmentID: 6, APIKey: "phx_flag"})
+	resolved, err := resolve(&GlobalFlags{Host: "https://flag.example", OrgID: "flag_org", Project: "5", EnvironmentID: 6, APIKey: "phx_flag"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestResolveEnvironmentDefaultsToProject(t *testing.T) {
 	t.Setenv("POSTHOG_PERSONAL_API_KEY", "phx_env")
 
 	// Project set, environment unset: environment mirrors the project (default env).
-	resolved, err := resolve(&GlobalFlags{ProjectID: 123})
+	resolved, err := resolve(&GlobalFlags{Project: "123"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestResolveEnvironmentDefaultsToProject(t *testing.T) {
 	}
 
 	// An explicit environment still wins over the project fallback.
-	resolved, err = resolve(&GlobalFlags{ProjectID: 123, EnvironmentID: 456})
+	resolved, err = resolve(&GlobalFlags{Project: "123", EnvironmentID: 456})
 	if err != nil {
 		t.Fatal(err)
 	}

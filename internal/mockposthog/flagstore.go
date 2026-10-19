@@ -33,7 +33,7 @@ type flagStore struct {
 }
 
 func newFlagStore() *flagStore {
-	s := &flagStore{nextID: 100, flags: map[int]map[int]map[string]any{123: {}, 124: {}}}
+	s := &flagStore{nextID: 100, flags: map[int]map[int]map[string]any{123: {}, 124: {}, approvalProject: {}}}
 	for _, flag := range []map[string]any{checkoutFlag(), billingFlag(23), billingFlag(24), approvalFlag(), policyFlag()} {
 		s.flags[123][toInt(flag["id"])] = withFlagDefaults(flag)
 	}

@@ -20,7 +20,7 @@ type GlobalFlags struct {
 
 	Profile       string
 	OrgID         string
-	ProjectID     int
+	Project       string
 	EnvironmentID int
 	Host          string
 	APIKey        string
@@ -46,7 +46,7 @@ func newRootCmd(version string) *cobra.Command {
 	pf := root.PersistentFlags()
 	pf.StringVarP(&globals.Profile, "profile", "p", "", "Profile alias (or AGENT_POSTHOG_PROFILE)")
 	pf.StringVar(&globals.OrgID, "org", "", "PostHog organization ID override")
-	pf.IntVar(&globals.ProjectID, "project", 0, "PostHog project ID override")
+	pf.StringVar(&globals.Project, "project", "", "PostHog project ID, or a project alias from the profile ('config alias list')")
 	pf.IntVar(&globals.EnvironmentID, "env", 0, "PostHog environment ID override")
 	pf.StringVar(&globals.Host, "host", "", "PostHog private API host override")
 	pf.StringVar(&globals.APIKey, "api-key", "", "Personal API key override; never printed or persisted")
@@ -55,7 +55,7 @@ func newRootCmd(version string) *cobra.Command {
 
 	registerUsageCommand(root)
 	registerCompletion(root)
-	registerConfig(root)
+	registerConfig(root, globals)
 	registerAuth(root, globals)
 	registerOrgs(root, globals)
 	registerProjects(root, globals)
