@@ -148,3 +148,16 @@ func TestConditionsSetRolloutPlansAndChecksIndex(t *testing.T) {
 		t.Fatalf("stderr = %s", errOut)
 	}
 }
+
+func TestStrictRolloutRefusesRemoteConfigLikeOtherEdits(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "create", "cfg", "--type", "remote_config", "--payload-json", `{"a":1}`, "--yes")
+	for _, args := range [][]string{
+		{"flags", "conditions", "set", "cfg", "0", "--rollout", "50", "--if-version", "1"},
+		{"flags", "conditions", "set", "cfg", "0", "--where", "plan = pro", "--if-version", "1"},
+	} {
+		if errOut := s.mustFail(args...); !strings.Contains(errOut, "remote_config flags serve one payload") {
+			t.Fatalf("%v: %s", args, errOut)
+		}
+	}
+}
