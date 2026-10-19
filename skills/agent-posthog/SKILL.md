@@ -25,7 +25,10 @@ flags, dashboards, recordings, experiments, or HogQL questions.
 - Use `--project` explicitly when the profile default is unknown. The environment
   defaults to the project (a project's default environment shares its ID), so set
   `--env` only to target a non-default environment.
-- Treat feature flag mutations as high stakes.
+- Treat feature flag mutations as high stakes. Every flag write prints a plan
+  and changes nothing unless you pass `--yes`; show the user the plan first.
+  `--dry-run` forces a plan even when `--yes` is present (the MCP bridge adds
+  `--yes` once the host confirms a tool call, so use `--dry-run` to preview there).
 
 ## Setup
 
@@ -92,3 +95,27 @@ Feature flag key lookup is CLI sugar: when a command accepts `<id-or-key>`, the
 CLI resolves keys by listing/searching flags and then fetching the numeric ID.
 A key that matches no flag (or matches multiple) yields an `@unresolved` line
 (exit 0) rather than a command-level stderr failure.
+
+## Feature flag writes
+
+Writes read the flag, print a receipt, and only write with `--yes`:
+`{"outcome":"planned|applied|unchanged","changes":[{"path","before","after"}],"base_version","version"?}`.
+Each PATCH carries the version and the flag as read, so PostHog refuses it if
+someone changed the same fields since. `--if-version N` refuses unless the flag
+is still at version N.
+
+```bash
+agent-posthog flags disable checkout-v2            # plan
+agent-posthog flags disable checkout-v2 --yes      # apply
+agent-posthog flags enable|archive|unarchive <id-or-key> --yes
+agent-posthog flags delete <id-or-key> --yes       # soft delete
+agent-posthog flags restore <id> --yes             # deleted flags are found by ID only
+agent-posthog flags early-exit <id-or-key> on --yes
+```
+
+- `archive` disables in the same write (PostHog requires it); `unarchive`
+  leaves the flag disabled.
+- An approval policy refusal is `fixable_by: human` and names the change
+  request; a stale-version conflict is `fixable_by: agent`: re-read and decide again.
+- A numeric argument is a flag ID; a flag whose key is numeric must be
+  addressed by its ID.

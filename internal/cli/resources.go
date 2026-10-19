@@ -212,7 +212,7 @@ func registerPersons(root *cobra.Command, globals *GlobalFlags) {
 }
 
 func registerFlags(root *cobra.Command, globals *GlobalFlags) {
-	flags := &cobra.Command{Use: "flags", Short: "List and get PostHog feature flags"}
+	flags := &cobra.Command{Use: "flags", Short: "Read, create, edit, and evaluate PostHog feature flags"}
 	var active string
 	var search string
 	var opts listOptions
@@ -246,6 +246,7 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	flags.AddCommand(flagEntityGetCommand(globals))
 	flags.AddCommand(flagGetCommand(globals, "dependent <id-or-key>", "List dependent feature flags", "dependent_flags"))
 	flags.AddCommand(flagGetCommand(globals, "activity <id-or-key>", "Get feature flag activity", "activity"))
+	registerFlagWrites(flags, globals)
 	root.AddCommand(flags)
 }
 
@@ -382,37 +383,6 @@ func filterRaw(items []json.RawMessage, search string) []json.RawMessage {
 		}
 	}
 	return out
-}
-
-func resolveFlagID(ctx context.Context, resolved *resolvedContext, idOrKey string) (string, error) {
-	if _, err := strconv.Atoi(idOrKey); err == nil {
-		return idOrKey, nil
-	}
-	q := baseValues(100)
-	q.Set("search", idOrKey)
-	page, err := resolved.Client.List(ctx, fmt.Sprintf("/api/projects/%d/feature_flags/", resolved.ProjectID), q)
-	if err != nil {
-		return "", err
-	}
-	var matches []string
-	for _, raw := range page.Results {
-		var flag map[string]any
-		if err := json.Unmarshal(raw, &flag); err != nil {
-			continue
-		}
-		if fmt.Sprint(flag["key"]) == idOrKey {
-			matches = append(matches, fmt.Sprint(flag["id"]))
-		}
-	}
-	if len(matches) == 0 {
-		return "", agenterrors.New("No feature flag matched key "+idOrKey, agenterrors.FixableByAgent).
-			WithHint("Run 'agent-posthog flags list --search " + idOrKey + "' to inspect matches.")
-	}
-	if len(matches) > 1 {
-		return "", agenterrors.New("Multiple feature flags matched key "+idOrKey, agenterrors.FixableByAgent).
-			WithHint("Use the numeric feature flag ID.")
-	}
-	return matches[0], nil
 }
 
 // entityGetCommand wraps the family get contract (1..N ids, NDJSON by default)
