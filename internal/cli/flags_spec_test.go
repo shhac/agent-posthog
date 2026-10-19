@@ -123,3 +123,12 @@ func writeTemp(t *testing.T, name, content string) string {
 	}
 	return path
 }
+
+func TestFlagApplyWarnsAboutConditionsAfterTypeConversion(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "create", "site-config", "--type", "remote_config", "--payload-json", `{"a":1}`, "--yes")
+	r := s.mustRun("flags", "apply", "--spec-json", `{"key":"site-config","type":"boolean","conditions":[{},{"where":["plan = pro"]}]}`)
+	if !strings.Contains(mustJSON(r["warnings"]), "Condition 0 matches everyone") {
+		t.Fatalf("conversion to boolean should review the new conditions: %v", r)
+	}
+}

@@ -335,20 +335,12 @@ func editableGroups(flag map[string]any) ([]any, error) {
 
 func groupsPatch(flag map[string]any, groups []any) (*flagspec.Patch, []string, error) {
 	flagType := flagspec.TypeOf(flag)
-	if err := flagspec.CheckOverrides(groups, flagType, variantKeys(flag)); err != nil {
+	if err := flagspec.CheckOverrides(groups, flagType, flagspec.VariantKeys(flag)); err != nil {
 		return nil, nil, err
 	}
 	p := flagspec.NewPatch()
 	p.Filters["groups"] = groups
 	return p, flagspec.ConditionWarnings(groups, flagType), nil
-}
-
-func variantKeys(flag map[string]any) map[string]bool {
-	keys := map[string]bool{}
-	for _, v := range asList(asObject(asObject(asObject(flag["filters"])["multivariate"]))["variants"]) {
-		keys[fmt.Sprint(asObject(v)["key"])] = true
-	}
-	return keys
 }
 
 func variantsSetCommand(globals *GlobalFlags) *cobra.Command {
@@ -362,8 +354,7 @@ func variantsSetCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			check, _ := json.Marshal(map[string]any{"key": "check", "variants": parsed})
-			if _, err := flagspec.ParseSpec(check); err != nil {
+			if err := flagspec.ValidateVariants(parsed); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
@@ -412,14 +403,7 @@ func variantsPatch(flag map[string]any, parsed []any) (*flagspec.Patch, []string
 	}
 	p := flagspec.NewPatch()
 	p.Filters["multivariate"] = map[string]any{"variants": variants}
-	stored := asObject(filters["payloads"])
-	kept := map[string]any{}
-	for key, value := range stored {
-		if keys[key] {
-			kept[key] = value
-		}
-	}
-	if len(kept) != len(stored) {
+	if kept, changed := flagspec.PrunePayloads(asObject(filters["payloads"]), flagspec.TypeMultivariate, keys); changed {
 		p.Filters["payloads"] = kept
 	}
 	var warnings []string
@@ -575,12 +559,12 @@ func payloadKeyFor(flag map[string]any, variant string) (string, error) {
 		if variant != "" {
 			return "", agenterrors.New("only multivariate flags have per-variant payloads; drop --variant", agenterrors.FixableByAgent)
 		}
-		return "true", nil
+		return flagspec.BooleanPayloadKey, nil
 	}
 	if variant == "" {
 		return "", agenterrors.New("multivariate flags have one payload per variant; pass --variant", agenterrors.FixableByAgent)
 	}
-	if !variantKeys(flag)[variant] {
+	if !flagspec.VariantKeys(flag)[variant] {
 		return "", agenterrors.New("the flag has no variant "+variant, agenterrors.FixableByAgent)
 	}
 	return variant, nil

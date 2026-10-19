@@ -135,16 +135,18 @@ func (s *Spec) validate() error {
 	if v, ok := s.fields["payloads"]; ok && asMap(v) == nil {
 		return fmt.Errorf("payloads must be an object keyed by variant")
 	}
-	if err := validateConditions(s.fields["conditions"], s.Has("conditions")); err != nil {
-		return err
+	if s.Has("conditions") {
+		if err := validateConditions(s.fields["conditions"]); err != nil {
+			return err
+		}
 	}
-	return validateVariants(s.fields["variants"], s.Has("variants"))
+	if s.Has("variants") {
+		return ValidateVariants(s.fields["variants"])
+	}
+	return nil
 }
 
-func validateConditions(v any, present bool) error {
-	if !present {
-		return nil
-	}
+func validateConditions(v any) error {
 	conditions, ok := v.([]any)
 	if !ok {
 		return fmt.Errorf("conditions must be a list")
@@ -183,10 +185,9 @@ func validateConditions(v any, present bool) error {
 	return nil
 }
 
-func validateVariants(v any, present bool) error {
-	if !present {
-		return nil
-	}
+// ValidateVariants checks a spec variants list: unique keys, percentages that
+// sum to 100.
+func ValidateVariants(v any) error {
 	variants, ok := v.([]any)
 	if !ok || len(variants) == 0 {
 		return fmt.Errorf("variants must be a non-empty list")

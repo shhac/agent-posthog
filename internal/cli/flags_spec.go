@@ -210,14 +210,7 @@ func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
 	if !changed {
 		return nil
 	}
-	flagType := flagspec.TypeBoolean
-	if current != nil {
-		flagType = flagspec.TypeOf(current)
-	}
-	if patch.Fields["is_remote_configuration"] == true {
-		flagType = flagspec.TypeRemoteConfig
-	}
-	return flagspec.ConditionWarnings(asList(groups), flagType)
+	return flagspec.ConditionWarnings(asList(groups), flagspec.TypeOf(flagspec.Result(current, patch)))
 }
 
 // readInput returns inline JSON when given, else the file's contents. MCP

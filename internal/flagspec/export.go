@@ -188,7 +188,7 @@ func Export(flag map[string]any) (*Ordered, error) {
 	case flagType == TypeMultivariate && len(decoded) > 0:
 		spec.Set("payloads", decoded)
 	case flagType != TypeMultivariate:
-		if value, ok := decoded["true"]; ok {
+		if value, ok := decoded[BooleanPayloadKey]; ok {
 			spec.Set("payload", value)
 		}
 	}

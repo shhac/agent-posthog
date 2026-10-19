@@ -90,10 +90,7 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 	if err != nil {
 		return nil, err
 	}
-	variantKeys := map[string]bool{}
-	for _, v := range variants {
-		variantKeys[fmt.Sprint(asMap(v)["key"])] = true
-	}
+	variantKeys := variantKeySet(variants)
 
 	switch {
 	case spec.Has("conditions"):
@@ -147,13 +144,14 @@ func buildMultivariate(p *Patch, spec *Spec, filters map[string]any, fromType, t
 
 func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, variantKeys map[string]bool, encrypted bool) error {
 	stored := asMap(filters["payloads"])
+	editing := spec.Has("payloads") || spec.Has("payload")
+	if encrypted && editing {
+		return fmt.Errorf("encrypted payloads cannot be changed through agent-posthog")
+	}
 	switch {
 	case spec.Has("payloads"):
 		if toType != TypeMultivariate {
 			return fmt.Errorf("payloads (per variant) need type multivariate; use payload for boolean and remote_config flags")
-		}
-		if encrypted {
-			return fmt.Errorf("encrypted payloads cannot be changed through agent-posthog")
 		}
 		out := map[string]any{}
 		for key, value := range asMap(spec.Get("payloads")) {
@@ -171,26 +169,71 @@ func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, 
 		if toType == TypeMultivariate {
 			return fmt.Errorf("multivariate flags take payloads keyed by variant, not payload")
 		}
-		if encrypted {
-			return fmt.Errorf("encrypted payloads cannot be changed through agent-posthog")
-		}
-		encoded, err := KeepOrEncode(stored["true"], spec.Get("payload"))
+		encoded, err := KeepOrEncode(stored[BooleanPayloadKey], spec.Get("payload"))
 		if err != nil {
 			return fmt.Errorf("payload: %w", err)
 		}
-		p.Filters["payloads"] = map[string]any{"true": encoded}
-	case !encrypted && len(stored) > 0:
-		kept := map[string]any{}
-		for key, value := range stored {
-			if (toType == TypeMultivariate && variantKeys[key]) || (toType != TypeMultivariate && key == "true") {
-				kept[key] = value
-			}
-		}
-		if len(kept) != len(stored) {
+		p.Filters["payloads"] = map[string]any{BooleanPayloadKey: encoded}
+	case !encrypted:
+		if kept, changed := PrunePayloads(stored, toType, variantKeys); changed {
 			p.Filters["payloads"] = kept
 		}
 	}
 	return nil
+}
+
+// BooleanPayloadKey is the filters.payloads key of a boolean or remote_config
+// flag's single payload.
+const BooleanPayloadKey = "true"
+
+// PrunePayloads drops payloads no longer reachable on a flag of flagType with
+// the given variants, reporting whether anything was dropped.
+func PrunePayloads(stored map[string]any, flagType string, variantKeys map[string]bool) (map[string]any, bool) {
+	kept := map[string]any{}
+	for key, value := range stored {
+		if flagType == TypeMultivariate && variantKeys[key] || flagType != TypeMultivariate && key == BooleanPayloadKey {
+			kept[key] = value
+		}
+	}
+	return kept, len(kept) != len(stored)
+}
+
+// VariantKeys returns the keys of a flag's variants.
+func VariantKeys(flag map[string]any) map[string]bool {
+	return variantKeySet(asSlice(asMap(asMap(flag["filters"])["multivariate"])["variants"]))
+}
+
+func variantKeySet(variants []any) map[string]bool {
+	keys := map[string]bool{}
+	for _, v := range variants {
+		keys[fmt.Sprint(asMap(v)["key"])] = true
+	}
+	return keys
+}
+
+// Result is the flag as it would be after the patch: fields replaced, filter
+// sections merged shallowly (a nil section cleared), as PostHog applies it.
+func Result(current map[string]any, p *Patch) map[string]any {
+	result, _ := Clone(current).(map[string]any)
+	if result == nil {
+		result = map[string]any{}
+	}
+	for key, value := range p.Fields {
+		result[key] = Clone(value)
+	}
+	filters, _ := Clone(asMap(result["filters"])).(map[string]any)
+	if filters == nil {
+		filters = map[string]any{}
+	}
+	for key, value := range p.Filters {
+		if value == nil {
+			delete(filters, key)
+			continue
+		}
+		filters[key] = Clone(value)
+	}
+	result["filters"] = filters
+	return result
 }
 
 // KeepOrEncode reuses the stored payload string when it already holds value,
