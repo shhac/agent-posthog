@@ -48,35 +48,50 @@ func BuildGroup(condition map[string]any, resolve FlagResolver) (map[string]any,
 func BuildProperties(where []any, resolve FlagResolver) ([]any, error) {
 	props := make([]any, 0, len(where))
 	for _, item := range where {
-		var prop map[string]any
-		switch w := item.(type) {
-		case string:
-			parsed, err := ParseWhere(w)
-			if err != nil {
-				return nil, err
-			}
-			prop = parsed
-		case map[string]any:
-			prop = Object(Clone(w))
-		default:
-			return nil, fmt.Errorf("where items must be expressions or property objects")
+		prop, err := buildProperty(item)
+		if err != nil {
+			return nil, err
 		}
-		if prop["type"] == PropertyFlag {
-			ref := fmt.Sprint(prop["key"])
-			if _, err := strconv.Atoi(ref); err != nil {
-				if resolve == nil {
-					return nil, fmt.Errorf("flag dependency %q needs resolving to an ID", ref)
-				}
-				id, err := resolve(ref)
-				if err != nil {
-					return nil, fmt.Errorf("flag dependency %q: %w", ref, err)
-				}
-				prop["key"] = id
-			}
+		if err := resolveFlagDependency(prop, resolve); err != nil {
+			return nil, err
 		}
 		props = append(props, prop)
 	}
 	return props, nil
+}
+
+// buildProperty reads one where item: an expression, or a property object
+// used as is.
+func buildProperty(item any) (map[string]any, error) {
+	switch w := item.(type) {
+	case string:
+		return ParseWhere(w)
+	case map[string]any:
+		return Object(Clone(w)), nil
+	default:
+		return nil, fmt.Errorf("where items must be expressions or property objects")
+	}
+}
+
+// resolveFlagDependency replaces a flag dependency's key with its numeric ID,
+// which is what PostHog stores.
+func resolveFlagDependency(prop map[string]any, resolve FlagResolver) error {
+	if prop["type"] != PropertyFlag {
+		return nil
+	}
+	ref := fmt.Sprint(prop["key"])
+	if _, err := strconv.Atoi(ref); err == nil {
+		return nil
+	}
+	if resolve == nil {
+		return fmt.Errorf("flag dependency %q needs resolving to an ID", ref)
+	}
+	id, err := resolve(ref)
+	if err != nil {
+		return fmt.Errorf("flag dependency %q: %w", ref, err)
+	}
+	prop["key"] = id
+	return nil
 }
 
 // CheckOverrides verifies every condition's variant override names an existing
