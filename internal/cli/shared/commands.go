@@ -52,7 +52,7 @@ func ListCommand(globals *GlobalFlags, spec ListSpec) *cobra.Command {
 			})
 		},
 	}
-	addListPagingFlags(cmd, &opts, 100)
+	addListPagingFlags(cmd, &opts)
 	return cmd
 }
 

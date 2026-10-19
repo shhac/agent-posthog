@@ -15,8 +15,8 @@ type listOptions struct {
 	PageLimit int
 }
 
-func addListPagingFlags(cmd *cobra.Command, opts *listOptions, defaultLimit int) {
-	cmd.Flags().IntVar(&opts.Limit, "limit", defaultLimit, "Maximum results to request per page")
+func addListPagingFlags(cmd *cobra.Command, opts *listOptions) {
+	cmd.Flags().IntVar(&opts.Limit, "limit", 100, "Maximum results to request per page")
 	cmd.Flags().BoolVar(&opts.All, "all", false, "Follow pagination and stream all available pages")
 	cmd.Flags().IntVar(&opts.PageLimit, "page-limit", 10, "Maximum pages to follow when --all is set")
 }
