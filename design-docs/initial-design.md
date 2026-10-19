@@ -331,7 +331,11 @@ narrow edits refuse them. Evaluation errors are never reported as `false`.
 
 Decided not to add a config-level write opt-in: raw `api post --yes` already
 treats MCP host confirmation as consent, and gating typed flag writes alone
-would not make a connection read-only.
+would not make a connection read-only. Consequence, stated in README and
+SKILL.md: existing MCP connections gained flag writes; a confirmed call
+applies, and `--dry-run` is the preview. TestMCPFlagWritesPreviewOnlyWithDryRun
+pins that behavior. Copying flags with encrypted payloads is supported
+(PostHog re-encrypts server side); plans never include the payloads.
 
 ## Investigation commands
 

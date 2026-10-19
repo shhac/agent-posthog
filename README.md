@@ -17,6 +17,8 @@ and no direct access to PostHog secrets, and for setting up feature flags
 - Feature flag management: create, apply specs, narrow edits, archive/delete,
   evaluate, scenario test suites, and diff/copy between projects. Every write
   prints a plan unless `--yes` is passed, and refuses stale overlapping edits.
+  Over MCP the `flags` tool can write once the host confirms a call (the bridge
+  adds `--yes`); preview with `--dry-run`. There is no read-only MCP switch.
 - Mock server: `mockposthog` provides deterministic E2E fixtures, including a
   stateful flag store.
 

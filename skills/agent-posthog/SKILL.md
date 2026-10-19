@@ -30,8 +30,12 @@ JSON payload).
   `--env` only to target a non-default environment.
 - Treat feature flag mutations as high stakes. Every flag write prints a plan
   and changes nothing unless you pass `--yes`; show the user the plan first.
-  `--dry-run` forces a plan even when `--yes` is present (the MCP bridge adds
-  `--yes` once the host confirms a tool call, so use `--dry-run` to preview there).
+  `--dry-run` forces a plan even when `--yes` is present.
+- Over MCP, the `flags` tool can write: any existing agent-posthog MCP
+  connection gained flag writes with this feature. The bridge adds `--yes` once
+  the host confirms a tool call (the tool is marked destructive so hosts ask),
+  so a confirmed call applies. Preview with `--dry-run` first. There is no
+  read-only switch for MCP connections.
 
 ## Setup
 
@@ -266,5 +270,6 @@ with the differences), refuses to overwrite without `--overwrite`, copies
 scheduled changes only with `--copy-schedule`, matches
 cohorts by name, and does not copy tags, evaluation contexts, or archived state.
 Its plan is advisory, since PostHog cannot check a target is unchanged since
-the plan. Targets that fail or wait on approval come back in `failed[]` and
+the plan. Flags with encrypted payloads can be copied (PostHog re-encrypts
+them for the target); plans never show the payloads. Targets that fail or wait on approval come back in `failed[]` and
 exit 1. `--project` takes an ID or an alias from the current profile.

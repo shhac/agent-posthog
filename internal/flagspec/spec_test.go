@@ -396,3 +396,35 @@ func TestBuildCreatesRemoteConfigServingEveryone(t *testing.T) {
 		t.Fatalf("body = %s\nwant   %s", body, want)
 	}
 }
+
+func TestConfigVersionOnlyAcceptsNumericOneAndTwo(t *testing.T) {
+	for raw, want := range map[string]int{`{}`: 1, `{"version":null}`: 1, `{"version":1}`: 1, `{"version":2}`: 2} {
+		filters, _ := DecodeObject([]byte(raw))
+		if got, err := ConfigVersion(filters); err != nil || got != want {
+			t.Fatalf("%s: %d, %v", raw, got, err)
+		}
+	}
+	for _, raw := range []string{`{"version":"1"}`, `{"version":true}`, `{"version":3}`} {
+		filters, _ := DecodeObject([]byte(raw))
+		if _, err := ConfigVersion(filters); err == nil {
+			t.Fatalf("%s should be unsupported", raw)
+		}
+	}
+}
+
+func TestStoredVersionOneIsNeverEchoed(t *testing.T) {
+	flag := mustFlag(t, boolFlag)
+	asMap(flag["filters"])["version"] = json.Number("1")
+	patch, err := buildFrom(t, flag, `{"key":"beta-gate","conditions":[{"rollout":5}],"payload":{"a":1}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, echoed := patch.Filters["version"]; echoed || strings.Contains(mustJSONString(patch.Body()), `"version"`) {
+		t.Fatalf("PostHog rejects an incoming filters.version on v1 writes: %v", patch.Body())
+	}
+}
+
+func mustJSONString(v any) string {
+	data, _ := json.Marshal(v)
+	return string(data)
+}

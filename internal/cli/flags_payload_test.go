@@ -84,3 +84,20 @@ func TestCreateRemoteConfigServesItsPayload(t *testing.T) {
 		t.Fatalf("evaluate = %v", r)
 	}
 }
+
+// Payload contents are configuration the flag serves, not CLI secrets: the
+// exact output path must not redact fields such as token.
+func TestExportAndReceiptsNeverRedactPayloads(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "create", "tokened", "--payload-json", `{"token":"abc","api_key":"k","nothing":null}`, "--yes")
+	for _, args := range [][]string{{"flags", "export", "tokened"}, {"flags", "payload", "get", "tokened", "--format", "json"}} {
+		out, _, err := s.run(args...)
+		if err != nil || strings.Contains(out, "REDACTED") || !strings.Contains(out, `"token": "abc"`) || !strings.Contains(out, `"nothing": null`) {
+			t.Fatalf("%v: %s", args, out)
+		}
+	}
+	r := s.mustRun("flags", "payload", "set", "tokened", "--json", `{"token":"xyz"}`)
+	if strings.Contains(mustJSON(r["changes"]), "REDACTED") || !strings.Contains(mustJSON(r["changes"]), "xyz") {
+		t.Fatalf("plan redacted the payload: %v", r["changes"])
+	}
+}
