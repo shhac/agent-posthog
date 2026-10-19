@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -228,5 +229,27 @@ func TestGuardRefusesWritesButNotReads(t *testing.T) {
 	}
 	if requests != 1 {
 		t.Fatalf("refused writes must not reach the server: %d requests", requests)
+	}
+}
+
+func TestDebugLogsRedactKeysInURLs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	var log strings.Builder
+	client := New(server.URL, "phx_realpersonalkey123")
+	client.Debug, client.DebugOut = true, &log
+	query := url.Values{"token": {"opaque-secret"}, "next": {"/api/x/?k=phc_projecttoken456"}, "limit": {"5"}}
+	if _, err := client.Get(context.Background(), "/api/x/", query); err != nil {
+		t.Fatal(err)
+	}
+	for _, leaked := range []string{"realpersonalkey123", "opaque-secret", "projecttoken456", "Authorization"} {
+		if strings.Contains(log.String(), leaked) {
+			t.Fatalf("debug log leaked %q: %s", leaked, log.String())
+		}
+	}
+	if !strings.Contains(log.String(), "limit=5") {
+		t.Fatalf("non-secret parameters should stay: %s", log.String())
 	}
 }

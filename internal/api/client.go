@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -307,6 +308,18 @@ func backoff(attempt int, retryAfter time.Duration) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// secretInURL matches PostHog keys (personal, project, share, and app tokens)
+// anywhere in a URL, even URL-encoded inside another parameter, plus the value
+// of query parameters named like secrets.
+var secretInURL = regexp.MustCompile(`(ph[xcsar]_)[A-Za-z0-9_-]+|((?:^|[?&])(?:token|api_key|personal_api_key|project_token|access_token|secret)=)[^&]*`)
+
+// redactURL keeps keys out of --debug output.
 func redactURL(value string) string {
-	return strings.ReplaceAll(value, "phx_mock", "phx_...")
+	return secretInURL.ReplaceAllStringFunc(value, func(match string) string {
+		m := secretInURL.FindStringSubmatch(match)
+		if m[1] != "" {
+			return m[1] + "..."
+		}
+		return m[2] + "..."
+	})
 }
