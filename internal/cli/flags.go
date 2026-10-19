@@ -30,19 +30,12 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	registerFlagConditionCommands(flags, globals)
 	registerFlagVariantCommands(flags, globals)
 	registerFlagPayloadCommands(flags, globals)
-	registerFlagEvalCommands(flags, globals)
+	flags.AddCommand(evaluateCommand(globals))
+	flags.AddCommand(testCommand(globals))
+	flags.AddCommand(reachCommand(globals))
 	flags.AddCommand(diffCommand(globals))
 	flags.AddCommand(copyCommand(globals))
 	root.AddCommand(flags)
-}
-
-// flagProject is the current project's feature flags; a project must be
-// configured.
-func (r *resolvedContext) flagProject() (featureflag.Project, error) {
-	if err := requireProject(r); err != nil {
-		return featureflag.Project{}, err
-	}
-	return featureflag.Project{Client: r.Client, ID: r.ProjectID, OrgID: r.OrgID, Host: r.Host, Alias: r.ProjectAlias}, nil
 }
 
 // fetchFlagRecord reads a flag by ID or key for 'flags get'.

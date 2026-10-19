@@ -12,12 +12,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func registerFlagEvalCommands(flags *cobra.Command, globals *GlobalFlags) {
-	flags.AddCommand(evaluateCommand(globals))
-	flags.AddCommand(testCommand(globals))
-	flags.AddCommand(reachCommand(globals))
-}
-
 type evalFlags struct {
 	engine, flagsHost, propsJSON, groupsJSON, groupPropsJSON, deviceID string
 	contexts                                                           []string
