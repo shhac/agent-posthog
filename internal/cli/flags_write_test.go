@@ -12,40 +12,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func flagSession(t *testing.T) *cliSession {
-	t.Helper()
-	return newMockSession(t, "phx_mock", "456")
-}
-
-// mustRun runs a command that must succeed and decodes its single JSON output.
-func (s *cliSession) mustRun(args ...string) map[string]any {
-	s.t.Helper()
-	out, errOut, err := s.run(append(args, "--format", "json")...)
-	if err != nil {
-		s.t.Fatalf("%v: err=%v stderr=%s", args, err, errOut)
-	}
-	var v map[string]any
-	if err := json.Unmarshal([]byte(out), &v); err != nil {
-		s.t.Fatalf("%v: stdout not JSON: %v\n%s", args, err, out)
-	}
-	return v
-}
-
-// mustFail runs a command that must fail and returns its stderr.
-func (s *cliSession) mustFail(args ...string) string {
-	s.t.Helper()
-	_, errOut, err := s.run(args...)
-	if err == nil {
-		s.t.Fatalf("%v: expected failure", args)
-	}
-	return errOut
-}
-
-func (s *cliSession) flag(ref string) map[string]any {
-	s.t.Helper()
-	return s.mustRun("flags", "get", ref)["data"].([]any)[0].(map[string]any)
-}
-
 func TestFlagWritePlansWithoutYes(t *testing.T) {
 	s := flagSession(t)
 	r := s.mustRun("flags", "disable", "checkout-v2")

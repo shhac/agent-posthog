@@ -2,8 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -113,15 +111,6 @@ func TestFlagApplyRejectsBadSpecs(t *testing.T) {
 	if errOut := s.mustFail("flags", "apply"); !strings.Contains(errOut, "--spec-json or --file") {
 		t.Fatalf("stderr = %s", errOut)
 	}
-}
-
-func writeTemp(t *testing.T, name, content string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 func TestFlagApplyWarnsAboutConditionsAfterTypeConversion(t *testing.T) {

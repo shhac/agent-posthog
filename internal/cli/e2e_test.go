@@ -1,17 +1,10 @@
 package cli
 
 import (
-	"bytes"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/shhac/agent-posthog/internal/config"
-	"github.com/shhac/agent-posthog/internal/mockposthog"
-	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func TestOrgsListAgainstMock(t *testing.T) {
@@ -45,25 +38,11 @@ func TestFlagsGetResolvesKey(t *testing.T) {
 }
 
 func TestMissingEnvironmentHasHint(t *testing.T) {
-	// Environment now mirrors the project when unset, so the missing-environment
+	// Environment mirrors the project when unset, so the missing-environment
 	// hint only surfaces when the project is unset too. Clear both.
-	config.SetConfigDir(t.TempDir())
-	t.Cleanup(func() { config.SetConfigDir("") })
-	server := httptest.NewServer(mockposthog.NewServer())
-	t.Cleanup(server.Close)
-	t.Setenv("AGENT_POSTHOG_BASE_URL", server.URL)
-	t.Setenv("POSTHOG_PERSONAL_API_KEY", "phx_mock")
-	t.Setenv("AGENT_POSTHOG_ORGANIZATION_ID", "org_1")
-
-	var stdout, stderr bytes.Buffer
-	restore := output.SetWritersForTest(&stdout, &stderr)
-	t.Cleanup(restore)
-	cmd := newRootCmd("test")
-	cmd.SetArgs([]string{"persons", "list"})
-	if err := cmd.Execute(); err != nil {
-		output.WriteError(output.Stderr(), err)
-	}
-	errOut := stderr.String()
+	s := newMockSession(t, "phx_mock", "")
+	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "")
+	errOut := s.mustFail("persons", "list")
 	if !strings.Contains(errOut, `"fixable_by":"agent"`) || !strings.Contains(errOut, "environments list") {
 		t.Fatalf("stderr = %s", errOut)
 	}
@@ -289,76 +268,6 @@ func TestCompletionScriptsRender(t *testing.T) {
 	if !strings.Contains(out, "bash completion V2 for agent-posthog") {
 		t.Fatalf("stdout = %s", out)
 	}
-}
-
-func runCLI(t *testing.T, args ...string) (string, string) {
-	return runCLIWithEnvironment(t, "456", args...)
-}
-
-func runCLIWithEnvironment(t *testing.T, envID string, args ...string) (string, string) {
-	return runCLIWithTokenAndEnvironment(t, "phx_mock", envID, args...)
-}
-
-func runCLIWithToken(t *testing.T, token string, args ...string) (string, string) {
-	return runCLIWithTokenAndEnvironment(t, token, "456", args...)
-}
-
-func runCLIWithTokenAndEnvironment(t *testing.T, token, envID string, args ...string) (string, string) {
-	t.Helper()
-	session := newMockSession(t, token, envID)
-	out, errOut, _ := session.run(args...)
-	return out, errOut
-}
-
-// cliSession runs several CLI invocations against one PostHog (usually a mock
-// from newMockSession), for multi-step flows whose later steps depend on state
-// the earlier ones wrote.
-type cliSession struct {
-	t *testing.T
-}
-
-func newMockSession(t *testing.T, token, envID string) *cliSession {
-	t.Helper()
-	return newWrappedMockSession(t, token, envID, func(h http.Handler) http.Handler { return h })
-}
-
-// newWrappedMockSession is newMockSession with the mock behind wrap, for tests
-// that need to observe or disturb traffic (dropped responses, concurrency).
-func newWrappedMockSession(t *testing.T, token, envID string, wrap func(http.Handler) http.Handler) *cliSession {
-	t.Helper()
-	// Isolate from the developer's real on-disk config: resolve() ranks
-	// profile.{Org,Project,Environment}ID ahead of the env vars set below, so a
-	// configured default profile would otherwise shadow the mock fixtures.
-	config.SetConfigDir(t.TempDir())
-	t.Cleanup(func() { config.SetConfigDir("") })
-	server := httptest.NewServer(wrap(mockposthog.NewServer()))
-	t.Cleanup(server.Close)
-	t.Setenv("AGENT_POSTHOG_BASE_URL", server.URL)
-	t.Setenv("POSTHOG_PERSONAL_API_KEY", token)
-	t.Setenv("AGENT_POSTHOG_ORGANIZATION_ID", "org_1")
-	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "123")
-	t.Setenv("AGENT_POSTHOG_ENVIRONMENT_ID", envID)
-	return &cliSession{t: t}
-}
-
-// run executes one CLI invocation, returning stdout, stderr, and the error
-// Execute bubbled (non-nil means the process would exit 1).
-func (s *cliSession) run(args ...string) (string, string, error) {
-	s.t.Helper()
-	var stdout, stderr bytes.Buffer
-	restore := output.SetWritersForTest(&stdout, &stderr)
-	defer restore()
-
-	cmd := newRootCmd("test")
-	cmd.SetArgs(args)
-	// Mirror libcli.Run: errors bubble out of Execute unrendered, and the single
-	// sink renders them once to stderr. We render to the captured writer here so
-	// the test sees exactly what Run would emit, exercising the single-sink path.
-	err := cmd.Execute()
-	if err != nil {
-		output.WriteError(output.Stderr(), err)
-	}
-	return stdout.String(), stderr.String(), err
 }
 
 func TestGetCommandsRedactSecrets(t *testing.T) {
