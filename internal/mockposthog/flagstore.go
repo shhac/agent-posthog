@@ -323,10 +323,14 @@ func (s *flagStore) copyFlags(w http.ResponseWriter, r *http.Request) {
 		existing["active"] = active
 		existing["is_remote_configuration"] = source["is_remote_configuration"]
 		existing["version"] = toInt(existing["version"]) + 1
-		success = append(success, map[string]any{
+		item := map[string]any{
 			"id": existing["id"], "key": key, "name": existing["name"], "active": active,
 			"team_id": project, "updated_existing": toInt(existing["version"]) > 1,
-		})
+		}
+		if body["copy_schedule"] == true {
+			item["schedule_copy_warning"] = "Existing schedules in the target project were kept."
+		}
+		success = append(success, item)
 	}
 	write(w, map[string]any{"success": success, "failed": failed})
 }

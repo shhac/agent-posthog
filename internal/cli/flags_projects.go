@@ -137,7 +137,7 @@ func relabel(changes []flagspec.Change, this, other string) []any {
 func copyCommand(globals *GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var targets []string
-	var overwrite, disable, copyDependencies bool
+	var overwrite, disable, copyDependencies, copySchedule bool
 	cmd := &cobra.Command{
 		Use:   "copy <id-or-key> --to <project>...",
 		Short: "Copy a flag to other projects in the organization (e.g. staging → prod) with PostHog's copy",
@@ -184,6 +184,9 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 					requirements, _ := flagspec.DecodeObject(raw)
 					result.Set("dependencies", requirements)
 				}
+				if copySchedule {
+					warnings = append(warnings, "Scheduled changes are copied too; schedules already on a target stay and may change the copy later.")
+				}
 				result.Set("warnings", warnings)
 				hint := applyHint
 				if len(blocked) > 0 {
@@ -196,7 +199,7 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 				if len(blocked) > 0 {
 					return agenterrors.New("Not copied: "+hint, agenterrors.FixableByAgent)
 				}
-				request["copy_schedule"] = false
+				request["copy_schedule"] = copySchedule
 				request["disable_copied_flag"] = disable
 				request["copy_dependencies"] = copyDependencies
 				raw, err := resolved.Client.Mutate(ctx, http.MethodPost, copyFlagsPath(resolved.OrgID), nil, request)
@@ -211,6 +214,7 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Replace the flag in targets where it already exists")
 	cmd.Flags().BoolVar(&disable, "disable", false, "Create the copies disabled regardless of the source")
 	cmd.Flags().BoolVar(&copyDependencies, "copy-dependencies", false, "Also copy flags this flag depends on that targets lack")
+	cmd.Flags().BoolVar(&copySchedule, "copy-schedule", false, "Also copy the flag's scheduled changes (schedules already on a target stay)")
 	addWriteFlags(cmd, &opts)
 	_ = cmd.MarkFlagRequired("to")
 	return cmd

@@ -133,3 +133,19 @@ func TestCopyReportsPartialSuccess(t *testing.T) {
 		t.Fatal("the successful target should have the copy")
 	}
 }
+
+func TestCopyCanIncludeSchedules(t *testing.T) {
+	s := stagingSession(t)
+	plan := s.mustRun("flags", "copy", "checkout-v2", "--to", "staging", "--copy-schedule")
+	if !strings.Contains(mustJSON(plan["warnings"]), "Scheduled changes are copied") {
+		t.Fatalf("plan = %v", plan)
+	}
+	r := s.mustRun("flags", "copy", "checkout-v2", "--to", "staging", "--copy-schedule", "--yes")
+	if r["outcome"] != "applied" || !strings.Contains(mustJSON(r["succeeded"]), "schedule_copy_warning") {
+		t.Fatalf("copy = %v", r)
+	}
+	plain := s.mustRun("flags", "copy", "checkout-v2", "--to", "staging", "--overwrite", "--yes")
+	if strings.Contains(mustJSON(plain["succeeded"]), "schedule_copy_warning") {
+		t.Fatalf("schedules copied without --copy-schedule: %v", plain)
+	}
+}

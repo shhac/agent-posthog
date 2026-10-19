@@ -257,7 +257,8 @@ agent-posthog --project staging flags copy beta-gate --to prod --yes    # copy
 ```
 
 `copy` uses PostHog's own copy: it plans per target (`create` or `overwrite`
-with the differences), refuses to overwrite without `--overwrite`, matches
+with the differences), refuses to overwrite without `--overwrite`, copies
+scheduled changes only with `--copy-schedule`, matches
 cohorts by name, and does not copy tags, evaluation contexts, or archived state.
 Its plan is advisory, since PostHog cannot check a target is unchanged since
 the plan. Targets that fail or wait on approval come back in `failed[]` and
