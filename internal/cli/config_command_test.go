@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 )
 
 func TestConfigAliasValidation(t *testing.T) {
@@ -30,5 +32,24 @@ func TestConfigSetRefusesPartNumbers(t *testing.T) {
 	}
 	if got := s.mustRun("config", "set", "timeout_ms", "1500"); got["value"] != "1500" {
 		t.Fatalf("set = %v", got)
+	}
+}
+
+func TestMCPWritesTurnBackOffWithUnset(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("config", "set", "mcp_writes", "on")
+	if got := s.mustRun("config", "get", "mcp_writes"); got["value"] != "on" || got["set"] != true {
+		t.Fatalf("get after set = %v", got)
+	}
+	s.mustRun("config", "unset", "mcp_writes")
+	if got := s.mustRun("config", "get", "mcp_writes"); got["value"] != "off" {
+		t.Fatalf("get after unset = %v", got)
+	}
+	if errOut := s.mustFail("config", "set", "mcp_writes", "true"); !strings.Contains(errOut, "on or off") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	t.Setenv(shared.ViaMCPEnv, "1")
+	if errOut := s.mustFail("flags", "disable", "checkout-v2", "--yes"); !strings.Contains(errOut, "mcp_writes") {
+		t.Fatalf("after unset, MCP writes must be refused again: %s", errOut)
 	}
 }

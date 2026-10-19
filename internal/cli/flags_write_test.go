@@ -159,3 +159,21 @@ func TestLifecyclePlansWarnAboutDependencies(t *testing.T) {
 		t.Fatalf("a flag nothing depends on should not warn: %v", r)
 	}
 }
+
+func TestReceiptsKeepExactValuesInYAML(t *testing.T) {
+	s := flagSession(t)
+	out, errOut, err := s.run("flags", "disable", "checkout-v2", "--yes", "--format", "yaml")
+	if err != nil {
+		t.Fatalf("%v %s", err, errOut)
+	}
+	for _, want := range []string{"outcome: applied", "base_version: ", "version: ", "before: true", "after: false"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in\n%s", want, out)
+		}
+	}
+	s.mustRun("flags", "apply", "--spec-json", `{"key":"yaml-gate","payload":{"price":1.50,"code":"007"}}`, "--yes")
+	payload, _, err := s.run("flags", "payload", "get", "yaml-gate", "--format", "yaml")
+	if err != nil || !strings.Contains(payload, "price: 1.50") || !strings.Contains(payload, `code: "007"`) {
+		t.Fatalf("payload get yaml must keep the number's text and quote number-like strings: %v\n%s", err, payload)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -176,5 +177,21 @@ func TestMCPFlagWritesNeedLocalOptIn(t *testing.T) {
 	nested := s.flags([]any{"conditions", "list", "checkout-v2"}, nil)
 	if nested["index"] != float64(0) {
 		t.Fatalf("nested subcommand through the group tool = %v", nested)
+	}
+}
+
+// TestMCPExposesOnlyTheAgentGroups pins the MCP tool surface. config in
+// particular must stay off it: through MCP an agent could otherwise run
+// 'config set mcp_writes on' and lift the write gate itself.
+func TestMCPExposesOnlyTheAgentGroups(t *testing.T) {
+	s := startMCP(t)
+	var names []string
+	for _, tool := range s.request("tools/list", nil)["tools"].([]any) {
+		names = append(names, tool.(map[string]any)["name"].(string))
+	}
+	slices.Sort(names)
+	want := []string{"api", "dashboards", "environments", "experiments", "flags", "insights", "investigate", "orgs", "persons", "projects", "query", "recordings", "schema"}
+	if !slices.Equal(names, want) {
+		t.Fatalf("tools = %v, want %v", names, want)
 	}
 }

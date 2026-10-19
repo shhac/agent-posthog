@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -76,5 +77,47 @@ func TestAuthRemoveCleansUpAHalfRemovedProfile(t *testing.T) {
 	}
 	if errOut := s.mustFail("auth", "remove", "half"); !strings.Contains(errOut, "not found") {
 		t.Fatalf("removing a profile that is gone should say so: %s", errOut)
+	}
+}
+
+func TestAuthUpdateDefaultAndCheck(t *testing.T) {
+	s, _ := authSession(t)
+	s.mustRun("auth", "add", "work", "--api-key", "phx_stored", "--org", "org_1", "--project", "123", "--env", "456")
+	s.mustRun("auth", "add", "other", "--api-key", "phx_other")
+
+	if r := s.mustRun("auth", "update", "work", "--clear-project", "--env", "7"); r["project_id"] != float64(0) || r["environment_id"] != float64(7) {
+		t.Fatalf("update = %v", r)
+	}
+	if errOut := s.mustFail("auth", "update", "work"); !strings.Contains(errOut, "no profile updates requested") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if errOut := s.mustFail("auth", "update", "nope", "--env", "1"); !strings.Contains(errOut, "not configured") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+
+	if errOut := s.mustFail("auth", "default", "nope"); !strings.Contains(errOut, "not configured") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if r := s.mustRun("auth", "default", "other"); r["profile"] != "other" {
+		t.Fatalf("default = %v", r)
+	}
+	list, _, _ := s.run("auth", "list")
+	var profiles []string
+	for _, line := range strings.Split(strings.TrimSpace(list), "\n") {
+		var row map[string]any
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			t.Fatalf("auth list line %q: %v", line, err)
+		}
+		profiles = append(profiles, row["profile"].(string))
+		if row["profile"] == "other" && row["default"] != true {
+			t.Fatalf("other should be the default: %v", row)
+		}
+	}
+	if strings.Join(profiles, ",") != "other,work" {
+		t.Fatalf("auth list order = %v", profiles)
+	}
+
+	if r := s.mustRun("auth", "check", "work"); r["status"] != "ok" || r["profile"] != "work" {
+		t.Fatalf("check = %v", r)
 	}
 }
