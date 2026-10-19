@@ -9,39 +9,36 @@ import (
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
+// WriteItem writes one record, cleaned but whole; JSON by default.
 func WriteItem(data any, flagFormat string) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
 		return err
 	}
-	output.Print(data, format, true)
-	return nil
+	return output.Print(data, format, output.Full)
 }
 
-func WriteRaw(raw json.RawMessage, flagFormat string) error {
-	return WriteRawResource(raw, flagFormat, false)
-}
-
-func WriteRawResource(raw json.RawMessage, flagFormat string, full bool) error {
+// WriteRaw writes a response body cleaned to shape; JSON by default.
+func WriteRaw(raw json.RawMessage, flagFormat string, shape output.Shape) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatJSON)
 	if err != nil {
 		return err
 	}
-	if !full {
-		raw = compactRaw(raw)
-	}
-	output.WriteRawJSON(raw, format, true)
-	return nil
+	return output.PrintRaw(raw, format, shape)
 }
 
-func WriteListResource(items []json.RawMessage, nextURL string, flagFormat string, full bool) error {
+// WriteList writes records as a list, NDJSON by default, with the
+// @pagination trailer when nextURL names more.
+func WriteList(items []any, nextURL, flagFormat string, shape output.Shape) error {
 	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
 	if err != nil {
 		return err
 	}
-	if !full {
-		items = compactRawItems(items)
-	}
+	return output.WriteList(format, items, output.PaginationMeta(nextURL), shape)
+}
+
+// WriteRawList writes a page of response records as a list.
+func WriteRawList(items []json.RawMessage, nextURL, flagFormat string, shape output.Shape) error {
 	decoded := make([]any, 0, len(items))
 	for _, raw := range items {
 		var item any
@@ -50,73 +47,15 @@ func WriteListResource(items []json.RawMessage, nextURL string, flagFormat strin
 		}
 		decoded = append(decoded, item)
 	}
-	return output.WriteList(format, decoded, output.PaginationMeta(nextURL))
+	return WriteList(decoded, nextURL, flagFormat, shape)
 }
 
-func compactRawItems(items []json.RawMessage) []json.RawMessage {
-	out := make([]json.RawMessage, 0, len(items))
-	for _, item := range items {
-		out = append(out, compactRaw(item))
+// ShapeOf is the shape --full asks for.
+func ShapeOf(globals *GlobalFlags) output.Shape {
+	if globals.Full {
+		return output.Full
 	}
-	return out
-}
-
-func compactRaw(raw json.RawMessage) json.RawMessage {
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return raw
-	}
-	compacted := compactValue(value)
-	data, err := json.Marshal(compacted)
-	if err != nil {
-		return raw
-	}
-	return data
-}
-
-// compactKeep is the allow-list of object keys retained when compacting API
-// responses (the default, non-full output). It is package-level so the literal
-// is built once rather than per object on every recursive compactValue call.
-var compactKeep = map[string]bool{
-	"id": true, "uuid": true, "name": true, "key": true, "type": true, "event": true,
-	"active": true, "archived": true, "created_at": true, "updated_at": true,
-	"start_time": true, "start_date": true, "end_date": true, "last_seen_at": true,
-	"distinct_ids": true, "properties": true, "email": true, "person_id": true,
-	"viewed": true, "recording_duration": true, "console_error_count": true,
-	"feature_flag_key": true, "rollout_percentage": true, "filters": true,
-	"multivariate": true, "variants": true, "results": true, "columns": true,
-	"query": true, "query_async": true, "complete": true, "error": true,
-	"error_message": true, "query_progress": true, "access_token": true,
-	"enabled": true, "password_required": true, "share_passwords": true,
-	"detail": true, "activity": true, "scope": true, "item_id": true,
-	"runtime_ms": true, "status": true, "metrics": true, "tiles": true,
-}
-
-func compactValue(value any) any {
-	switch v := value.(type) {
-	case []any:
-		out := make([]any, len(v))
-		for i, item := range v {
-			out[i] = compactValue(item)
-		}
-		return out
-	case map[string]any:
-		if nested, ok := v["query_status"]; ok {
-			return map[string]any{"query_status": compactValue(nested)}
-		}
-		out := make(map[string]any)
-		for key, item := range v {
-			if compactKeep[key] {
-				out[key] = compactValue(item)
-			}
-		}
-		if len(out) == 0 {
-			return v
-		}
-		return out
-	default:
-		return v
-	}
+	return output.Compact
 }
 
 // WriteExact encodes v without the pruning and redaction the general output

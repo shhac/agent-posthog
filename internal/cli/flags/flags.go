@@ -71,7 +71,7 @@ func flagSubresourceCommand(globals *shared.GlobalFlags, use, short, subresource
 				if err != nil {
 					return err
 				}
-				return shared.WriteRawResource(raw, globals.Format, globals.Full)
+				return shared.WriteRaw(raw, globals.Format, shared.ShapeOf(globals))
 			})
 		},
 	}

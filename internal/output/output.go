@@ -1,9 +1,8 @@
-// Package output re-exports the shared output contract from lib-agent-output,
-// keeping the internal/output import path while the wire mechanism (format
-// parsing, JSON/YAML encoding, error rendering) lives in one place. What stays
-// local is agent-posthog policy: the writer indirection used by tests, the
-// always-on secret redaction, and the PostHog-shaped pagination trailer.
-// (Migration shim.)
+// Package output is agent-posthog's output policy on top of lib-agent-output,
+// which owns the wire mechanism (format parsing, JSON/YAML encoding, list
+// shapes, error rendering). What stays here is PostHog-specific: which fields
+// a compact record keeps, the always-on secret redaction, the PostHog-shaped
+// pagination trailer, and the writer indirection tests use.
 package output
 
 import (
@@ -31,13 +30,10 @@ const (
 	FormatNDJSON = out.FormatNDJSON
 )
 
-const (
-	MetaKeyPagination = "@pagination"
-	MetaKeyQuery      = "@query"
-)
+// MetaKeyQuery carries a query's columns and ID ahead of its rows.
+const MetaKeyQuery = "@query"
 
 var (
-	ParseFormat   = out.ParseFormat
 	ResolveFormat = out.ResolveFormat
 	WriteError    = out.WriteError
 )
@@ -79,15 +75,41 @@ func SetWritersForTest(o, e io.Writer) func() {
 	}
 }
 
-// Print cleans (prune + redact) then encodes data in the given format via the
-// shared encoder. Redaction is always applied; pruning is opt-in.
-func Print(data any, format Format, prune bool) {
-	cleaned, ok := toCleanAny(data, prune)
-	if !ok {
-		return
+// Shape is how much of a PostHog record a command prints.
+type Shape int
+
+const (
+	// Full prints every field.
+	Full Shape = iota
+	// Compact keeps the fields agents usually need (see compactKeep).
+	Compact
+)
+
+// Cleaner is the policy every cleaned write applies: shape the record, drop
+// nulls, then mask secrets. Nulls go before masking so a null secret leaves
+// no @redacted note. It reads --expose when called, after flags are parsed.
+func Cleaner(shape Shape) out.Pruner {
+	var compact out.Pruner
+	if shape == Compact {
+		compact = compactValue
 	}
-	// Data is already cleaned, so pass a nil pruner — out.Print just encodes.
-	_ = out.Print(Stdout(), cleaned, format, nil)
+	return out.Chain(compact, out.PruneNils, out.Redactor(postHogSecrets(), redactExpose))
+}
+
+// Print writes data cleaned to the given shape.
+func Print(data any, format Format, shape Shape) error {
+	return out.Print(Stdout(), data, format, Cleaner(shape))
+}
+
+// PrintRaw is Print for a response body; a body that is not JSON is written
+// as it came.
+func PrintRaw(raw json.RawMessage, format Format, shape Shape) error {
+	var data any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		_, err := Stdout().Write(append(raw, '\n'))
+		return err
+	}
+	return Print(data, format, shape)
 }
 
 // PrintExact encodes data with neither pruning nor redaction, for output whose
@@ -96,30 +118,18 @@ func PrintExact(data any, format Format) error {
 	return out.Print(Stdout(), data, format, nil)
 }
 
-// Clean prunes nils and redacts secrets, for records handed to a writer that
-// does not clean (such as the shared multi-get printer).
+// Clean prunes nils and redacts secrets from a decoded value, for records
+// handed to a writer that does not clean (such as the shared multi-get
+// printer).
 func Clean(data any) any {
-	cleaned, ok := toCleanAny(data, true)
-	if !ok {
-		return data
-	}
-	return cleaned
-}
-
-func WriteRawJSON(raw json.RawMessage, format Format, prune bool) {
-	var data any
-	if err := json.Unmarshal(raw, &data); err != nil {
-		_ = out.Print(Stdout(), raw, FormatJSON, nil)
-		return
-	}
-	Print(data, format, prune)
+	return Cleaner(Full)(data)
 }
 
 // WriteList renders a list in the family's two shapes (NDJSON records then
 // @-prefixed meta lines, or one {"data":[...], <meta>} document), cleaning
-// each record.
-func WriteList(format Format, items []any, meta map[string]any) error {
-	return out.WriteList(Stdout(), format, items, meta, Clean)
+// each record to the given shape.
+func WriteList(format Format, items []any, meta map[string]any, shape Shape) error {
+	return out.WriteList(Stdout(), format, items, meta, Cleaner(shape))
 }
 
 // PaginationMeta is the meta map for a page that has more after it, keyed
@@ -128,7 +138,7 @@ func PaginationMeta(nextURL string) map[string]any {
 	if nextURL == "" {
 		return nil
 	}
-	return map[string]any{MetaKeyPagination: Pagination{HasMore: true, NextURL: nextURL}}
+	return map[string]any{out.MetaKeyPagination: Pagination{HasMore: true, NextURL: nextURL}}
 }
 
 // Pagination is PostHog-shaped (a next URL, not an opaque cursor), so it stays
@@ -151,35 +161,11 @@ func NewNDJSONWriter(w io.Writer) *NDJSONWriter {
 }
 
 func (n *NDJSONWriter) WriteItem(item any) error {
-	cleaned, ok := toCleanAny(item, true)
-	if !ok {
-		return nil
-	}
-	return n.inner.WriteItem(cleaned)
+	return n.inner.WriteItem(Clean(item))
 }
 
 func (n *NDJSONWriter) WriteMetaLine(key string, value any) error {
-	cleaned, ok := toCleanAny(value, true)
-	if !ok {
-		return nil
-	}
-	return n.inner.WriteMetaLine(key, cleaned)
-}
-
-func toCleanAny(data any, prune bool) (any, bool) {
-	b, err := json.Marshal(data)
-	if err != nil {
-		return nil, false
-	}
-	var decoded any
-	if err := json.Unmarshal(b, &decoded); err != nil {
-		return nil, false
-	}
-	if prune {
-		decoded = out.PruneNils(decoded)
-	}
-	decoded = out.Redact(decoded, postHogSecrets(), redactExpose)
-	return decoded, true
+	return n.inner.WriteMetaLine(key, Clean(value))
 }
 
 // redactExpose is the --expose allowlist, set once from the global flag.

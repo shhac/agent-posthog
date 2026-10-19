@@ -14,6 +14,7 @@ import (
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/credential"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 // PromptSecret is a variable so tests can stand in for the native dialog.
@@ -198,12 +199,11 @@ func registerAuthList(parent *cobra.Command, globals *shared.GlobalFlags) {
 		Short: "List configured profiles without exposing secrets",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.Read()
-			rows := make([]json.RawMessage, 0, len(cfg.Profiles))
+			rows := make([]any, 0, len(cfg.Profiles))
 			for _, alias := range slices.Sorted(maps.Keys(cfg.Profiles)) {
-				row, _ := json.Marshal(profileRecord(cfg, alias, map[string]any{"credential": credential.Storage(alias)}))
-				rows = append(rows, row)
+				rows = append(rows, profileRecord(cfg, alias, map[string]any{"credential": credential.Storage(alias)}))
 			}
-			return shared.WriteListResource(rows, "", globals.Format, true)
+			return shared.WriteList(rows, "", globals.Format, output.Full)
 		},
 	}
 	parent.AddCommand(cmd)

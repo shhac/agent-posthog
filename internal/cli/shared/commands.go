@@ -48,7 +48,7 @@ func ListCommand(globals *GlobalFlags, spec ListSpec) *cobra.Command {
 				if spec.Filter != nil {
 					items = spec.Filter(items)
 				}
-				return WriteListResource(items, nextURL, globals.Format, globals.Full)
+				return WriteRawList(items, nextURL, globals.Format, ShapeOf(globals))
 			})
 		},
 	}
@@ -113,7 +113,7 @@ func SubresourceCommand(use, short string, globals *GlobalFlags, s Scope, segmen
 				if err != nil {
 					return err
 				}
-				return WriteRawResource(raw, globals.Format, globals.Full)
+				return WriteRaw(raw, globals.Format, ShapeOf(globals))
 			})
 		},
 	}

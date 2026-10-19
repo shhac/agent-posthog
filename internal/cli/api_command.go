@@ -14,6 +14,7 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/api"
 	"github.com/shhac/agent-posthog/internal/cli/shared"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerAPI(root *cobra.Command, globals *shared.GlobalFlags) {
@@ -61,7 +62,7 @@ func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return shared.WriteRaw(raw, globals.Format)
+				return shared.WriteRaw(raw, globals.Format, output.Compact)
 			})
 		},
 	}

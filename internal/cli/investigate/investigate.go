@@ -45,7 +45,7 @@ func investigateUser(globals *shared.GlobalFlags) *cobra.Command {
 					return err
 				}
 				if len(page.Results) == 0 {
-					return writeEvidence([]any{findingRecord("warning", "No matching person found", map[string]any{"email": email, "distinct_id": distinctID})}, "", globals.Format)
+					return shared.WriteList([]any{findingRecord("warning", "No matching person found", map[string]any{"email": email, "distinct_id": distinctID})}, "", globals.Format, output.Full)
 				}
 				var records []any
 				for _, raw := range page.Results {
@@ -58,7 +58,7 @@ func investigateUser(globals *shared.GlobalFlags) *cobra.Command {
 						records = append(records, nextStepRecord(fmt.Sprintf("agent-posthog persons activity %v --env %d", personID, resolved.EnvironmentID)))
 					}
 				}
-				return writeEvidence(records, page.Next, globals.Format)
+				return shared.WriteList(records, page.Next, globals.Format, output.Full)
 			})
 		},
 	}
@@ -87,10 +87,10 @@ func investigateEvent(globals *shared.GlobalFlags) *cobra.Command {
 				}
 				var result any
 				_ = json.Unmarshal(raw, &result)
-				return writeEvidence([]any{
+				return shared.WriteList([]any{
 					entityRecord("event", event, map[string]any{"name": event}),
 					queryResultRecord("recent_events", result),
-				}, "", globals.Format)
+				}, "", globals.Format, output.Full)
 			})
 		},
 	}
@@ -133,20 +133,10 @@ func investigateFlag(globals *shared.GlobalFlags) *cobra.Command {
 					}
 				}
 				records = append(records, nextStepRecord(fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])))
-				return writeEvidence(records, "", globals.Format)
+				return shared.WriteList(records, "", globals.Format, output.Full)
 			})
 		},
 	}
-}
-
-// writeEvidence prints an investigation's records as a list, NDJSON by
-// default.
-func writeEvidence(records []any, nextURL, flagFormat string) error {
-	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
-	if err != nil {
-		return err
-	}
-	return output.WriteList(format, records, output.PaginationMeta(nextURL))
 }
 
 func entityRecord(entity string, id any, data any) map[string]any {

@@ -41,7 +41,7 @@ func Register(root *cobra.Command, globals *shared.GlobalFlags) {
 				if err != nil {
 					return err
 				}
-				return shared.WriteRaw(raw, globals.Format)
+				return shared.WriteRaw(raw, globals.Format, output.Compact)
 			})
 		},
 	})
@@ -148,14 +148,14 @@ func queryWaitCommand(globals *shared.GlobalFlags) *cobra.Command {
 						WithHint("Run 'agent-posthog query get " + args[0] + "' to inspect the current query status.")
 				}
 				if status.Error {
-					if err := shared.WriteRaw(raw, globals.Format); err != nil {
+					if err := shared.WriteRaw(raw, globals.Format, output.Compact); err != nil {
 						return err
 					}
 					return agenterrors.New("query failed: "+creds.FirstNonEmpty(status.Message, "PostHog reported an error"), agenterrors.FixableByAgent).
 						WithHint("Fix the HogQL and run it again; the full status is on stdout.")
 				}
 				if !status.Known || !status.Complete {
-					return shared.WriteRaw(raw, globals.Format)
+					return shared.WriteRaw(raw, globals.Format, output.Compact)
 				}
 				return writeQueryResult(raw, globals.Format)
 			})
@@ -173,8 +173,7 @@ func writeQueryResult(raw json.RawMessage, flagFormat string) error {
 	}
 	data := queryResultPayload(raw)
 	if format != output.FormatNDJSON {
-		output.WriteRawJSON(data, format, true)
-		return nil
+		return output.PrintRaw(data, format, output.Full)
 	}
 	return writeQueryNDJSON(data)
 }
