@@ -88,6 +88,27 @@ func (s *Spec) Type() (string, bool) {
 }
 
 func (s *Spec) validate() error {
+	for _, check := range []func() error{s.validateHeader, s.validateFieldTypes, s.validateFiltersDocument, s.validatePayloadFields} {
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	if s.Has("conditions") {
+		if err := validateConditions(s.fields["conditions"]); err != nil {
+			return err
+		}
+	}
+	if s.Has("variants") {
+		return ValidateVariants(s.fields["variants"])
+	}
+	return nil
+}
+
+var specTypes = map[any]bool{TypeBoolean: true, TypeMultivariate: true, TypeRemoteConfig: true}
+
+// validateHeader checks the fields every spec is read by: known names, not an
+// incomplete export, a supported schema, a key, and a known type.
+func (s *Spec) validateHeader() error {
 	var unknown []string
 	for field := range s.fields {
 		if !specFields[field] {
@@ -107,11 +128,13 @@ func (s *Spec) validate() error {
 	if s.Key() == "" {
 		return fmt.Errorf("key is required")
 	}
-	if t, ok := s.fields["type"]; ok {
-		if t != TypeBoolean && t != TypeMultivariate && t != TypeRemoteConfig {
-			return fmt.Errorf("type must be boolean, multivariate, or remote_config")
-		}
+	if t, ok := s.fields["type"]; ok && !specTypes[t] {
+		return fmt.Errorf("type must be boolean, multivariate, or remote_config")
 	}
+	return nil
+}
+
+func (s *Spec) validateFieldTypes() error {
 	for _, field := range []string{"active", "early_exit", "ensure_experience_continuity"} {
 		if err := expectType[bool](s.fields, field); err != nil {
 			return err
@@ -130,30 +153,33 @@ func (s *Spec) validate() error {
 	if v, ok := s.fields["aggregation_group_type_index"]; ok && v != nil && !isInteger(v) {
 		return fmt.Errorf("aggregation_group_type_index must be an integer or null")
 	}
-	if s.Has("filters_document") {
-		document := Object(s.fields["filters_document"])
-		if document == nil || !Equal(document["version"], number(2)) {
-			return fmt.Errorf("filters_document must be a config version 2 object (version: 2); describe v1 filters with conditions, variants, and payloads")
-		}
-		for _, field := range classicFilterFields {
-			if s.Has(field) {
-				return fmt.Errorf("filters_document replaces the filters whole; drop %s", field)
-			}
+	return nil
+}
+
+// validateFiltersDocument checks a config version 2 document, which replaces
+// the classic filter fields whole.
+func (s *Spec) validateFiltersDocument() error {
+	if !s.Has("filters_document") {
+		return nil
+	}
+	document := Object(s.fields["filters_document"])
+	if document == nil || !Equal(document["version"], number(2)) {
+		return fmt.Errorf("filters_document must be a config version 2 object (version: 2); describe v1 filters with conditions, variants, and payloads")
+	}
+	for _, field := range classicFilterFields {
+		if s.Has(field) {
+			return fmt.Errorf("filters_document replaces the filters whole; drop %s", field)
 		}
 	}
+	return nil
+}
+
+func (s *Spec) validatePayloadFields() error {
 	if s.Has("payload") && s.Has("payloads") {
 		return fmt.Errorf("use payload (boolean, remote_config) or payloads (multivariate), not both")
 	}
 	if v, ok := s.fields["payloads"]; ok && Object(v) == nil {
 		return fmt.Errorf("payloads must be an object keyed by variant")
-	}
-	if s.Has("conditions") {
-		if err := validateConditions(s.fields["conditions"]); err != nil {
-			return err
-		}
-	}
-	if s.Has("variants") {
-		return ValidateVariants(s.fields["variants"])
 	}
 	return nil
 }
@@ -169,20 +195,8 @@ func validateConditions(v any) error {
 			return fmt.Errorf("conditions[%d] must be an object", i)
 		}
 		if where, ok := condition["where"]; ok {
-			list, ok := where.([]any)
-			if !ok {
-				return fmt.Errorf("conditions[%d].where must be a list", i)
-			}
-			for j, filter := range list {
-				switch f := filter.(type) {
-				case string:
-					if _, err := ParseWhere(f); err != nil {
-						return fmt.Errorf("conditions[%d].where[%d]: %w", i, j, err)
-					}
-				case map[string]any:
-				default:
-					return fmt.Errorf("conditions[%d].where[%d] must be a string or property object", i, j)
-				}
+			if err := validateWhere(i, where); err != nil {
+				return err
 			}
 		}
 		if rollout, ok := condition["rollout"]; ok && rollout != nil && !isPercentage(rollout) {
@@ -192,6 +206,27 @@ func validateConditions(v any) error {
 			if _, ok := variant.(string); !ok {
 				return fmt.Errorf("conditions[%d].variant must be a string or null", i)
 			}
+		}
+	}
+	return nil
+}
+
+// validateWhere checks condition i's filters: expressions that parse, or
+// property objects.
+func validateWhere(i int, where any) error {
+	list, ok := where.([]any)
+	if !ok {
+		return fmt.Errorf("conditions[%d].where must be a list", i)
+	}
+	for j, filter := range list {
+		switch f := filter.(type) {
+		case string:
+			if _, err := ParseWhere(f); err != nil {
+				return fmt.Errorf("conditions[%d].where[%d]: %w", i, j, err)
+			}
+		case map[string]any:
+		default:
+			return fmt.Errorf("conditions[%d].where[%d] must be a string or property object", i, j)
 		}
 	}
 	return nil

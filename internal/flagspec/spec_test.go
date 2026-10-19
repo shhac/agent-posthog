@@ -15,9 +15,12 @@ func TestParseSpecRejects(t *testing.T) {
 		`{"key":"x","active":"yes"}`:                        "active must be",
 		`{"key":"x","payload":1,"payloads":{}}`:             "not both",
 		`{"key":"x","variants":[{"key":"a","rollout":60}]}`: "sum to 100",
-		`{"key":"x","variants":[{"key":"a","rollout":50},{"key":"a","rollout":50}]}`: "twice",
-		`{"key":"x","conditions":[{"where":["email frobs x"]}]}`:                     "unknown operator",
-		`{"key":"x","conditions":[{"rollout":150}]}`:                                 "rollout must be",
+		`{"key":"x","variants":[{"key":"a","rollout":50},{"key":"a","rollout":50}]}`:   "twice",
+		`{"key":"x","conditions":[{"where":["email frobs x"]}]}`:                       "unknown operator",
+		`{"key":"x","conditions":[{"rollout":150}]}`:                                   "rollout must be",
+		`{"key":"x","conditions":[{"rollout":-1}]}`:                                    "conditions[0].rollout must be",
+		`{"key":"x","variants":[{"key":"a","rollout":150},{"key":"b","rollout":-50}]}`: "variants[0].rollout must be",
+		`{"key":"x","variants":[{"rollout":100}]}`:                                     "variants[0].key is required",
 		"key: x\nkey: y\n":               "duplicate key",
 		"key: x\npayloads:\n  true: 1\n": "keys must be strings",
 		"key: x\n---\nkey: y\n":          "single YAML document",
@@ -41,5 +44,16 @@ func TestParseSpecYAMLKeepsTypes(t *testing.T) {
 	want := `{"big":12345678901234567890,"on":"yes","when":"2026-01-01","zip":"00123"}`
 	if string(data) != want {
 		t.Fatalf("payload = %s, want %s", data, want)
+	}
+}
+
+func TestParseSpecAcceptsRolloutEdges(t *testing.T) {
+	for _, input := range []string{
+		`{"key":"x","conditions":[{"rollout":0},{"rollout":100}]}`,
+		`{"key":"x","variants":[{"key":"a","rollout":0},{"key":"b","rollout":100}]}`,
+	} {
+		if _, err := ParseSpec([]byte(input)); err != nil {
+			t.Fatalf("%s: %v", input, err)
+		}
 	}
 }
