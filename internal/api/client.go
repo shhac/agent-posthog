@@ -136,6 +136,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 			if !idempotent {
 				return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent).WithHint(outcomeUnknownHint)
 			}
+			if ctx.Err() != nil {
+				return nil, agenterrors.Wrap(ctx.Err(), agenterrors.FixableByRetry).WithHint("The request ran out of time; retry, or raise --timeout.")
+			}
 			if attempt < attempts-1 {
 				c.Sleep(backoff(attempt, 0))
 				continue
@@ -155,7 +158,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 			})
 		}
 		retry := retryable(resp.StatusCode) && (idempotent || resp.StatusCode == http.StatusTooManyRequests)
-		if retry && attempt < attempts-1 {
+		if retry && attempt < attempts-1 && ctx.Err() == nil {
 			c.Sleep(backoff(attempt, retryAfter(resp.Header.Get("Retry-After"))))
 			continue
 		}

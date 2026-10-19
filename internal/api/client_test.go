@@ -183,3 +183,18 @@ func TestNetworkErrorsRetryReadsButNeverWrites(t *testing.T) {
 		t.Fatalf("write attempts = %d, err = %#v", write.calls, err)
 	}
 }
+
+func TestExpiredContextStopsRetries(t *testing.T) {
+	doer := &failingDoer{}
+	client := New("http://posthog.invalid", "phx_test")
+	client.HTTPClient, client.MaxRetries = doer, 3
+	slept := 0
+	client.Sleep = func(time.Duration) { slept++ }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := client.Get(ctx, "/api/x/", nil)
+	var apiErr *agenterrors.APIError
+	if doer.calls != 1 || slept != 0 || !errors.As(err, &apiErr) || !strings.Contains(apiErr.Hint, "--timeout") {
+		t.Fatalf("calls = %d, slept = %d, err = %#v", doer.calls, slept, err)
+	}
+}
