@@ -1,6 +1,7 @@
 package flagspec
 
 import (
+	"iter"
 	"maps"
 	"slices"
 )
@@ -38,23 +39,47 @@ func (p *Patch) Prune(current map[string]any) {
 	if current == nil {
 		return
 	}
-	for key, value := range p.Fields {
-		if existing, ok := current[key]; ok && Equal(existing, value) {
-			delete(p.Fields, key)
+	for e := range p.entries(current) {
+		switch {
+		case e.field && e.present && Equal(e.current, e.value):
+			delete(p.Fields, e.key)
+		case !e.field && Equal(e.current, e.value):
+			delete(p.Filters, e.key)
 		}
 	}
-	filters := Object(current["filters"])
-	for key, value := range p.Filters {
-		existing, ok := filters[key]
-		if !ok && value == nil {
-			delete(p.Filters, key)
-			continue
+}
+
+// patchEntry is one patch entry beside what a flag holds for it. Condition
+// groups are normalized on both sides, so null defaults compare as absent.
+type patchEntry struct {
+	// field is true for a top-level field, false for a filters section.
+	field   bool
+	key     string
+	path    string
+	current any
+	present bool
+	value   any
+}
+
+// entries walks the patch in path order: fields first, then filter sections.
+func (p *Patch) entries(flag map[string]any) iter.Seq[patchEntry] {
+	return func(yield func(patchEntry) bool) {
+		for _, key := range slices.Sorted(maps.Keys(p.Fields)) {
+			current, present := flag[key]
+			if !yield(patchEntry{field: true, key: key, path: key, current: current, present: present, value: p.Fields[key]}) {
+				return
+			}
 		}
-		if key == "groups" {
-			existing, value = normalizeGroups(existing), normalizeGroups(value)
-		}
-		if Equal(existing, value) {
-			delete(p.Filters, key)
+		filters := Object(flag["filters"])
+		for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
+			current, present := filters[key]
+			value := p.Filters[key]
+			if key == "groups" {
+				current, value = normalizeGroups(current), normalizeGroups(value)
+			}
+			if !yield(patchEntry{key: key, path: "filters." + key, current: current, present: present, value: value}) {
+				return
+			}
 		}
 	}
 }
@@ -109,19 +134,9 @@ func Result(current map[string]any, p *Patch) map[string]any {
 // happens when PostHog normalizes or drops part of a write.
 func Unapplied(p *Patch, stored map[string]any) []string {
 	var paths []string
-	for _, key := range slices.Sorted(maps.Keys(p.Fields)) {
-		if !Equal(stored[key], p.Fields[key]) {
-			paths = append(paths, key)
-		}
-	}
-	filters := Object(stored["filters"])
-	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
-		sent, got := p.Filters[key], filters[key]
-		if key == "groups" {
-			sent, got = normalizeGroups(sent), normalizeGroups(got)
-		}
-		if !Equal(got, sent) {
-			paths = append(paths, "filters."+key)
+	for e := range p.entries(stored) {
+		if !Equal(e.current, e.value) {
+			paths = append(paths, e.path)
 		}
 	}
 	return paths

@@ -19,22 +19,9 @@ type Change struct {
 
 // Changes lists what applying patch to current would change.
 func Changes(current map[string]any, p *Patch) []Change {
-	if current == nil {
-		current = map[string]any{}
-	}
 	var out []Change
-	for _, key := range slices.Sorted(maps.Keys(p.Fields)) {
-		before, ok := current[key]
-		out = append(out, Diff(key, presence(before, ok), p.Fields[key])...)
-	}
-	filters := Object(current["filters"])
-	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
-		before, ok := filters[key]
-		after := p.Filters[key]
-		if key == "groups" {
-			before, after = normalizeGroups(before), normalizeGroups(after)
-		}
-		out = append(out, Diff("filters."+key, presence(before, ok), after)...)
+	for e := range p.entries(current) {
+		out = append(out, Diff(e.path, presence(e.current, e.present), e.value)...)
 	}
 	return out
 }
