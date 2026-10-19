@@ -30,18 +30,51 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 		return nil, err
 	}
 	encrypted := current["has_encrypted_payloads"] == true
-	fromType := TypeBoolean
-	if !creating {
-		fromType = TypeOf(current)
-	}
-	toType := fromType
-	if t, ok := spec.Type(); ok {
-		toType = t
-	}
+	fromType, toType := flagTypes(current, creating, spec)
 	if encrypted && toType != TypeRemoteConfig {
 		return nil, fmt.Errorf("this flag has encrypted payloads, which PostHog only allows on remote_config flags")
 	}
 
+	p := basePatch(spec, creating)
+	if creating || spec.Has("type") {
+		p.Fields["is_remote_configuration"] = toType == TypeRemoteConfig
+	}
+	for _, section := range []string{"early_exit", "aggregation_group_type_index"} {
+		if spec.Has(section) {
+			p.Filters[section] = spec.Get(section)
+		}
+	}
+	variants, err := buildMultivariate(p, spec, filters, fromType, toType)
+	if err != nil {
+		return nil, err
+	}
+	variantKeys := variantKeySet(variants)
+	if err := buildConditionGroups(p, spec, filters, creating, fromType, toType, variantKeys, resolve); err != nil {
+		return nil, err
+	}
+	if err := buildPayloads(p, spec, filters, toType, variantKeys, encrypted); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// flagTypes is the flag's type before and after the spec: a new flag starts
+// as boolean, and the spec's type wins when it names one.
+func flagTypes(current map[string]any, creating bool, spec *Spec) (from, to string) {
+	from = TypeBoolean
+	if !creating {
+		from = TypeOf(current)
+	}
+	to = from
+	if t, ok := spec.Type(); ok {
+		to = t
+	}
+	return from, to
+}
+
+// basePatch starts a patch with the top-level fields the spec names; a new
+// flag also gets its key and starts disabled.
+func basePatch(spec *Spec, creating bool) *Patch {
 	p := NewPatch()
 	if creating {
 		p.Fields["key"] = spec.Key()
@@ -52,32 +85,25 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 			p.Fields[field] = Clone(spec.Get(field))
 		}
 	}
-	if creating || spec.Has("type") {
-		p.Fields["is_remote_configuration"] = toType == TypeRemoteConfig
-	}
-	for _, section := range []string{"early_exit", "aggregation_group_type_index"} {
-		if spec.Has(section) {
-			p.Filters[section] = spec.Get(section)
-		}
-	}
+	return p
+}
 
-	variants, err := buildMultivariate(p, spec, filters, fromType, toType)
-	if err != nil {
-		return nil, err
-	}
-	variantKeys := variantKeySet(variants)
-
+// buildConditionGroups sets the conditions the spec gives, the defaults a new
+// flag needs, or checks that the stored conditions still fit a changed type or
+// variant set. The case order matters: a new remote_config flag gets its one
+// everyone condition before the general new-flag default.
+func buildConditionGroups(p *Patch, spec *Spec, filters map[string]any, creating bool, fromType, toType string, variantKeys map[string]bool, resolve FlagResolver) error {
 	switch {
 	case spec.Has("conditions"):
 		if toType == TypeRemoteConfig {
-			return nil, fmt.Errorf("remote_config flags serve one payload to everyone; remove conditions or use type multivariate")
+			return fmt.Errorf("remote_config flags serve one payload to everyone; remove conditions or use type multivariate")
 		}
 		groups, err := buildGroups(List(spec.Get("conditions")), resolve)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err := CheckOverrides(groups, toType, variantKeys); err != nil {
-			return nil, err
+			return err
 		}
 		p.Filters["groups"] = groups
 	case creating && toType == TypeRemoteConfig:
@@ -86,14 +112,10 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 		p.Filters["groups"] = []any{}
 	case fromType != toType || spec.Has("variants"):
 		if err := CheckOverrides(List(filters["groups"]), toType, variantKeys); err != nil {
-			return nil, fmt.Errorf("%w; supply conditions in the spec as well", err)
+			return fmt.Errorf("%w; supply conditions in the spec as well", err)
 		}
 	}
-
-	if err := buildPayloads(p, spec, filters, toType, variantKeys, encrypted); err != nil {
-		return nil, err
-	}
-	return p, nil
+	return nil
 }
 
 // buildDocument writes a config version 2 filters document whole. PostHog
@@ -108,19 +130,10 @@ func buildDocument(current map[string]any, creating bool, spec *Spec) (*Patch, e
 			return nil, fmt.Errorf("this flag uses classic filters; describe them with conditions, variants, and payloads instead of filters_document")
 		}
 	}
-	p := NewPatch()
-	if creating {
-		if spec.Get("active") == true {
-			return nil, fmt.Errorf("PostHog creates config version 2 flags disabled; create it, then run 'flags enable'")
-		}
-		p.Fields["key"] = spec.Key()
-		p.Fields["active"] = false
+	if creating && spec.Get("active") == true {
+		return nil, fmt.Errorf("PostHog creates config version 2 flags disabled; create it, then run 'flags enable'")
 	}
-	for _, field := range passthroughFields {
-		if spec.Has(field) {
-			p.Fields[field] = Clone(spec.Get(field))
-		}
-	}
+	p := basePatch(spec, creating)
 	p.Fields["filters"] = Clone(spec.Get("filters_document"))
 	return p, nil
 }
