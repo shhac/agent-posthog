@@ -87,15 +87,47 @@ func (p Project) PlanVia(ctx context.Context, ref, operation string, ifVersion i
 	}}, nil
 }
 
-// PlanCreate plans creating a flag from spec.
+// PlanApply plans making a flag match spec: creating it when no flag has the
+// spec's key, otherwise changing only the fields the spec names.
+func (p Project) PlanApply(ctx context.Context, spec *flagspec.Spec, ifVersion int) (*Pending, error) {
+	id, found, err := p.FindByKey(ctx, spec.Key())
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return p.planCreate(ctx, spec)
+	}
+	resolve := p.Resolver(ctx)
+	return p.Plan(ctx, id, "apply", ifVersion, func(flag map[string]any) (*flagspec.Patch, []string, error) {
+		patch, err := flagspec.Build(flag, spec, resolve)
+		if err != nil {
+			return nil, nil, err
+		}
+		return patch, specWarnings(flag, patch), nil
+	})
+}
+
+// PlanCreate plans creating a flag from spec, refusing a key already taken.
 func (p Project) PlanCreate(ctx context.Context, spec *flagspec.Spec) (*Pending, error) {
+	_, found, err := p.FindByKey(ctx, spec.Key())
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return nil, agenterrors.New("a flag with key "+spec.Key()+" already exists", agenterrors.FixableByAgent).
+			WithHint("Edit it with 'flags apply' or the narrow commands ('flags conditions', 'flags payload').")
+	}
+	return p.planCreate(ctx, spec)
+}
+
+func (p Project) planCreate(ctx context.Context, spec *flagspec.Spec) (*Pending, error) {
 	patch, err := flagspec.Build(nil, spec, p.Resolver(ctx))
 	if err != nil {
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
 	}
 	r := p.receipt("create", map[string]any{"key": spec.Key()})
 	r.Changes = flagspec.Changes(nil, patch)
-	r.Warnings = SpecWarnings(nil, patch)
+	r.Warnings = specWarnings(nil, patch)
 	if patch.Fields["active"] != true {
 		r.Warnings = append(r.Warnings, fmt.Sprintf("The flag is created disabled; enable it with 'agent-posthog flags enable %s --yes'.", spec.Key()))
 	}
@@ -115,8 +147,8 @@ func (p Project) PlanRestore(id int) *Pending {
 	}}
 }
 
-// SpecWarnings reviews the conditions a write leaves the flag with.
-func SpecWarnings(current map[string]any, patch *flagspec.Patch) []string {
+// specWarnings reviews the conditions a write leaves the flag with.
+func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
 	groups, changed := patch.Filters["groups"]
 	if !changed {
 		return nil

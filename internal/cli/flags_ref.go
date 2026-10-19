@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/shhac/agent-posthog/internal/featureflag"
-	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
 // flagProject is the current project's feature flags; a project must be
@@ -47,16 +46,4 @@ func flagKeyByID(ctx context.Context, resolved *resolvedContext, projectID int, 
 
 func projectFlags(resolved *resolvedContext, projectID int) featureflag.Project {
 	return featureflag.Project{Client: resolved.Client, ID: projectID, OrgID: resolved.OrgID, Host: resolved.Host}
-}
-
-func flagResolver(ctx context.Context, resolved *resolvedContext, projectID int) flagspec.FlagResolver {
-	return projectFlags(resolved, projectID).Resolver(ctx)
-}
-
-func findFlagByKey(ctx context.Context, resolved *resolvedContext, key string) (string, bool, error) {
-	p, err := resolved.flagProject()
-	if err != nil {
-		return "", false, err
-	}
-	return p.FindByKey(ctx, key)
 }

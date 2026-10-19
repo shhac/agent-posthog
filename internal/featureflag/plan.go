@@ -33,8 +33,8 @@ type SavedPlan struct {
 
 // Save writes the planned edit to path for PlanSaved to apply later.
 func (pd *Pending) Save(path string) error {
-	if pd.patch == nil {
-		return agenterrors.New("only edits to an existing flag can be saved as a plan", agenterrors.FixableByAgent)
+	if pd.patch == nil || pd.Receipt.ID == nil {
+		return agenterrors.New("only edits to an existing flag can be saved as a plan, not "+pd.Receipt.Operation, agenterrors.FixableByAgent)
 	}
 	r := pd.Receipt
 	plan := SavedPlan{

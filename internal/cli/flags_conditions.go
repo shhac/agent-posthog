@@ -2,15 +2,12 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"slices"
 	"strconv"
 
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 	"github.com/shhac/agent-posthog/internal/output"
 )
@@ -34,8 +31,8 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "List conditions in evaluation order, with the flag version to pass as --if-version",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				flag, err := currentFlag(ctx, resolved, args[0])
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				flag, err := p.Fetch(ctx, args[0])
 				if err != nil {
 					return err
 				}
@@ -71,35 +68,25 @@ type conditionFlags struct {
 	clear     bool
 }
 
-func (c conditionFlags) validate() error {
-	if c.rollout < 0 || c.rollout > 100 {
-		return agenterrors.New("--rollout must be from 0 to 100", agenterrors.FixableByAgent)
-	}
-	return nil
-}
-
-// edit applies the flags the caller passed to one condition group.
-func (c conditionFlags) edit(group map[string]any, changed func(string) bool, resolve flagspec.FlagResolver) error {
+// edit is the change the flags the caller passed make to one condition.
+func (c conditionFlags) edit(changed func(string) bool) featureflag.ConditionEdit {
+	var e featureflag.ConditionEdit
 	switch {
 	case changed("where"):
-		props, err := flagspec.BuildProperties(flagspec.Strings(c.where), resolve)
-		if err != nil {
-			return err
-		}
-		group["properties"] = props
+		e.Where = &c.where
 	case c.clear:
-		group["properties"] = []any{}
+		e.Where = &[]string{}
 	}
 	if changed("rollout") {
-		group["rollout_percentage"] = rolloutNumber(c.rollout)
+		e.Rollout = &c.rollout
 	}
 	switch {
 	case changed("variant"):
-		group["variant"] = c.variant
+		e.Variant = &c.variant
 	case c.noVariant:
-		group["variant"] = nil
+		e.Variant = new(string)
 	}
-	return nil
+	return e
 }
 
 func addConditionFlags(cmd *cobra.Command, c *conditionFlags) {
@@ -117,38 +104,22 @@ func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Add a condition (appended unless --at; no --where means everyone)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := c.validate(); err != nil {
+			if err := featureflag.CheckRollout(c.rollout); err != nil {
 				return err
 			}
+			index := -1
 			if cmd.Flags().Changed("at") {
 				if err := opts.requireVersion(args[0]); err != nil {
 					return err
 				}
+				if at < 0 {
+					return agenterrors.New("--at must be 0 or more", agenterrors.FixableByAgent)
+				}
+				index = at
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				resolve := flagResolver(ctx, resolved, resolved.ProjectID)
-				return updateFlag(ctx, resolved, globals, args[0], "conditions add", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					condition := map[string]any{"where": flagspec.Strings(c.where), "rollout": rolloutNumber(c.rollout)}
-					if c.variant != "" {
-						condition["variant"] = c.variant
-					}
-					group, err := flagspec.BuildGroup(condition, resolve)
-					if err != nil {
-						return nil, nil, err
-					}
-					groups, err := editableGroups(flag)
-					if err != nil {
-						return nil, nil, err
-					}
-					index := len(groups)
-					if cmd.Flags().Changed("at") {
-						index = at
-					}
-					if index < 0 || index > len(groups) {
-						return nil, nil, fmt.Errorf("--at %d is outside 0..%d", index, len(groups))
-					}
-					return groupsPatch(flag, slices.Insert(groups, index, any(group)))
-				})
+			condition := featureflag.Condition{Where: c.where, Rollout: c.rollout, Variant: c.variant}
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				return editFlag(ctx, p, args[0], "conditions add", opts, p.AddCondition(ctx, condition, index), globals.Format)
 			})
 		},
 	}
@@ -172,42 +143,32 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := c.validate(); err != nil {
+			if err := featureflag.CheckRollout(c.rollout); err != nil {
 				return err
 			}
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
 			changed := func(name string) bool { return cmd.Flags().Changed(name) }
-			whereEdit := changed("where") || c.clear
-			variantEdit := changed("variant") || c.noVariant
-			rolloutEdit := changed("rollout")
 			switch {
-			case !whereEdit && !variantEdit && !rolloutEdit:
-				return agenterrors.New("nothing to change: pass --where, --clear-where, --rollout, --variant, or --no-variant", agenterrors.FixableByAgent)
 			case c.noVariant && changed("variant"):
 				return agenterrors.New("use --variant or --no-variant, not both", agenterrors.FixableByAgent)
 			case c.clear && changed("where"):
 				return agenterrors.New("use --where or --clear-where, not both", agenterrors.FixableByAgent)
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if rolloutEdit && !whereEdit && !variantEdit {
-					return setConditionRollout(ctx, resolved, globals, args[0], index, c.rollout, opts)
-				}
-				resolve := flagResolver(ctx, resolved, resolved.ProjectID)
-				return updateFlag(ctx, resolved, globals, args[0], "conditions set", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					groups, err := editableGroups(flag)
+			edit := c.edit(changed)
+			if edit.Where == nil && edit.Rollout == nil && edit.Variant == nil {
+				return agenterrors.New("nothing to change: pass --where, --clear-where, --rollout, --variant, or --no-variant", agenterrors.FixableByAgent)
+			}
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				if edit.Where == nil && edit.Variant == nil {
+					pending, err := p.PlanConditionRollout(ctx, args[0], opts.ifVersion, index, *edit.Rollout)
 					if err != nil {
-						return nil, nil, err
+						return err
 					}
-					if err := checkConditionIndex(groups, index); err != nil {
-						return nil, nil, err
-					}
-					if err := c.edit(flagspec.Object(groups[index]), changed, resolve); err != nil {
-						return nil, nil, err
-					}
-					return groupsPatch(flag, groups)
-				})
+					return writeFlag(ctx, pending, opts, globals.Format)
+				}
+				return editFlag(ctx, p, args[0], "conditions set", opts, p.EditCondition(ctx, index, edit), globals.Format)
 			})
 		},
 	}
@@ -216,44 +177,6 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 	cmd.Flags().BoolVar(&c.noVariant, "no-variant", false, "Remove the variant override")
 	addWriteFlags(cmd, &opts)
 	return cmd
-}
-
-// setConditionRollout uses PostHog's strict endpoint, which refuses the write
-// if the flag changed at all since the version given.
-func setConditionRollout(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, ref string, index int, rollout float64, opts writeOptions) error {
-	build := func(flag map[string]any) (*flagspec.Patch, []string, error) {
-		groups, err := editableGroups(flag)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := checkConditionIndex(groups, index); err != nil {
-			return nil, nil, err
-		}
-		flagspec.Object(groups[index])["rollout_percentage"] = rolloutNumber(rollout)
-		p := flagspec.NewPatch()
-		p.Filters["groups"] = groups
-		return p, nil, nil
-	}
-	send := func(ctx context.Context, flag map[string]any, _ *flagspec.Patch) (json.RawMessage, error) {
-		body := map[string]any{"condition_index": index, "rollout_percentage": rolloutNumber(rollout), "version": flag["version"]}
-		return resolved.Client.Mutate(ctx, http.MethodPost, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]), "set_release_condition_rollout"), nil, body)
-	}
-	p, err := resolved.flagProject()
-	if err != nil {
-		return err
-	}
-	pending, err := p.PlanVia(ctx, ref, "conditions set", opts.ifVersion, build, send)
-	if err != nil {
-		return err
-	}
-	return writeFlag(ctx, pending, opts, globals.Format)
-}
-
-func checkConditionIndex(groups []any, index int) error {
-	if index >= len(groups) {
-		return fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
-	}
-	return nil
 }
 
 func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
@@ -270,17 +193,8 @@ func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				return updateFlag(ctx, resolved, globals, args[0], "conditions remove", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					groups, err := editableGroups(flag)
-					if err != nil {
-						return nil, nil, err
-					}
-					if err := checkConditionIndex(groups, index); err != nil {
-						return nil, nil, err
-					}
-					return groupsPatch(flag, slices.Delete(groups, index, index+1))
-				})
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				return editFlag(ctx, p, args[0], "conditions remove", opts, featureflag.RemoveCondition(index), globals.Format)
 			})
 		},
 	}
@@ -306,57 +220,13 @@ func conditionsMoveCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.requireVersion(args[0]); err != nil {
 				return err
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				return updateFlag(ctx, resolved, globals, args[0], "conditions move", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					groups, err := editableGroups(flag)
-					if err != nil {
-						return nil, nil, err
-					}
-					moved, err := moveGroup(groups, from, to)
-					if err != nil {
-						return nil, nil, err
-					}
-					groups = moved
-					return groupsPatch(flag, groups)
-				})
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				return editFlag(ctx, p, args[0], "conditions move", opts, featureflag.MoveCondition(from, to), globals.Format)
 			})
 		},
 	}
 	addWriteFlags(cmd, &opts)
 	return cmd
-}
-
-// moveGroup moves the condition at from so it ends up at index to.
-func moveGroup(groups []any, from, to int) ([]any, error) {
-	if from >= len(groups) || to >= len(groups) {
-		return nil, fmt.Errorf("indexes must be below %d", len(groups))
-	}
-	moved := groups[from]
-	return slices.Insert(slices.Delete(groups, from, from+1), to, moved), nil
-}
-
-// editableGroups returns a copy of the flag's conditions after checking the
-// flag is one whose conditions can be edited.
-func editableGroups(flag map[string]any) ([]any, error) {
-	filters := flagspec.Object(flag["filters"])
-	if err := flagspec.RequireV1(filters); err != nil {
-		return nil, err
-	}
-	if flagspec.TypeOf(flag) == flagspec.TypeRemoteConfig {
-		return nil, fmt.Errorf("remote_config flags serve one payload to everyone and have no conditions to edit")
-	}
-	groups, _ := flagspec.Clone(filters["groups"]).([]any)
-	return append([]any{}, groups...), nil
-}
-
-func groupsPatch(flag map[string]any, groups []any) (*flagspec.Patch, []string, error) {
-	flagType := flagspec.TypeOf(flag)
-	if err := flagspec.CheckOverrides(groups, flagType, flagspec.VariantKeys(flag)); err != nil {
-		return nil, nil, err
-	}
-	p := flagspec.NewPatch()
-	p.Filters["groups"] = groups
-	return p, flagspec.ConditionWarnings(groups, flagType), nil
 }
 
 func parseIndex(arg string) (int, error) {
@@ -365,8 +235,4 @@ func parseIndex(arg string) (int, error) {
 		return 0, agenterrors.New("index "+arg+" must be a whole number from 0", agenterrors.FixableByAgent)
 	}
 	return index, nil
-}
-
-func rolloutNumber(pct float64) json.Number {
-	return json.Number(strconv.FormatFloat(pct, 'f', -1, 64))
 }

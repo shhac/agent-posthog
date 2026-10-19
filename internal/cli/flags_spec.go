@@ -25,8 +25,8 @@ func exportCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Export a flag as a spec that 'flags apply' accepts (json, or --format yaml)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				flag, err := currentFlag(ctx, resolved, args[0])
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				flag, err := p.Fetch(ctx, args[0])
 				if err != nil {
 					return err
 				}
@@ -59,25 +59,12 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				id, found, err := findFlagByKey(ctx, resolved, spec.Key())
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				pending, err := p.PlanApply(ctx, spec, opts.ifVersion)
 				if err != nil {
 					return err
 				}
-				if !found {
-					return createFlag(ctx, resolved, globals, spec, opts)
-				}
-				resolve := flagResolver(ctx, resolved, resolved.ProjectID)
-				return updateFlag(ctx, resolved, globals, id, "apply", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					patch, err := flagspec.Build(flag, spec, resolve)
-					if err != nil {
-						return nil, nil, err
-					}
-					return patch, featureflag.SpecWarnings(flag, patch), nil
-				})
+				return writeFlag(ctx, pending, opts, globals.Format)
 			})
 		},
 	}
@@ -134,19 +121,15 @@ func createCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				_, found, err := findFlagByKey(ctx, resolved, args[0])
+			if err := opts.refuseSavePlan("create"); err != nil {
+				return err
+			}
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				pending, err := p.PlanCreate(ctx, spec)
 				if err != nil {
 					return err
 				}
-				if found {
-					return agenterrors.New("a flag with key "+args[0]+" already exists", agenterrors.FixableByAgent).
-						WithHint("Edit it with 'flags apply' or the narrow commands ('flags conditions', 'flags payload').")
-				}
-				return createFlag(ctx, resolved, globals, spec, opts)
+				return writeFlag(ctx, pending, opts, globals.Format)
 			})
 		},
 	}
@@ -176,19 +159,4 @@ func parseVariantArgs(args []string) ([]any, error) {
 		out = append(out, map[string]any{"key": key, "rollout": json.Number(pct)})
 	}
 	return out, nil
-}
-
-func createFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, spec *flagspec.Spec, opts writeOptions) error {
-	if err := opts.refuseSavePlan("create"); err != nil {
-		return err
-	}
-	p, err := resolved.flagProject()
-	if err != nil {
-		return err
-	}
-	pending, err := p.PlanCreate(ctx, spec)
-	if err != nil {
-		return err
-	}
-	return writeFlag(ctx, pending, opts, globals.Format)
 }
