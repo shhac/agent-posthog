@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -127,21 +127,17 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 			if err := opts.refuseSavePlan("restore"); err != nil {
 				return err
 			}
-			ref, _, err := parseFlagRef(args[0])
+			ref, _, err := featureflag.ParseRef(args[0])
 			if err != nil || ref == "" {
 				return agenterrors.New("restore needs the numeric flag ID; deleted flags cannot be looked up by key", agenterrors.FixableByAgent)
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
+				p, err := resolved.flagProject()
+				if err != nil {
 					return err
 				}
 				id, _ := strconv.Atoi(ref)
-				r := newReceipt("restore", resolved, map[string]any{"id": id})
-				r.Changes = []flagspec.Change{{Path: "deleted", Before: true, After: false}}
-				r.Warnings = []string{"PostHog may give the restored flag a suffixed key if its key was reused."}
-				return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
-					return resolved.Client.Patch(ctx, flagPath(resolved.ProjectID, ref), nil, map[string]any{"deleted": false})
-				})
+				return writeFlag(ctx, p.PlanRestore(id), opts, globals.Format)
 			})
 		},
 	}

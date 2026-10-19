@@ -3,14 +3,13 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -64,7 +63,7 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 				if err := requireProject(resolved); err != nil {
 					return err
 				}
-				id, found, err := lookupFlagByKey(ctx, resolved, resolved.ProjectID, spec.Key())
+				id, found, err := findFlagByKey(ctx, resolved, spec.Key())
 				if err != nil {
 					return err
 				}
@@ -77,7 +76,7 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 					if err != nil {
 						return nil, nil, err
 					}
-					return patch, specWarnings(flag, patch), nil
+					return patch, featureflag.SpecWarnings(flag, patch), nil
 				})
 			})
 		},
@@ -139,7 +138,7 @@ func createCommand(globals *GlobalFlags) *cobra.Command {
 				if err := requireProject(resolved); err != nil {
 					return err
 				}
-				_, found, err := lookupFlagByKey(ctx, resolved, resolved.ProjectID, args[0])
+				_, found, err := findFlagByKey(ctx, resolved, args[0])
 				if err != nil {
 					return err
 				}
@@ -183,28 +182,13 @@ func createFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalF
 	if err := opts.refuseSavePlan("create"); err != nil {
 		return err
 	}
-	patch, err := flagspec.Build(nil, spec, flagResolver(ctx, resolved, resolved.ProjectID))
+	p, err := resolved.flagProject()
 	if err != nil {
-		return agenterrors.Wrap(err, agenterrors.FixableByAgent)
+		return err
 	}
-	r := newReceipt("create", resolved, map[string]any{"key": spec.Key()})
-	r.Changes = flagspec.Changes(nil, patch)
-	r.Warnings = specWarnings(nil, patch)
-	if patch.Fields["active"] != true {
-		r.Warnings = append(r.Warnings, fmt.Sprintf("The flag is created disabled; enable it with 'agent-posthog flags enable %s --yes'.", spec.Key()))
+	pending, err := p.PlanCreate(ctx, spec)
+	if err != nil {
+		return err
 	}
-	return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
-		return checkStored(r, patch, func() (json.RawMessage, error) {
-			return resolved.Client.Mutate(ctx, http.MethodPost, flagsPath(resolved.ProjectID), nil, patch.Body())
-		})
-	})
-}
-
-// specWarnings reviews the conditions a write leaves the flag with.
-func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
-	groups, changed := patch.Filters["groups"]
-	if !changed {
-		return nil
-	}
-	return flagspec.ConditionWarnings(flagspec.List(groups), flagspec.TypeOf(flagspec.Result(current, patch)))
+	return writeFlag(ctx, pending, opts, globals.Format)
 }

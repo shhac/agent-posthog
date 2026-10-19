@@ -7,23 +7,6 @@ import (
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func TestKeyLookupFollowsPagesAndRefusesToGuess(t *testing.T) {
-	saved := keyLookupPages
-	t.Cleanup(func() { keyLookupPages = saved })
-	s := flagSession(t)
-
-	keyLookupPages = listOptions{Limit: 1, All: true, PageLimit: 5}
-	out, _, _ := s.run("flags", "get", "ambiguous-flag")
-	if !strings.Contains(out, "Multiple feature flags matched key ambiguous-flag") {
-		t.Fatalf("a duplicate on page 2 must still be found: %s", out)
-	}
-
-	keyLookupPages = listOptions{Limit: 1, All: true, PageLimit: 1}
-	if errOut := s.mustFail("flags", "apply", "--spec-json", `{"key":"ambiguous-flag","active":false}`); !strings.Contains(errOut, "too many feature flags match") {
-		t.Fatalf("running out of pages must not read as not-found (it would create a duplicate): %s", errOut)
-	}
-}
-
 func TestLegacyFlagWithNullVersion(t *testing.T) {
 	s := flagSession(t)
 	if v := s.flag("legacy-flag")["version"]; v != nil {
@@ -62,13 +45,6 @@ func TestEveryJSONPayloadTypeRoundTrips(t *testing.T) {
 		if got["set"] != true || !flagspec.Equal(got["payload"], want) {
 			t.Fatalf("payload %s came back as %s", payload, raw)
 		}
-	}
-}
-
-func TestPendingChangeRequestIsForAHuman(t *testing.T) {
-	err := classifyWriteError(conflictError(t, `{"code":"change_request_pending","status":"approval_required","detail":"Already pending","change_request_id":"cr_9"}`))
-	if !strings.Contains(err.Error(), "change request cr_9") {
-		t.Fatalf("err = %v", err)
 	}
 }
 

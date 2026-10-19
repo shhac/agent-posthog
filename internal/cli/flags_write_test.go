@@ -1,15 +1,8 @@
 package cli
 
 import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/shhac/agent-posthog/internal/api"
-	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
 func TestFlagWritePlansWithoutYes(t *testing.T) {
@@ -67,13 +60,6 @@ func TestFlagWriteClassifiesApprovalAndPolicyErrors(t *testing.T) {
 	errOut = s.mustFail("flags", "enable", "policy-flag", "--yes")
 	if !strings.Contains(errOut, "more than one approval policy") || !strings.Contains(errOut, "separately") {
 		t.Fatalf("policy stderr = %s", errOut)
-	}
-}
-
-func TestFlagWriteClassifiesStaleConflict(t *testing.T) {
-	err := classifyWriteError(conflictError(t, `{"type":"server_error","code":"conflict","detail":"The feature flag was updated by someone"}`))
-	if !strings.Contains(err.Error(), "updated by someone") {
-		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -141,17 +127,6 @@ func TestFlagWriteCommandsExposeYesAndDryRun(t *testing.T) {
 	}
 }
 
-func conflictError(t *testing.T, body string) error {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(server.Close)
-	_, err := api.New(server.URL, "phx_mock").Patch(context.Background(), "/x/", nil, map[string]any{})
-	return err
-}
-
 func TestReceiptNamesHostProjectAndAlias(t *testing.T) {
 	s := stagingSession(t)
 	r := s.mustRun("--project", "staging", "flags", "create", "aliased", "--yes")
@@ -161,40 +136,6 @@ func TestReceiptNamesHostProjectAndAlias(t *testing.T) {
 	plan := s.mustRun("--project", "staging", "flags", "enable", "aliased")
 	if !strings.Contains(plan["hint"].(string), "--if-version") {
 		t.Fatalf("plan hint should explain a re-run re-reads the flag: %v", plan)
-	}
-}
-
-func TestPatchCarriesVersionAndFlagAsRead(t *testing.T) {
-	var body map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		_, _ = w.Write([]byte(`{"id":7,"key":"k","version":4,"active":false}`))
-	}))
-	t.Cleanup(server.Close)
-	resolved := &resolvedContext{Client: api.New(server.URL, "phx_mock"), ProjectID: 1}
-	flag := map[string]any{"id": json.Number("7"), "key": "k", "version": json.Number("3"), "active": true}
-	patch := flagspec.NewPatch()
-	patch.Fields["active"] = false
-	if _, err := patchFlag(resolved)(context.Background(), flag, patch); err != nil {
-		t.Fatal(err)
-	}
-	original, _ := body["original_flag"].(map[string]any)
-	if body["version"] != float64(3) || original["active"] != true || body["active"] != false {
-		t.Fatalf("PATCH body = %v", body)
-	}
-}
-
-func TestCheckStoredWarnsWhenPostHogNormalizes(t *testing.T) {
-	patch := flagspec.NewPatch()
-	patch.Fields["active"] = true
-	patch.Filters["groups"] = []any{map[string]any{"properties": []any{}, "rollout_percentage": json.Number("0")}}
-	r := &receipt{}
-	stored := `{"active":true,"filters":{"groups":[{"properties":[],"rollout_percentage":100}]}}`
-	if _, err := checkStored(r, patch, func() (json.RawMessage, error) { return json.RawMessage(stored), nil }); err != nil {
-		t.Fatal(err)
-	}
-	if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0], "filters.groups") {
-		t.Fatalf("warnings = %v", r.Warnings)
 	}
 }
 

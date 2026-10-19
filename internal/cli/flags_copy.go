@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/api"
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -33,7 +34,7 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 			"unchanged since the plan, maps cohorts by name, and does not copy tags, evaluation contexts, or archived state.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if opts.ifVersion != noVersion {
+			if opts.ifVersion != featureflag.NoVersion {
 				return agenterrors.New("copy does not support --if-version: PostHog's copy cannot check the target's version", agenterrors.FixableByAgent)
 			}
 			if err := opts.refuseSavePlan("copy"); err != nil {
@@ -74,7 +75,7 @@ func runCopy(ctx context.Context, resolved *resolvedContext, format, ref string,
 		return err
 	}
 	result := flagspec.NewOrdered()
-	result.Set("outcome", outcomePlanned)
+	result.Set("outcome", featureflag.OutcomePlanned)
 	result.Set("operation", "copy")
 	result.Set("key", key)
 	result.Set("from_project", resolved.ProjectID)
@@ -102,7 +103,7 @@ func runCopy(ctx context.Context, resolved *resolvedContext, format, ref string,
 	request["copy_dependencies"] = o.dependencies
 	raw, err := resolved.Client.Mutate(ctx, http.MethodPost, copyFlagsPath(resolved.OrgID), nil, request)
 	if err != nil {
-		return classifyWriteError(err)
+		return featureflag.ClassifyWriteError(err)
 	}
 	return reportCopy(result, raw, format)
 }
@@ -211,7 +212,7 @@ func reportCopy(result *flagspec.Ordered, raw json.RawMessage, format string) er
 	}
 	succeeded := flagspec.List(resp["success"])
 	failed := flagspec.List(resp["failed"])
-	outcome := outcomeApplied
+	outcome := featureflag.OutcomeApplied
 	switch {
 	case len(failed) > 0 && len(succeeded) > 0:
 		outcome = "partial"
