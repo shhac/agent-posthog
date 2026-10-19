@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +14,7 @@ import (
 
 func TestClientRetriesRateLimit(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		if requests == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -23,10 +22,9 @@ func TestClientRetriesRateLimit(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	}))
-	defer server.Close()
+	})
 
-	client := New(server.URL, "phx_test")
+	client := New(base, "phx_test")
 	client.Sleep = func(time.Duration) {}
 	_, err := client.Get(context.Background(), "/api/users/@me/", nil)
 	if err != nil {
@@ -39,13 +37,12 @@ func TestClientRetriesRateLimit(t *testing.T) {
 
 func TestMutateDoesNotRetryServerErrors(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		w.WriteHeader(http.StatusBadGateway)
-	}))
-	defer server.Close()
+	})
 
-	client := New(server.URL, "phx_test")
+	client := New(base, "phx_test")
 	client.Sleep = func(time.Duration) {}
 	_, err := client.Mutate(context.Background(), http.MethodPatch, "/api/projects/1/feature_flags/2/", nil, map[string]any{"active": true})
 	if err == nil {
@@ -62,17 +59,16 @@ func TestMutateDoesNotRetryServerErrors(t *testing.T) {
 
 func TestMutateRetriesRateLimit(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		if requests == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
-	}))
-	defer server.Close()
+	})
 
-	client := New(server.URL, "phx_test")
+	client := New(base, "phx_test")
 	client.Sleep = func(time.Duration) {}
 	if _, err := client.Mutate(context.Background(), http.MethodPost, "/api/x/", nil, map[string]any{}); err != nil {
 		t.Fatalf("Mutate returned error: %v", err)
@@ -120,14 +116,13 @@ func TestExpiredContextStopsRetries(t *testing.T) {
 func TestRetryAfterIsCappedAndHonorsTheDeadline(t *testing.T) {
 	status := http.StatusTooManyRequests
 	retryAfterHeader := "3600"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", retryAfterHeader)
 		w.WriteHeader(status)
-	}))
-	defer server.Close()
+	})
 
 	var waits []time.Duration
-	client := New(server.URL, "phx_test")
+	client := New(base, "phx_test")
 	client.Sleep = func(d time.Duration) { waits = append(waits, d) }
 	_, err := client.Get(context.Background(), "/api/x/", nil)
 	var apiErr *agenterrors.Error

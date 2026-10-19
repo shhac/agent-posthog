@@ -15,18 +15,25 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 )
 
+// testServer serves handler for the rest of the test and returns its URL.
+func testServer(t *testing.T, handler http.HandlerFunc) string {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
 func TestClientListAndAuthHeader(t *testing.T) {
 	var gotAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"next":    nil,
 			"results": []map[string]any{{"id": 1}},
 		})
-	}))
-	defer server.Close()
+	})
 
-	client := New(server.URL, "phx_test")
+	client := New(base, "phx_test")
 	page, err := client.List(context.Background(), "/api/organizations/", nil)
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
@@ -48,12 +55,11 @@ func (d *failingDoer) Do(*http.Request) (*http.Response, error) {
 
 func TestGuardRefusesWritesButNotReads(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
-	client := New(server.URL, "phx_test")
+	})
+	client := New(base, "phx_test")
 	client.Guard = func() error { return errors.New("writes are off") }
 	if _, err := client.Get(context.Background(), "/api/x/", nil); err != nil {
 		t.Fatalf("reads must pass the guard: %v", err)
@@ -79,12 +85,11 @@ func TestGuardRefusesWritesButNotReads(t *testing.T) {
 }
 
 func TestDebugLogsRedactKeysInURLs(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
+	})
 	var log strings.Builder
-	client := New(server.URL, "phx_realpersonalkey123")
+	client := New(base, "phx_realpersonalkey123")
 	client.Debug, client.DebugOut = true, &log
 	query := url.Values{"token": {"opaque-secret"}, "next": {"/api/x/?k=phc_projecttoken456"}, "limit": {"5"}}
 	if _, err := client.Get(context.Background(), "/api/x/", query); err != nil {
