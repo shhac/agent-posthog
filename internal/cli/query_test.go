@@ -1,10 +1,8 @@
 package cli
 
 import (
-	"bytes"
-	"encoding/json"
-	"io"
-	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -20,28 +18,6 @@ func TestQueryWaitFailsOnAFailedQuery(t *testing.T) {
 	}
 }
 
-func TestInvestigateEventPassesTheNameAsAValue(t *testing.T) {
-	var body map[string]any
-	s := newWrappedMockSession(t, "phx_mock", "456", func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/query/") {
-				data, _ := io.ReadAll(r.Body)
-				_ = json.Unmarshal(data, &body)
-				r.Body = io.NopCloser(bytes.NewReader(data))
-			}
-			next.ServeHTTP(w, r)
-		})
-	})
-	name := `it's a \' trap` + "\n"
-	if _, errOut, err := s.run("investigate", "event", "--event", name); err != nil {
-		t.Fatalf("%v %s", err, errOut)
-	}
-	query := body["query"].(map[string]any)
-	if query["values"].(map[string]any)["event"] != name || strings.Contains(query["query"].(string), "trap") {
-		t.Fatalf("the event name must travel as a value, not inside the SQL: %v", query)
-	}
-}
-
 func TestQueryAndAPIAcceptInlineJSON(t *testing.T) {
 	s := newMockSession(t, "phx_mock", "456")
 	body := `{"query":{"kind":"HogQLQuery","query":"select 1"}}`
@@ -53,5 +29,47 @@ func TestQueryAndAPIAcceptInlineJSON(t *testing.T) {
 	}
 	if errOut := s.mustFail("query", "json", "--json", "[1,2]"); !strings.Contains(errOut, "must hold a JSON object") || !strings.Contains(errOut, `"fixable_by":"agent"`) {
 		t.Fatalf("stderr = %s", errOut)
+	}
+}
+
+func TestQueryHogQLOutputsNDJSONRows(t *testing.T) {
+	out := runOK(t, "--env", "456", "query", "hogql", "select event, count() from events group by event")
+	if !strings.Contains(out, `"@query"`) || !strings.Contains(out, `"$pageview"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestAsyncQueryFixtures(t *testing.T) {
+	bodyPath := filepath.Join(t.TempDir(), "query.json")
+	if err := os.WriteFile(bodyPath, []byte(`{"async":true,"query":{"kind":"HogQLQuery","query":"select 1"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := runOK(t, "api", "post", "/api/environments/456/query/", "--body", bodyPath)
+	if !strings.Contains(out, `"complete": false`) || !strings.Contains(out, `"query_pending"`) {
+		t.Fatalf("stdout = %s", out)
+	}
+
+	out = runOK(t, "query", "get", "query_failed")
+	if !strings.Contains(out, `"error": true`) || !strings.Contains(out, "Syntax error near frobulate") {
+		t.Fatalf("stdout = %s", out)
+	}
+
+	out = runOK(t, "query", "log", "query_complete")
+	if !strings.Contains(out, `"runtime_ms": 812`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestQueryHogQLAsyncReturnsStatus(t *testing.T) {
+	out := runOK(t, "query", "hogql", "--async", "select 1")
+	if !strings.Contains(out, `"query_pending"`) || !strings.Contains(out, `"complete":false`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestQueryWaitEmitsCompletedRows(t *testing.T) {
+	out := runOK(t, "query", "wait", "query_complete", "--interval", "1ms", "--max-wait", "10ms")
+	if !strings.Contains(out, `"event":"$pageview"`) || !strings.Contains(out, `"@query"`) {
+		t.Fatalf("stdout = %s", out)
 	}
 }

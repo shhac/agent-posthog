@@ -18,6 +18,17 @@ func runCLI(t *testing.T, args ...string) (string, string) {
 	return runCLIWithEnvironment(t, "456", args...)
 }
 
+// runOK runs a command against a fresh mock and fails the test on any
+// stderr; it returns stdout.
+func runOK(t *testing.T, args ...string) string {
+	t.Helper()
+	out, errOut := runCLI(t, args...)
+	if errOut != "" {
+		t.Fatalf("%v: stderr = %s", args, errOut)
+	}
+	return out
+}
+
 func runCLIWithEnvironment(t *testing.T, envID string, args ...string) (string, string) {
 	return runCLIWithTokenAndEnvironment(t, "phx_mock", envID, args...)
 }
