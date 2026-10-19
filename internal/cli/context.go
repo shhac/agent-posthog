@@ -82,6 +82,7 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 			WithHint("Run 'agent-posthog auth add <profile> --form' or set POSTHOG_PERSONAL_API_KEY for direct auth.")
 	}
 	client := api.New(host, token)
+	client.Guard = requireWriteAllowed
 	client.MaxRetries = flags.MaxRetries
 	client.Debug = flags.Debug
 	client.DebugOut = output.Stderr()

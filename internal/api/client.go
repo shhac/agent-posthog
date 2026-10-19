@@ -28,6 +28,9 @@ type Client struct {
 	Debug      bool
 	DebugOut   io.Writer
 	Sleep      func(time.Duration)
+	// Guard, when set, runs before every state-changing request and can refuse
+	// it, so a write policy holds for every command that writes.
+	Guard func() error
 }
 
 type Page struct {
@@ -86,6 +89,11 @@ func (c *Client) Delete(ctx context.Context, path string, query url.Values) (jso
 // or a 5xx may follow a committed write, and replaying it could create or
 // overwrite twice.
 func (c *Client) Mutate(ctx context.Context, method, path string, query url.Values, body any) (json.RawMessage, error) {
+	if c.Guard != nil {
+		if err := c.Guard(); err != nil {
+			return nil, err
+		}
+	}
 	return c.do(ctx, method, path, query, body, false)
 }
 

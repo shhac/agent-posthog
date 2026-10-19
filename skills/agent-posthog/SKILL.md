@@ -33,7 +33,7 @@ JSON payload).
   `--dry-run` forces a plan even when `--yes` is present.
 - Over MCP, writes are **off** until a person runs
   `agent-posthog config mcp-writes on` on the machine serving MCP (this covers
-  flag commands and raw `api post`). A refused write is `fixable_by: human`;
+  every PostHog write: flag commands, `query cancel`, and raw `api post`). A refused write is `fixable_by: human`;
   ask the user, never work around it. Once on, the bridge adds `--yes` after the
   host confirms a tool call, so a confirmed call applies: preview with
   `--dry-run` first. Plans work either way.

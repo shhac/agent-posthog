@@ -330,8 +330,8 @@ payload edits and remote-config conditions. Flags in PostHog's config version
 narrow edits refuse them. Evaluation errors are never reported as `false`.
 
 Writes through MCP need a local opt-in: the `mcp` command marks its tool-call
-subprocesses (`AGENT_POSTHOG_VIA_MCP`), and every PostHog write path (flag
-commands and raw `api post`) refuses under that mark unless a person ran
+subprocesses (`AGENT_POSTHOG_VIA_MCP`), and the API client's write guard
+refuses every state-changing request under that mark unless a person ran
 `config mcp-writes on`. Connecting an agent therefore grants reads; plans and
 `--dry-run` always work. TestMCPFlagWritesNeedLocalOptIn pins this through the
 real bridge. Copying flags with encrypted payloads is supported

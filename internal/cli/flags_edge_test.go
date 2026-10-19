@@ -192,3 +192,18 @@ func TestRawPostReportsWriteErrors(t *testing.T) {
 		t.Fatalf("a failed raw write must surface its error: %s", errOut)
 	}
 }
+
+func TestEveryWriteIsGatedThroughMCP(t *testing.T) {
+	s := flagSession(t)
+	t.Setenv(viaMCPEnv, "1")
+	for _, args := range [][]string{
+		{"query", "cancel", "query_pending"},
+		{"flags", "copy", "checkout-v2", "--to", "124", "--yes"},
+		{"flags", "restore", "22", "--yes"},
+		{"flags", "create", "gated", "--yes"},
+	} {
+		if errOut := s.mustFail(args...); !strings.Contains(errOut, "mcp-writes") {
+			t.Fatalf("%v must be refused through MCP: %s", args, errOut)
+		}
+	}
+}

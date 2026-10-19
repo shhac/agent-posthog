@@ -198,3 +198,35 @@ func TestExpiredContextStopsRetries(t *testing.T) {
 		t.Fatalf("calls = %d, slept = %d, err = %#v", doer.calls, slept, err)
 	}
 }
+
+func TestGuardRefusesWritesButNotReads(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client := New(server.URL, "phx_test")
+	client.Guard = func() error { return errors.New("writes are off") }
+	if _, err := client.Get(context.Background(), "/api/x/", nil); err != nil {
+		t.Fatalf("reads must pass the guard: %v", err)
+	}
+	for _, write := range []func() error{
+		func() error {
+			_, err := client.Patch(context.Background(), "/api/x/", nil, map[string]any{})
+			return err
+		},
+		func() error { _, err := client.Delete(context.Background(), "/api/x/", nil); return err },
+		func() error {
+			_, err := client.Mutate(context.Background(), http.MethodPost, "/api/x/", nil, nil)
+			return err
+		},
+	} {
+		if err := write(); err == nil || err.Error() != "writes are off" {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	if requests != 1 {
+		t.Fatalf("refused writes must not reach the server: %d requests", requests)
+	}
+}

@@ -135,9 +135,6 @@ func commitWrite(r *receipt, opts writeOptions, format string, send func() (json
 		r.Hint = applyHint
 		return writeExact(r, format)
 	}
-	if err := requireWriteAllowed(); err != nil {
-		return err
-	}
 	raw, err := send()
 	if err != nil {
 		return classifyWriteError(err)
@@ -164,7 +161,8 @@ func newReceipt(operation string, resolved *resolvedContext, flag map[string]any
 const viaMCPEnv = "AGENT_POSTHOG_VIA_MCP"
 
 // requireWriteAllowed refuses writes made through the MCP server unless a
-// person enabled them with 'config mcp-writes on'. Plans are unaffected.
+// person enabled them with 'config mcp-writes on'. It is the API client's
+// Guard, so it covers every write; plans never reach it.
 func requireWriteAllowed() error {
 	if os.Getenv(viaMCPEnv) != "1" || config.Read().MCPWrites {
 		return nil
