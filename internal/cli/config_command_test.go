@@ -28,7 +28,7 @@ func TestConfigSetRefusesPartNumbers(t *testing.T) {
 	if errOut := s.mustFail("config", "set", "timeout_ms", "12abc"); !strings.Contains(errOut, "whole number") {
 		t.Fatalf("stderr = %s", errOut)
 	}
-	if got := s.mustRun("config", "set", "timeout_ms", "1500"); got["value"] != float64(1500) {
+	if got := s.mustRun("config", "set", "timeout_ms", "1500"); got["value"] != "1500" {
 		t.Fatalf("set = %v", got)
 	}
 }

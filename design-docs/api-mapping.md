@@ -132,7 +132,7 @@ Commands check the scope they need before any request: a missing
 organization, project, or environment fails the command on stderr with exit 1,
 including every `get`. `query cancel`, flag writes, and `api post` outside
 `/query/` paths are writes: they are never replayed after a `5xx`, and the API
-client refuses them through MCP unless `config mcp-writes on` was run.
+client refuses them through MCP unless `config set mcp_writes on` was run.
 
 Flag write and evaluation behavior was checked against PostHog source at
 `master` commit `c58dbfa6eeb72f5e735ed99cedd61ad939234ba8` (2026-10-19):

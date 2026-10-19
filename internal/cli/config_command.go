@@ -5,17 +5,19 @@ import (
 	"strings"
 	"unicode"
 
+	libcli "github.com/shhac/lib-agent-cli/cli"
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/config"
 )
 
+// registerConfig builds the config group on the family's ConfigCommand
+// (get/set/unset/list over configKeys) and adds the bespoke path, show, and
+// alias commands.
 func registerConfig(root *cobra.Command, globals *GlobalFlags) {
-	cfg := &cobra.Command{
-		Use:   "config",
-		Short: "Inspect and update non-secret agent-posthog config",
-	}
+	cfg := libcli.ConfigCommand(&globals.Globals, configKeys())
+	cfg.Short = "Inspect and update non-secret agent-posthog config"
 	cfg.AddCommand(&cobra.Command{
 		Use:   "path",
 		Short: "Print config path",
@@ -30,43 +32,56 @@ func registerConfig(root *cobra.Command, globals *GlobalFlags) {
 			return writeItem(config.Read(), globals.Format)
 		},
 	})
-	cfg.AddCommand(configSetCommand(globals))
-	cfg.AddCommand(configUnsetCommand(globals))
 	cfg.AddCommand(aliasCommand(globals))
-	cfg.AddCommand(mcpWritesCommand(globals))
 	root.AddCommand(cfg)
 }
 
-func configSetCommand(globals *GlobalFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "set <timeout_ms|max_retries> <value>",
-		Short: "Set an integer default config value",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			value, err := strconv.Atoi(args[1])
-			if err != nil {
-				return agenterrors.New(args[0]+" takes a whole number", agenterrors.FixableByAgent)
-			}
-			if err := config.SetDefaultValue(args[0], value); err != nil {
-				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
-			}
-			return writeItem(map[string]any{"status": "set", "key": args[0], "value": value}, globals.Format)
+func configKeys() []libcli.ConfigKey {
+	return []libcli.ConfigKey{
+		intKey("timeout_ms", "Request timeout in milliseconds", func(d config.Defaults) *int { return d.TimeoutMS }),
+		intKey("max_retries", "Automatic retries for transient 429/5xx responses", func(d config.Defaults) *int { return d.MaxRetries }),
+		{
+			Name:        "mcp_writes",
+			Description: "Allow PostHog writes from commands run through the MCP server (off by default)",
+			Get: func() (string, bool) {
+				if config.Read().MCPWrites {
+					return "on", true
+				}
+				return "off", false
+			},
+			Set: func(raw string) error {
+				switch raw {
+				case "on", "true":
+					return config.SetMCPWrites(true)
+				case "off", "false":
+					return config.SetMCPWrites(false)
+				}
+				return agenterrors.New("mcp_writes takes on or off", agenterrors.FixableByAgent)
+			},
+			Unset: func() error { return config.SetMCPWrites(false) },
 		},
 	}
-	return cmd
 }
 
-func configUnsetCommand(globals *GlobalFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "unset <timeout_ms|max_retries>",
-		Short: "Unset a default config value",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := config.UnsetDefaultValue(args[0]); err != nil {
-				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
+func intKey(name, description string, current func(config.Defaults) *int) libcli.ConfigKey {
+	return libcli.ConfigKey{
+		Name:        name,
+		Description: description,
+		Get: func() (string, bool) {
+			value := current(config.Read().Defaults)
+			if value == nil {
+				return "", false
 			}
-			return writeItem(map[string]any{"status": "unset", "key": args[0]}, globals.Format)
+			return strconv.Itoa(*value), true
 		},
+		Set: func(raw string) error {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value < 0 {
+				return agenterrors.New(name+" takes a whole number", agenterrors.FixableByAgent)
+			}
+			return config.SetDefaultValue(name, value)
+		},
+		Unset: func() error { return config.UnsetDefaultValue(name) },
 	}
 }
 
@@ -146,24 +161,4 @@ func aliasProfile(globals *GlobalFlags) (string, error) {
 			WithHint("Run 'agent-posthog auth list'.")
 	}
 	return profile, nil
-}
-
-func mcpWritesCommand(globals *GlobalFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "mcp-writes <on|off|status>",
-		Short: "Allow or block PostHog writes from commands run through the MCP server (off by default)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			switch args[0] {
-			case "on", "off":
-				if err := config.SetMCPWrites(args[0] == "on"); err != nil {
-					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
-				}
-			case "status":
-			default:
-				return agenterrors.New("mcp-writes takes on, off, or status", agenterrors.FixableByAgent)
-			}
-			return writeItem(map[string]any{"mcp_writes": config.Read().MCPWrites}, globals.Format)
-		},
-	}
 }

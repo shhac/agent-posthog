@@ -66,7 +66,7 @@ agent-posthog
 ├── experiments       list, get
 ├── investigate       user, event, flag
 ├── api               get, post
-├── config            show, path, set, unset, alias, mcp-writes
+├── config            get, set, unset, list, show, path, alias
 ├── mcp               stdio or --http server; pair, usage
 ├── usage
 └── completion
@@ -177,6 +177,11 @@ Config file shape:
   "mcp_writes": false
 }
 ```
+
+`config get|set|unset|list` (lib-agent-cli's `ConfigCommand`) manage
+`timeout_ms`, `max_retries`, and `mcp_writes` (`on`/`off`), each printing
+`{key, value, set}`; `config show`, `config path`, and `config alias` stay
+bespoke.
 
 ## Output contract
 
@@ -373,7 +378,7 @@ narrow edits refuse them. Evaluation errors are never reported as `false`.
 Writes through MCP need a local opt-in: the `mcp` command marks its tool-call
 subprocesses (`AGENT_POSTHOG_VIA_MCP`), and the API client's write guard
 refuses every state-changing request under that mark unless a person ran
-`config mcp-writes on`. Connecting an agent therefore grants reads; plans and
+`config set mcp_writes on`. Connecting an agent therefore grants reads; plans and
 `--dry-run` always work. TestMCPFlagWritesNeedLocalOptIn pins this through the
 real bridge. Copying flags with encrypted payloads is supported
 (PostHog re-encrypts server side); plans never include the payloads.
@@ -435,7 +440,7 @@ Rules:
 - allow `post` by default only for query endpoints; require `--yes` for other raw
   POST endpoints because many PostHog POST routes mutate state. Those go through
   the client's write path: never replayed after a `5xx`, and refused through MCP
-  unless `config mcp-writes on`
+  unless `config set mcp_writes on`
 - do not ship raw `patch`/`delete` until there is a specific need
 - support `--print-request` to show the resolved method, path, query, host, and
   redacted headers without sending the request

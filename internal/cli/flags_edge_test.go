@@ -174,13 +174,13 @@ func TestWritesThroughMCPNeedLocalOptIn(t *testing.T) {
 	if errOut := s.mustFail("flags", "disable", "checkout-v2", "--yes"); !strings.Contains(errOut, `"fixable_by":"human"`) {
 		t.Fatalf("stderr = %s", errOut)
 	}
-	if errOut := s.mustFail("api", "post", "/api/projects/123/feature_flags/", "--yes"); !strings.Contains(errOut, "mcp-writes") {
+	if errOut := s.mustFail("api", "post", "/api/projects/123/feature_flags/", "--yes"); !strings.Contains(errOut, "mcp_writes") {
 		t.Fatalf("raw writes must be gated too: %s", errOut)
 	}
 	if s.flag("checkout-v2")["active"] != true {
 		t.Fatal("a refused write changed the flag")
 	}
-	s.mustRun("config", "mcp-writes", "on")
+	s.mustRun("config", "set", "mcp_writes", "on")
 	if r := s.mustRun("flags", "disable", "checkout-v2", "--yes"); r["outcome"] != "applied" {
 		t.Fatalf("after opt-in = %v", r)
 	}
@@ -202,7 +202,7 @@ func TestEveryWriteIsGatedThroughMCP(t *testing.T) {
 		{"flags", "restore", "22", "--yes"},
 		{"flags", "create", "gated", "--yes"},
 	} {
-		if errOut := s.mustFail(args...); !strings.Contains(errOut, "mcp-writes") {
+		if errOut := s.mustFail(args...); !strings.Contains(errOut, "mcp_writes") {
 			t.Fatalf("%v must be refused through MCP: %s", args, errOut)
 		}
 	}

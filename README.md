@@ -32,7 +32,7 @@ and no direct access to PostHog secrets, and for setting up feature flags
   evaluate, scenario test suites, and diff/copy between projects. Every write
   prints a plan unless `--yes` is passed, and refuses stale overlapping edits.
   Over MCP, every PostHog write (flag commands, `query cancel`, `api post`
-  outside query endpoints) stays off until a person runs `agent-posthog config mcp-writes on`; after
+  outside query endpoints) stays off until a person runs `agent-posthog config set mcp_writes on`; after
   that a host-confirmed call applies (the bridge adds `--yes`), and
   `--dry-run` previews.
 - Mock server: `mockposthog` provides deterministic E2E fixtures, including a

@@ -304,7 +304,7 @@ func TestGetCommandsRedactSecrets(t *testing.T) {
 
 func TestLocalCommandsHonorFormat(t *testing.T) {
 	s := newMockSession(t, "phx_mock", "456")
-	for _, args := range [][]string{{"config", "path"}, {"usage"}, {"config", "mcp-writes", "status"}} {
+	for _, args := range [][]string{{"config", "path"}, {"usage"}, {"config", "get", "mcp_writes"}} {
 		out, errOut, err := s.run(append(args, "--format", "yaml")...)
 		if err != nil || strings.HasPrefix(strings.TrimSpace(out), "{") {
 			t.Fatalf("%v --format yaml printed JSON: %v %s\n%s", args, err, errOut, out)

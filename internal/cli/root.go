@@ -44,6 +44,10 @@ func newRootCmd(version string) *cobra.Command {
 		Redacts:        true,
 	})
 
+	// Commands from the shared libraries write to the cobra stream; point it at
+	// the same writer as everything else.
+	root.SetOut(output.Stdout())
+
 	pf := root.PersistentFlags()
 	pf.StringVarP(&globals.Profile, "profile", "p", "", "Profile alias (or AGENT_POSTHOG_PROFILE)")
 	pf.StringVar(&globals.OrgID, "org", "", "PostHog organization ID override")
@@ -87,7 +91,7 @@ func newRootCmd(version string) *cobra.Command {
 	serve := mcpCmd.RunE
 	mcpCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		// Tool calls run as subprocesses that inherit this, so writes they make
-		// are subject to 'config mcp-writes'.
+		// are subject to 'config set mcp_writes'.
 		if err := os.Setenv(viaMCPEnv, "1"); err != nil {
 			return err
 		}

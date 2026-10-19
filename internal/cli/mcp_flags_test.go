@@ -127,7 +127,7 @@ func (s *mcpSession) flags(args []any, options map[string]any) map[string]any {
 
 // TestMCPFlagWritesNeedLocalOptIn pins how flag writes behave through the
 // MCP bridge. The host's confirmation becomes an injected --yes, so writes
-// are off until a person runs 'config mcp-writes on' locally; --dry-run plans
+// are off until a person runs 'config set mcp_writes on' locally; --dry-run plans
 // always work.
 func TestMCPFlagWritesNeedLocalOptIn(t *testing.T) {
 	s := startMCP(t)
@@ -148,18 +148,18 @@ func TestMCPFlagWritesNeedLocalOptIn(t *testing.T) {
 		t.Fatalf("dry-run through MCP = %v", plan)
 	}
 	refused := s.call("flags", []any{"disable", "checkout-v2"}, nil)
-	if refused["isError"] != true || !strings.Contains(mustJSON(refused), "config mcp-writes on") {
+	if refused["isError"] != true || !strings.Contains(mustJSON(refused), "config set mcp_writes on") {
 		t.Fatalf("writes must be off through MCP by default: %v", refused)
 	}
 	raw := s.call("api", []any{"post", "/api/projects/123/feature_flags/"}, nil)
-	if raw["isError"] != true || !strings.Contains(mustJSON(raw), "config mcp-writes on") {
+	if raw["isError"] != true || !strings.Contains(mustJSON(raw), "config set mcp_writes on") {
 		t.Fatalf("raw API writes must be off through MCP too: %v", raw)
 	}
 	if got := s.flags([]any{"get", "checkout-v2"}, nil); got["active"] != true {
 		t.Fatalf("a refused write changed the flag: %v", got)
 	}
 
-	s.localCLI("config", "mcp-writes", "on")
+	s.localCLI("config", "set", "mcp_writes", "on")
 	applied := s.flags([]any{"disable", "checkout-v2"}, nil)
 	if applied["outcome"] != "applied" {
 		t.Fatalf("once enabled, a confirmed call applies via the injected --yes: %v", applied)
