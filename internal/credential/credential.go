@@ -49,7 +49,7 @@ func store() creds.Store {
 func Store(name, apiKey string) (string, error) {
 	entry := credentialEntry{APIKey: apiKey}
 	storage := "file"
-	if err := keychainStore(name, apiKey); err == nil {
+	if err := keychain.Set(name, apiKey); err == nil {
 		entry.APIKey = keychainSentinel
 		entry.KeychainManaged = true
 		storage = "keychain"
@@ -76,12 +76,18 @@ func Get(name string) (string, error) {
 	if !ok {
 		return "", &NotFoundError{Name: name}
 	}
-	if entry.KeychainManaged {
-		return keychainGet(name)
+	if !entry.KeychainManaged {
+		return entry.APIKey, nil
 	}
-	return entry.APIKey, nil
+	v, ok := keychain.Get(name)
+	if !ok {
+		return "", fmt.Errorf("read credential %q from Keychain: not found", name)
+	}
+	return v, nil
 }
 
+// Remove deletes a credential. A keychain item that is already gone does not
+// block removing the index entry, so a half-removed credential can be cleaned up.
 func Remove(name string) error {
 	return updateIndex(func(index map[string]credentialEntry) error {
 		entry, ok := index[name]
@@ -89,23 +95,29 @@ func Remove(name string) error {
 			return &NotFoundError{Name: name}
 		}
 		if entry.KeychainManaged {
-			_ = keychainDelete(name)
+			_ = keychain.Delete(name)
 		}
 		delete(index, name)
 		return nil
 	})
 }
 
-func List() ([]string, error) {
+// Storage reports where a profile's credential lives: "keychain", "file", or
+// "missing" when the index has no entry for it.
+func Storage(name string) string {
 	index, err := readIndex()
 	if err != nil {
-		return nil, err
+		return "missing"
 	}
-	names := make([]string, 0, len(index))
-	for name := range index {
-		names = append(names, name)
+	entry, ok := index[name]
+	switch {
+	case !ok:
+		return "missing"
+	case entry.KeychainManaged:
+		return "keychain"
+	default:
+		return "file"
 	}
-	return names, nil
 }
 
 func readIndex() (map[string]credentialEntry, error) {

@@ -89,13 +89,6 @@ func TestConcurrentStoresDoNotLoseEntries(t *testing.T) {
 	}
 	wg.Wait()
 
-	names, err := List()
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(names) != writers {
-		t.Errorf("%d of %d concurrent Store calls survived — updates were lost", len(names), writers)
-	}
 	for i := range writers {
 		name := fmt.Sprintf("profile-%02d", i)
 		got, err := Get(name)

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -63,6 +64,8 @@ func registerAuthAdd(parent *cobra.Command) {
 				EnvironmentID:  envID,
 			}
 			if err := config.StoreProfile(alias, profile); err != nil {
+				// Without the profile nothing lists or removes the secret, so take it back.
+				_ = credential.Remove(alias)
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
 			cfg := config.Read()
@@ -217,7 +220,7 @@ func registerAuthList(parent *cobra.Command) {
 				row, _ := json.Marshal(map[string]any{
 					"profile":         alias,
 					"default":         alias == cfg.DefaultProfile,
-					"credential":      "keychain",
+					"credential":      credential.Storage(alias),
 					"host":            profile.Host,
 					"organization_id": profile.OrganizationID,
 					"project_id":      profile.ProjectID,
@@ -238,7 +241,11 @@ func registerAuthRemove(parent *cobra.Command) {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias := args[0]
-			if err := credential.Remove(alias); err != nil {
+			_, hasProfile := config.Read().Profiles[alias]
+			var notFound *credential.NotFoundError
+			err := credential.Remove(alias)
+			keyAlreadyGone := errors.As(err, &notFound) && hasProfile
+			if err != nil && !keyAlreadyGone {
 				return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 			}
 			if err := config.RemoveProfile(alias); err != nil {
