@@ -333,3 +333,24 @@ func TestListAllStopsAtThePageLimit(t *testing.T) {
 		t.Fatalf("unlimited: items=%s next=%q err=%v", items, next, err)
 	}
 }
+
+func TestListAllKeepsTheKeyOnTheConfiguredHost(t *testing.T) {
+	var leaked bool
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked = r.Header.Get("Authorization") != ""
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{}})
+	}))
+	defer other.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []any{1}, "next": other.URL + "/api/items/?page=2"})
+	}))
+	defer server.Close()
+
+	_, _, err := New(server.URL, "phx_test").ListAll(context.Background(), "/api/items/", nil, 0)
+	if err == nil || !strings.Contains(err.Error(), "not sending the API key there") {
+		t.Fatalf("err = %v", err)
+	}
+	if leaked {
+		t.Fatal("the personal API key was sent to another host")
+	}
+}

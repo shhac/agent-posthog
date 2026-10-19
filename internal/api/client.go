@@ -259,10 +259,17 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent).WithHint("Check the PostHog host or AGENT_POSTHOG_BASE_URL")
 	}
 	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		u, err = url.Parse(path)
+		next, err := url.Parse(path)
 		if err != nil {
 			return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
 		}
+		// Absolute URLs come from PostHog's next links; the personal API key
+		// only ever goes to the configured host.
+		if next.Scheme != u.Scheme || next.Host != u.Host {
+			return nil, agenterrors.New("PostHog pointed at "+next.Scheme+"://"+next.Host+", not the configured "+u.Scheme+"://"+u.Host+"; not sending the API key there", agenterrors.FixableByHuman).
+				WithHint("Check the PostHog host setting matches the URL PostHog reports for itself (SITE_URL on self-hosted instances).")
+		}
+		u = next
 	} else {
 		if !strings.HasPrefix(path, "/") {
 			path = "/" + path
