@@ -11,7 +11,7 @@ func TestParseWhere(t *testing.T) {
 		expr string
 		want string
 	}{
-		{"email icontains @letsdothis.com", `{"key":"email","operator":"icontains","type":"person","value":"@letsdothis.com"}`},
+		{"email icontains @example.com", `{"key":"email","operator":"icontains","type":"person","value":"@example.com"}`},
 		{"app_env = staging", `{"key":"app_env","operator":"exact","type":"person","value":"staging"}`},
 		{`email = ["a@x.com","b@x.com"]`, `{"key":"email","operator":"exact","type":"person","value":["a@x.com","b@x.com"]}`},
 		{"plan != free", `{"key":"plan","operator":"is_not","type":"person","value":"free"}`},
@@ -70,7 +70,7 @@ func TestParseWhereRejects(t *testing.T) {
 
 func TestFormatWhereRoundTrips(t *testing.T) {
 	for _, expr := range []string{
-		"email icontains @letsdothis.com",
+		"email icontains @example.com",
 		`email = ["a@x.com","b@x.com"]`,
 		"age >= 21",
 		"email is_set",

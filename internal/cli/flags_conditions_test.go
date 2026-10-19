@@ -44,8 +44,8 @@ func TestConditionsAddAppendsAndInsertsWithVersion(t *testing.T) {
 	if errOut := s.mustFail("flags", "conditions", "add", "beta-gate", "--at", "0"); !strings.Contains(errOut, "--if-version") {
 		t.Fatalf("stderr = %s", errOut)
 	}
-	r := s.mustRun("flags", "conditions", "add", "beta-gate", "--where", "email = qa@letsdothis.com", "--at", "0", "--if-version", "2", "--yes")
-	if r["outcome"] != "applied" || !strings.Contains(mustJSON(groupsOf(t, s, "beta-gate")[0]), "qa@letsdothis.com") {
+	r := s.mustRun("flags", "conditions", "add", "beta-gate", "--where", "email = qa@example.com", "--at", "0", "--if-version", "2", "--yes")
+	if r["outcome"] != "applied" || !strings.Contains(mustJSON(groupsOf(t, s, "beta-gate")[0]), "qa@example.com") {
 		t.Fatalf("receipt = %v", r)
 	}
 }

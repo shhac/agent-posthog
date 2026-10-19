@@ -8,7 +8,7 @@ import (
 
 func TestFlagCreatePlansThenCreatesInactive(t *testing.T) {
 	s := flagSession(t)
-	args := []string{"flags", "create", "beta-gate", "--where", "email icontains @letsdothis.com", "--tag", "beta"}
+	args := []string{"flags", "create", "beta-gate", "--where", "email icontains @example.com", "--tag", "beta"}
 	plan := s.mustRun(args...)
 	if plan["outcome"] != "planned" || plan["operation"] != "create" {
 		t.Fatalf("plan = %v", plan)

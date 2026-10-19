@@ -9,7 +9,7 @@ import (
 const gateSpec = `{"key":"beta-gate","active":true,"early_exit":true,"conditions":[
 	{"where":["email icontains @contractor.com"],"rollout":0},
 	{"where":["app_env = staging"]},
-	{"where":["email icontains @letsdothis.com"]}]}`
+	{"where":["email icontains @acme.test"]}]}`
 
 const gateCases = `
 - name: contractor in staging is denied
@@ -19,7 +19,7 @@ const gateCases = `
   props: {email: sam@example.com, app_env: staging}
   expect: {enabled: true, condition_index: 1}
 - name: employee in production
-  props: {email: ana@letsdothis.com, app_env: production}
+  props: {email: ana@acme.test, app_env: production}
   expect: {enabled: true, condition_index: 2}
 - name: stranger in production
   props: {email: bob@example.com, app_env: production}

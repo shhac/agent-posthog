@@ -15,12 +15,12 @@ func TestV2FlagsRoundTripAsWholeDocuments(t *testing.T) {
 		t.Fatalf("export → apply changed the flag: %v", r)
 	}
 
-	edited := strings.Replace(out, "@example.com", "@letsdothis.com", 1)
+	edited := strings.Replace(out, "@example.com", "@example.org", 1)
 	r := s.mustRun("flags", "apply", "--file", writeTemp(t, "edited.yaml", edited), "--yes")
 	if r["outcome"] != "applied" || !strings.Contains(mustJSON(r["changes"]), "filters.rules[0].when") {
 		t.Fatalf("apply = %v", r)
 	}
-	if doc := mustJSON(s.flag("v2-flag")["filters"]); !strings.Contains(doc, "@letsdothis.com") || !strings.Contains(doc, `"version":2`) {
+	if doc := mustJSON(s.flag("v2-flag")["filters"]); !strings.Contains(doc, "@example.org") || !strings.Contains(doc, `"version":2`) {
 		t.Fatalf("filters = %s", doc)
 	}
 	if r := s.mustRun("flags", "enable", "v2-flag", "--yes"); r["outcome"] != "applied" {
