@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,20 +12,21 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/output"
+	"github.com/shhac/agent-posthog/internal/query"
 )
 
 func registerQuery(root *cobra.Command, globals *GlobalFlags) {
-	query := &cobra.Command{Use: "query", Short: "Run and inspect PostHog queries"}
-	query.AddCommand(queryHogQLCommand(globals))
-	query.AddCommand(queryJSONCommand(globals))
-	query.AddCommand(queryWaitCommand(globals))
-	query.AddCommand(subresourceCommand("get <query-id>", "Get async query status", globals, scopeEnvironment, func(id string) []string {
+	group := &cobra.Command{Use: "query", Short: "Run and inspect PostHog queries"}
+	group.AddCommand(queryHogQLCommand(globals))
+	group.AddCommand(queryJSONCommand(globals))
+	group.AddCommand(queryWaitCommand(globals))
+	group.AddCommand(subresourceCommand("get <query-id>", "Get async query status", globals, scopeEnvironment, func(id string) []string {
 		return []string{"query", id}
 	}))
-	query.AddCommand(subresourceCommand("log <query-id>", "Get async query log", globals, scopeEnvironment, func(id string) []string {
+	group.AddCommand(subresourceCommand("log <query-id>", "Get async query log", globals, scopeEnvironment, func(id string) []string {
 		return []string{"query", id, "log"}
 	}))
-	query.AddCommand(&cobra.Command{
+	group.AddCommand(&cobra.Command{
 		Use:   "cancel <query-id>",
 		Short: "Cancel an async query",
 		Args:  cobra.ExactArgs(1),
@@ -42,7 +44,7 @@ func registerQuery(root *cobra.Command, globals *GlobalFlags) {
 			})
 		},
 	})
-	root.AddCommand(query)
+	root.AddCommand(group)
 }
 
 func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
@@ -62,7 +64,7 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := hogQLBody(sql, nil)
+			body := query.HogQL(sql, nil)
 			if async {
 				body["async"] = true
 			}
@@ -105,16 +107,6 @@ func queryJSONCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-// hogQLBody builds a HogQL query request. values fill {placeholder}s in sql,
-// so user input never has to be escaped into the query text.
-func hogQLBody(sql string, values map[string]any) map[string]any {
-	query := map[string]any{"kind": "HogQLQuery", "query": sql}
-	if len(values) > 0 {
-		query["values"] = values
-	}
-	return map[string]any{"query": query}
-}
-
 func runQuery(cmdCtx context.Context, globals *GlobalFlags, body map[string]any) error {
 	return withClient(cmdCtx, globals, func(ctx context.Context, resolved *resolvedContext) error {
 		path, err := resolved.path(scopeEnvironment, "query")
@@ -145,7 +137,11 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 				fetch := func(ctx context.Context) (json.RawMessage, error) {
 					return resolved.Client.Get(ctx, path, nil)
 				}
-				raw, status, err := waitForQuery(ctx, fetch, interval, maxWait)
+				raw, status, err := query.Wait(ctx, fetch, interval, maxWait)
+				if errors.Is(err, query.ErrStillRunning) {
+					return agenterrors.New("query did not complete before --max-wait", agenterrors.FixableByRetry).
+						WithHint("Run 'agent-posthog query wait " + args[0] + "' again, or 'query get' to inspect its status.")
+				}
 				if err != nil {
 					return agenterrors.Wrap(err, agenterrors.FixableByRetry).
 						WithHint("Run 'agent-posthog query get " + args[0] + "' to inspect the current query status.")
@@ -167,54 +163,6 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 	cmd.Flags().DurationVar(&interval, "interval", 2*time.Second, "Polling interval")
 	cmd.Flags().DurationVar(&maxWait, "max-wait", 2*time.Minute, "Maximum time to wait")
 	return cmd
-}
-
-type parsedQueryStatus struct {
-	Known    bool
-	Complete bool
-	Error    bool
-	Message  string
-}
-
-func queryStatus(raw json.RawMessage) parsedQueryStatus {
-	var payload struct {
-		QueryStatus *struct {
-			Complete     bool   `json:"complete"`
-			Error        bool   `json:"error"`
-			ErrorMessage string `json:"error_message"`
-		} `json:"query_status"`
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil || payload.QueryStatus == nil {
-		return parsedQueryStatus{}
-	}
-	q := payload.QueryStatus
-	return parsedQueryStatus{Known: true, Complete: q.Complete, Error: q.Error, Message: q.ErrorMessage}
-}
-
-// waitForQuery polls until the query status is missing, failed, or complete,
-// or maxWait runs out.
-func waitForQuery(ctx context.Context, fetch func(context.Context) (json.RawMessage, error), interval, maxWait time.Duration) (json.RawMessage, parsedQueryStatus, error) {
-	deadline := time.Now().Add(maxWait)
-	for {
-		raw, err := fetch(ctx)
-		if err != nil {
-			return nil, parsedQueryStatus{}, err
-		}
-		status := queryStatus(raw)
-		if !status.Known || status.Error || status.Complete {
-			return raw, status, nil
-		}
-		if time.Now().Add(interval).After(deadline) {
-			return nil, status, fmt.Errorf("query did not complete before --max-wait")
-		}
-		timer := time.NewTimer(interval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, status, ctx.Err()
-		case <-timer.C:
-		}
-	}
 }
 
 func writeQueryResult(raw json.RawMessage, flagFormat string) error {
