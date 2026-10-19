@@ -6,14 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/shhac/lib-agent-cli/creds"
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/api"
-	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -161,21 +159,6 @@ func newReceipt(operation string, resolved *resolvedContext, flag map[string]any
 		BaseVersion:  flag["version"],
 		Changes:      []flagspec.Change{},
 	}
-}
-
-// viaMCPEnv marks processes the MCP server started; its subprocesses inherit it
-// and a tool call cannot change it.
-const viaMCPEnv = "AGENT_POSTHOG_VIA_MCP"
-
-// requireWriteAllowed refuses writes made through the MCP server unless a
-// person enabled them with 'config set mcp_writes on'. It is the API client's
-// Guard, so it covers every write; plans never reach it.
-func requireWriteAllowed() error {
-	if os.Getenv(viaMCPEnv) != "1" || config.Read().MCPWrites {
-		return nil
-	}
-	return agenterrors.New("writes through MCP are off for this agent-posthog install; nothing was written", agenterrors.FixableByHuman).
-		WithHint("A person can allow them with 'agent-posthog config set mcp_writes on'. --dry-run plans work without it.")
 }
 
 // checkStored sends a write and warns about any part of it the stored flag

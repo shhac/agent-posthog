@@ -170,3 +170,18 @@ func envInt(name string) int {
 	value, _ := strconv.Atoi(os.Getenv(name))
 	return value
 }
+
+// viaMCPEnv marks processes the MCP server started; its subprocesses inherit it
+// and a tool call cannot change it.
+const viaMCPEnv = "AGENT_POSTHOG_VIA_MCP"
+
+// requireWriteAllowed refuses writes made through the MCP server unless a
+// person enabled them with 'config set mcp_writes on'. It is the API client's
+// Guard, so it covers every write; plans never reach it.
+func requireWriteAllowed() error {
+	if os.Getenv(viaMCPEnv) != "1" || config.Read().MCPWrites {
+		return nil
+	}
+	return agenterrors.New("writes through MCP are off for this agent-posthog install; nothing was written", agenterrors.FixableByHuman).
+		WithHint("A person can allow them with 'agent-posthog config set mcp_writes on'. --dry-run plans work without it.")
+}
