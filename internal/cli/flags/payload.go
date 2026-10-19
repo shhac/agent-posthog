@@ -36,10 +36,11 @@ func payloadGetCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				result := output.Ordered{}
-				result = append(result, output.Field{Key: "key", Value: payload.Key})
-				result = append(result, output.Field{Key: "payload_key", Value: payload.Slot})
-				result = append(result, output.Field{Key: "set", Value: payload.Set})
+				result := output.Ordered{
+					{Key: "key", Value: payload.Key},
+					{Key: "payload_key", Value: payload.Slot},
+					{Key: "set", Value: payload.Set},
+				}
 				if payload.Set {
 					result = append(result, output.Field{Key: "payload", Value: payload.Value})
 				}

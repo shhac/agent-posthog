@@ -64,9 +64,10 @@ func Export(flag map[string]any) (agentoutput.Ordered, error) {
 
 // exportCommon sets the fields every spec carries, whatever the filters format.
 func exportCommon(flag map[string]any, withType bool) agentoutput.Ordered {
-	spec := agentoutput.Ordered{}
-	spec = append(spec, agentoutput.Field{Key: "schema_version", Value: number(schemaVersion)})
-	spec = append(spec, agentoutput.Field{Key: "key", Value: flag["key"]})
+	spec := agentoutput.Ordered{
+		{Key: "schema_version", Value: number(schemaVersion)},
+		{Key: "key", Value: flag["key"]},
+	}
 	if name, ok := flag["name"].(string); ok && name != "" {
 		spec = append(spec, agentoutput.Field{Key: "name", Value: name})
 	}
@@ -133,9 +134,10 @@ func exportVariants(variants []any) []any {
 	out := make([]any, 0, len(variants))
 	for _, item := range variants {
 		variant := Object(item)
-		entry := agentoutput.Ordered{}
-		entry = append(entry, agentoutput.Field{Key: "key", Value: variant["key"]})
-		entry = append(entry, agentoutput.Field{Key: "rollout", Value: variant["rollout_percentage"]})
+		entry := agentoutput.Ordered{
+			{Key: "key", Value: variant["key"]},
+			{Key: "rollout", Value: variant["rollout_percentage"]},
+		}
 		if name, ok := variant["name"]; ok {
 			entry = append(entry, agentoutput.Field{Key: "name", Value: name})
 		}

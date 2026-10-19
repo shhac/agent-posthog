@@ -91,15 +91,17 @@ func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOption
 
 // copyReport is the plan as the copy command reports it, with its outcome.
 func copyReport(plan *featureflag.CopyPlan, outcome string) output.Ordered {
-	result := output.Ordered{}
-	result = append(result, output.Field{Key: "outcome", Value: outcome})
-	result = append(result, output.Field{Key: "operation", Value: "copy"})
-	result = append(result, output.Field{Key: "key", Value: plan.Key})
-	result = append(result, output.Field{Key: "from_project", Value: plan.From})
+	result := output.Ordered{
+		{Key: "outcome", Value: outcome},
+		{Key: "operation", Value: "copy"},
+		{Key: "key", Value: plan.Key},
+		{Key: "from_project", Value: plan.From},
+	}
 	targets := make([]any, 0, len(plan.Targets))
 	for _, t := range plan.Targets {
-		entry := output.Ordered{}
-		entry = append(entry, output.Field{Key: "project", Value: t.Target.ID})
+		entry := output.Ordered{
+			{Key: "project", Value: t.Target.ID},
+		}
 		if t.Target.Alias != "" {
 			entry = append(entry, output.Field{Key: "alias", Value: t.Target.Alias})
 		}

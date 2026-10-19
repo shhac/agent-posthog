@@ -30,13 +30,14 @@ func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				result := output.Ordered{}
-				result = append(result, output.Field{Key: "key", Value: c.Key})
-				result = append(result, output.Field{Key: "project", Value: c.Project})
-				result = append(result, output.Field{Key: "against", Value: c.Against})
-				result = append(result, output.Field{Key: "exists_in_against", Value: c.Exists})
-				result = append(result, output.Field{Key: "identical", Value: c.Identical()})
-				result = append(result, output.Field{Key: "differences", Value: relabel(c.Differences, "project", "against")})
+				result := output.Ordered{
+					{Key: "key", Value: c.Key},
+					{Key: "project", Value: c.Project},
+					{Key: "against", Value: c.Against},
+					{Key: "exists_in_against", Value: c.Exists},
+					{Key: "identical", Value: c.Identical()},
+					{Key: "differences", Value: relabel(c.Differences, "project", "against")},
+				}
 				if len(c.Warnings) > 0 {
 					result = append(result, output.Field{Key: "warnings", Value: c.Warnings})
 				}
@@ -53,10 +54,11 @@ func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
 func relabel(changes []flagspec.Change, this, other string) []any {
 	out := make([]any, 0, len(changes))
 	for _, change := range changes {
-		entry := output.Ordered{}
-		entry = append(entry, output.Field{Key: "path", Value: change.Path})
-		entry = append(entry, output.Field{Key: this, Value: change.Before})
-		entry = append(entry, output.Field{Key: other, Value: change.After})
+		entry := output.Ordered{
+			{Key: "path", Value: change.Path},
+			{Key: this, Value: change.Before},
+			{Key: other, Value: change.After},
+		}
 		out = append(out, entry)
 	}
 	return out

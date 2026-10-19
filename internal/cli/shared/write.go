@@ -77,8 +77,9 @@ func WriteExactList(items []any, meta map[string]any, flagFormat string) error {
 	}
 	keys := slices.Sorted(maps.Keys(meta))
 	if format != output.FormatNDJSON {
-		envelope := output.Ordered{}
-		envelope = append(envelope, output.Field{Key: "data", Value: items})
+		envelope := output.Ordered{
+			{Key: "data", Value: items},
+		}
 		for _, key := range keys {
 			envelope = append(envelope, output.Field{Key: key, Value: meta[key]})
 		}

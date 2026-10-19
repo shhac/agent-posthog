@@ -47,10 +47,11 @@ func conditionsListCommand(globals *shared.GlobalFlags) *cobra.Command {
 				}
 				lines := make([]any, 0, len(conditions))
 				for i, condition := range conditions {
-					line := output.Ordered{}
-					line = append(line, output.Field{Key: "index", Value: i})
-					line = append(line, output.Field{Key: "version", Value: flag["version"]})
-					line = append(line, output.Field{Key: "condition", Value: condition})
+					line := output.Ordered{
+						{Key: "index", Value: i},
+						{Key: "version", Value: flag["version"]},
+						{Key: "condition", Value: condition},
+					}
 					lines = append(lines, line)
 				}
 				return output.WriteExactLines(lines, nil)

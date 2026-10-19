@@ -32,12 +32,13 @@ func reachCommand(globals *shared.GlobalFlags) *cobra.Command {
 				}
 				lines := make([]any, 0, len(reaches))
 				for _, r := range reaches {
-					line := output.Ordered{}
-					line = append(line, output.Field{Key: "index", Value: r.Index})
-					line = append(line, output.Field{Key: "matching", Value: r.Matching})
-					line = append(line, output.Field{Key: "total", Value: r.Total})
-					line = append(line, output.Field{Key: "rollout", Value: r.Rollout})
-					line = append(line, output.Field{Key: "aggregation_group_type_index", Value: r.Aggregation})
+					line := output.Ordered{
+						{Key: "index", Value: r.Index},
+						{Key: "matching", Value: r.Matching},
+						{Key: "total", Value: r.Total},
+						{Key: "rollout", Value: r.Rollout},
+						{Key: "aggregation_group_type_index", Value: r.Aggregation},
+					}
 					lines = append(lines, line)
 				}
 				note := "matching counts users whose properties pass a condition's filters, before its rollout; conditions overlap, so do not sum them"

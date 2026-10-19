@@ -218,10 +218,11 @@ func decodeEvalPayload(stored any) (any, bool) {
 
 // Record reports an evaluation, with the condition that matched as a spec.
 func (e *Evaluator) Record(in Subject, r Result) output.Ordered {
-	out := output.Ordered{}
-	out = append(out, output.Field{Key: "engine", Value: e.engine})
-	out = append(out, output.Field{Key: "key", Value: e.flag["key"]})
-	out = append(out, output.Field{Key: "distinct_id", Value: in.DistinctID})
+	out := output.Ordered{
+		{Key: "engine", Value: e.engine},
+		{Key: "key", Value: e.flag["key"]},
+		{Key: "distinct_id", Value: in.DistinctID},
+	}
 	if in.At != "" {
 		out = append(out, output.Field{Key: "at", Value: in.At})
 	}

@@ -63,9 +63,10 @@ func testCommand(globals *shared.GlobalFlags) *cobra.Command {
 func writeCaseResults(e *featureflag.Evaluator, results []featureflag.CaseResult, summary featureflag.Summary, format string) error {
 	lines := make([]any, 0, len(results))
 	for _, cr := range results {
-		line := output.Ordered{}
-		line = append(line, output.Field{Key: "case", Value: cr.Case.Name})
-		line = append(line, output.Field{Key: "result", Value: cr.Outcome})
+		line := output.Ordered{
+			{Key: "case", Value: cr.Case.Name},
+			{Key: "result", Value: cr.Outcome},
+		}
 		switch cr.Outcome {
 		case "error":
 			line = append(line, output.Field{Key: "error", Value: cr.Result.Error})
@@ -75,11 +76,12 @@ func writeCaseResults(e *featureflag.Evaluator, results []featureflag.CaseResult
 		line = append(line, output.Field{Key: "actual", Value: e.Record(cr.Case.In, cr.Result)})
 		lines = append(lines, line)
 	}
-	totals := output.Ordered{}
-	totals = append(totals, output.Field{Key: "engine", Value: e.Engine()})
-	totals = append(totals, output.Field{Key: "pass", Value: summary.Pass})
-	totals = append(totals, output.Field{Key: "fail", Value: summary.Fail})
-	totals = append(totals, output.Field{Key: "error", Value: summary.Error})
+	totals := output.Ordered{
+		{Key: "engine", Value: e.Engine()},
+		{Key: "pass", Value: summary.Pass},
+		{Key: "fail", Value: summary.Fail},
+		{Key: "error", Value: summary.Error},
+	}
 	if warnings := e.Warnings(); len(warnings) > 0 {
 		totals = append(totals, output.Field{Key: "warnings", Value: warnings})
 	}
