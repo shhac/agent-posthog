@@ -1,10 +1,12 @@
 package flagspec
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	_ "github.com/shhac/lib-agent-cli/yaml"
+	agentoutput "github.com/shhac/lib-agent-output"
 )
 
 func TestExportThenApplyIsUnchanged(t *testing.T) {
@@ -73,10 +75,11 @@ func TestExportYAMLRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := yaml.Marshal(spec)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := agentoutput.Print(&buf, spec, agentoutput.FormatYAML, nil); err != nil {
 		t.Fatal(err)
 	}
+	data := buf.Bytes()
 	if !strings.Contains(string(data), "schema_version: 1\nkey: checkout-config\n") {
 		t.Fatalf("yaml order wrong:\n%s", data)
 	}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
-	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func testCommand(globals *shared.GlobalFlags) *cobra.Command {
@@ -63,25 +63,25 @@ func testCommand(globals *shared.GlobalFlags) *cobra.Command {
 func writeCaseResults(e *featureflag.Evaluator, results []featureflag.CaseResult, summary featureflag.Summary, format string) error {
 	lines := make([]any, 0, len(results))
 	for _, cr := range results {
-		line := flagspec.NewOrdered()
-		line.Set("case", cr.Case.Name)
-		line.Set("result", cr.Outcome)
+		line := output.Ordered{}
+		line = append(line, output.Field{Key: "case", Value: cr.Case.Name})
+		line = append(line, output.Field{Key: "result", Value: cr.Outcome})
 		switch cr.Outcome {
 		case "error":
-			line.Set("error", cr.Result.Error)
+			line = append(line, output.Field{Key: "error", Value: cr.Result.Error})
 		case "fail":
-			line.Set("mismatches", cr.Mismatches)
+			line = append(line, output.Field{Key: "mismatches", Value: cr.Mismatches})
 		}
-		line.Set("actual", e.Record(cr.Case.In, cr.Result))
+		line = append(line, output.Field{Key: "actual", Value: e.Record(cr.Case.In, cr.Result)})
 		lines = append(lines, line)
 	}
-	totals := flagspec.NewOrdered()
-	totals.Set("engine", e.Engine())
-	totals.Set("pass", summary.Pass)
-	totals.Set("fail", summary.Fail)
-	totals.Set("error", summary.Error)
+	totals := output.Ordered{}
+	totals = append(totals, output.Field{Key: "engine", Value: e.Engine()})
+	totals = append(totals, output.Field{Key: "pass", Value: summary.Pass})
+	totals = append(totals, output.Field{Key: "fail", Value: summary.Fail})
+	totals = append(totals, output.Field{Key: "error", Value: summary.Error})
 	if warnings := e.Warnings(); len(warnings) > 0 {
-		totals.Set("warnings", warnings)
+		totals = append(totals, output.Field{Key: "warnings", Value: warnings})
 	}
 	if err := shared.WriteExactList(lines, map[string]any{"@summary": totals}, format); err != nil {
 		return err

@@ -11,6 +11,7 @@ import (
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 type evalFlags struct {
@@ -58,7 +59,7 @@ func evaluateCommand(globals *shared.GlobalFlags) *cobra.Command {
 				}
 				record := e.Record(in, r)
 				if warnings := e.Warnings(); len(warnings) > 0 {
-					record.Set("warnings", warnings)
+					record = append(record, output.Field{Key: "warnings", Value: warnings})
 				}
 				return shared.WriteExact(record, globals.Format)
 			})

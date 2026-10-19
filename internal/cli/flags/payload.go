@@ -9,6 +9,7 @@ import (
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func registerFlagPayloadCommands(flags *cobra.Command, globals *shared.GlobalFlags) {
@@ -35,12 +36,12 @@ func payloadGetCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				result := flagspec.NewOrdered()
-				result.Set("key", payload.Key)
-				result.Set("payload_key", payload.Slot)
-				result.Set("set", payload.Set)
+				result := output.Ordered{}
+				result = append(result, output.Field{Key: "key", Value: payload.Key})
+				result = append(result, output.Field{Key: "payload_key", Value: payload.Slot})
+				result = append(result, output.Field{Key: "set", Value: payload.Set})
 				if payload.Set {
-					result.Set("payload", payload.Value)
+					result = append(result, output.Field{Key: "payload", Value: payload.Value})
 				}
 				return shared.WriteExact(result, globals.Format)
 			})

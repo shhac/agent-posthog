@@ -113,7 +113,11 @@ func PrintRaw(raw json.RawMessage, format Format, shape Shape) error {
 
 // PrintExact encodes data with neither pruning nor redaction, for output whose
 // nulls and values are the point (flag write receipts, exported specs).
+// Numbers keep their exact text in every format.
 func PrintExact(data any, format Format) error {
+	if format == FormatYAML {
+		data = exactTree(data)
+	}
 	return out.Print(Stdout(), data, format, nil)
 }
 

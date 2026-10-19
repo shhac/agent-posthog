@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+
+	agentoutput "github.com/shhac/lib-agent-output"
 )
 
 // Export converts a PostHog flag into a spec. Properties that the --where
 // grammar reproduces exactly become expressions; anything else stays a raw
 // property object. Encrypted payloads are omitted and the spec is marked
 // incomplete so it cannot be applied back over the flag.
-func Export(flag map[string]any) (*Ordered, error) {
+func Export(flag map[string]any) (agentoutput.Ordered, error) {
 	filters := Object(flag["filters"])
 	version, err := configVersion(filters)
 	if err != nil {
@@ -18,27 +20,27 @@ func Export(flag map[string]any) (*Ordered, error) {
 	}
 	if version == 2 {
 		spec := exportCommon(flag, false)
-		spec.Set("filters_document", filters)
+		spec = append(spec, agentoutput.Field{Key: "filters_document", Value: filters})
 		return spec, nil
 	}
 	spec := exportCommon(flag, true)
 	if v, ok := filters["early_exit"]; ok && v != nil {
-		spec.Set("early_exit", v)
+		spec = append(spec, agentoutput.Field{Key: "early_exit", Value: v})
 	}
 	if v, ok := filters["aggregation_group_type_index"]; ok && v != nil {
-		spec.Set("aggregation_group_type_index", v)
+		spec = append(spec, agentoutput.Field{Key: "aggregation_group_type_index", Value: v})
 	}
 	flagType := TypeOf(flag)
 	if flagType != TypeRemoteConfig {
-		spec.Set("conditions", ExportConditions(List(filters["groups"])))
+		spec = append(spec, agentoutput.Field{Key: "conditions", Value: ExportConditions(List(filters["groups"]))})
 	}
 	if flagType == TypeMultivariate {
-		spec.Set("variants", exportVariants(List(Object(filters["multivariate"])["variants"])))
+		spec = append(spec, agentoutput.Field{Key: "variants", Value: exportVariants(List(Object(filters["multivariate"])["variants"]))})
 	}
 
 	payloads := Object(filters["payloads"])
 	if flag["has_encrypted_payloads"] == true && len(payloads) > 0 {
-		spec.Set("incomplete", []any{"encrypted payloads omitted"})
+		spec = append(spec, agentoutput.Field{Key: "incomplete", Value: []any{"encrypted payloads omitted"}})
 		return spec, nil
 	}
 	decoded := map[string]any{}
@@ -51,38 +53,38 @@ func Export(flag map[string]any) (*Ordered, error) {
 	}
 	switch {
 	case flagType == TypeMultivariate && len(decoded) > 0:
-		spec.Set("payloads", decoded)
+		spec = append(spec, agentoutput.Field{Key: "payloads", Value: decoded})
 	case flagType != TypeMultivariate:
 		if value, ok := decoded[BooleanPayloadKey]; ok {
-			spec.Set("payload", value)
+			spec = append(spec, agentoutput.Field{Key: "payload", Value: value})
 		}
 	}
 	return spec, nil
 }
 
 // exportCommon sets the fields every spec carries, whatever the filters format.
-func exportCommon(flag map[string]any, withType bool) *Ordered {
-	spec := NewOrdered()
-	spec.Set("schema_version", number(schemaVersion))
-	spec.Set("key", flag["key"])
+func exportCommon(flag map[string]any, withType bool) agentoutput.Ordered {
+	spec := agentoutput.Ordered{}
+	spec = append(spec, agentoutput.Field{Key: "schema_version", Value: number(schemaVersion)})
+	spec = append(spec, agentoutput.Field{Key: "key", Value: flag["key"]})
 	if name, ok := flag["name"].(string); ok && name != "" {
-		spec.Set("name", name)
+		spec = append(spec, agentoutput.Field{Key: "name", Value: name})
 	}
 	if withType {
-		spec.Set("type", TypeOf(flag))
+		spec = append(spec, agentoutput.Field{Key: "type", Value: TypeOf(flag)})
 	}
-	spec.Set("active", flag["active"] == true)
+	spec = append(spec, agentoutput.Field{Key: "active", Value: flag["active"] == true})
 	for _, field := range []string{"tags", "evaluation_contexts"} {
 		if list := List(flag[field]); len(list) > 0 {
-			spec.Set(field, list)
+			spec = append(spec, agentoutput.Field{Key: field, Value: list})
 		}
 	}
 	if flag["ensure_experience_continuity"] == true {
-		spec.Set("ensure_experience_continuity", true)
+		spec = append(spec, agentoutput.Field{Key: "ensure_experience_continuity", Value: true})
 	}
 	for _, field := range []string{"evaluation_runtime", "bucketing_identifier"} {
 		if v, ok := flag[field].(string); ok && v != "" {
-			spec.Set(field, v)
+			spec = append(spec, agentoutput.Field{Key: field, Value: v})
 		}
 	}
 	return spec
@@ -93,7 +95,7 @@ func ExportConditions(groups []any) []any {
 	out := make([]any, 0, len(groups))
 	for _, item := range groups {
 		group := Object(item)
-		condition := NewOrdered()
+		condition := agentoutput.Ordered{}
 		if props := List(group["properties"]); len(props) > 0 {
 			where := make([]any, 0, len(props))
 			for _, p := range props {
@@ -104,13 +106,13 @@ func ExportConditions(groups []any) []any {
 					where = append(where, p)
 				}
 			}
-			condition.Set("where", where)
+			condition = append(condition, agentoutput.Field{Key: "where", Value: where})
 		}
 		if rollout, ok := group["rollout_percentage"]; ok {
-			condition.Set("rollout", rollout)
+			condition = append(condition, agentoutput.Field{Key: "rollout", Value: rollout})
 		}
 		if variant, ok := group["variant"]; ok && variant != nil {
-			condition.Set("variant", variant)
+			condition = append(condition, agentoutput.Field{Key: "variant", Value: variant})
 		}
 		for _, key := range slices.Sorted(maps.Keys(group)) {
 			switch key {
@@ -120,7 +122,7 @@ func ExportConditions(groups []any) []any {
 			if key == "aggregation_group_type_index" && group[key] == nil {
 				continue
 			}
-			condition.Set(key, group[key])
+			condition = append(condition, agentoutput.Field{Key: key, Value: group[key]})
 		}
 		out = append(out, condition)
 	}
@@ -131,18 +133,18 @@ func exportVariants(variants []any) []any {
 	out := make([]any, 0, len(variants))
 	for _, item := range variants {
 		variant := Object(item)
-		entry := NewOrdered()
-		entry.Set("key", variant["key"])
-		entry.Set("rollout", variant["rollout_percentage"])
+		entry := agentoutput.Ordered{}
+		entry = append(entry, agentoutput.Field{Key: "key", Value: variant["key"]})
+		entry = append(entry, agentoutput.Field{Key: "rollout", Value: variant["rollout_percentage"]})
 		if name, ok := variant["name"]; ok {
-			entry.Set("name", name)
+			entry = append(entry, agentoutput.Field{Key: "name", Value: name})
 		}
 		for _, key := range slices.Sorted(maps.Keys(variant)) {
 			switch key {
 			case "key", "rollout_percentage", "name":
 				continue
 			}
-			entry.Set(key, variant[key])
+			entry = append(entry, agentoutput.Field{Key: key, Value: variant[key]})
 		}
 		out = append(out, entry)
 	}

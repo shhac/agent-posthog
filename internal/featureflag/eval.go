@@ -12,6 +12,7 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/api"
 	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 // Evaluation engines. public calls PostHog's /flags endpoint, as an SDK would,
@@ -216,33 +217,33 @@ func decodeEvalPayload(stored any) (any, bool) {
 }
 
 // Record reports an evaluation, with the condition that matched as a spec.
-func (e *Evaluator) Record(in Subject, r Result) *flagspec.Ordered {
-	out := flagspec.NewOrdered()
-	out.Set("engine", e.engine)
-	out.Set("key", e.flag["key"])
-	out.Set("distinct_id", in.DistinctID)
+func (e *Evaluator) Record(in Subject, r Result) output.Ordered {
+	out := output.Ordered{}
+	out = append(out, output.Field{Key: "engine", Value: e.engine})
+	out = append(out, output.Field{Key: "key", Value: e.flag["key"]})
+	out = append(out, output.Field{Key: "distinct_id", Value: in.DistinctID})
 	if in.At != "" {
-		out.Set("at", in.At)
+		out = append(out, output.Field{Key: "at", Value: in.At})
 	}
-	out.Set("status", r.Status)
+	out = append(out, output.Field{Key: "status", Value: r.Status})
 	if r.Status == "error" {
-		out.Set("error", r.Error)
+		out = append(out, output.Field{Key: "error", Value: r.Error})
 		return out
 	}
-	out.Set("enabled", r.Enabled)
-	out.Set("variant", r.Variant)
+	out = append(out, output.Field{Key: "enabled", Value: r.Enabled})
+	out = append(out, output.Field{Key: "variant", Value: r.Variant})
 	if r.PayloadSet {
-		out.Set("payload", r.Payload)
+		out = append(out, output.Field{Key: "payload", Value: r.Payload})
 	}
-	out.Set("reason", r.Reason)
+	out = append(out, output.Field{Key: "reason", Value: r.Reason})
 	if r.Description != nil && r.Description != r.Reason {
-		out.Set("reason_description", r.Description)
+		out = append(out, output.Field{Key: "reason_description", Value: r.Description})
 	}
-	out.Set("condition_index", r.ConditionIndex)
+	out = append(out, output.Field{Key: "condition_index", Value: r.ConditionIndex})
 	if index, ok := r.ConditionIndex.(json.Number); ok {
 		groups := flagspec.List(flagspec.Object(e.flag["filters"])["groups"])
 		if i := flagspec.Int(index); i >= 0 && i < len(groups) {
-			out.Set("condition", flagspec.ExportConditions(groups[i : i+1])[0])
+			out = append(out, output.Field{Key: "condition", Value: flagspec.ExportConditions(groups[i : i+1])[0]})
 		}
 	}
 	return out

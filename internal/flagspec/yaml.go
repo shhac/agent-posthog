@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -114,74 +112,5 @@ func yamlScalar(node *yaml.Node) (any, error) {
 		return json.Number(strconv.FormatFloat(f, 'g', -1, 64)), nil
 	default:
 		return nil, fmt.Errorf("line %d: unsupported YAML tag %s", node.Line, node.Tag)
-	}
-}
-
-// MarshalYAML renders any JSON-encodable value as YAML, keeping numbers exact
-// and quoting strings YAML would otherwise retype.
-func MarshalYAML(v any) ([]byte, error) {
-	if ordered, ok := v.(*Ordered); ok {
-		return yaml.Marshal(ordered)
-	}
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	decoded, err := Decode(data)
-	if err != nil {
-		return nil, err
-	}
-	node, err := yamlNode(decoded)
-	if err != nil {
-		return nil, err
-	}
-	return yaml.Marshal(node)
-}
-
-// yamlNode renders decoded JSON as YAML, keeping json.Number text exact and
-// quoting strings that YAML would otherwise read as another type.
-func yamlNode(v any) (*yaml.Node, error) {
-	switch t := v.(type) {
-	case *Ordered:
-		out, err := t.MarshalYAML()
-		if err != nil {
-			return nil, err
-		}
-		return out.(*yaml.Node), nil
-	case json.Number:
-		tag := "!!int"
-		if _, err := strconv.ParseInt(t.String(), 10, 64); err != nil {
-			tag = "!!float"
-		}
-		return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: t.String()}, nil
-	case string:
-		node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: t}
-		var probe any
-		if yaml.Unmarshal([]byte(t), &probe) != nil || probe != t {
-			node.Style = yaml.DoubleQuotedStyle
-		}
-		return node, nil
-	case map[string]any:
-		ordered := NewOrdered()
-		for _, key := range slices.Sorted(maps.Keys(t)) {
-			ordered.Set(key, t[key])
-		}
-		return yamlNode(ordered)
-	case []any:
-		node := &yaml.Node{Kind: yaml.SequenceNode}
-		for _, item := range t {
-			child, err := yamlNode(item)
-			if err != nil {
-				return nil, err
-			}
-			node.Content = append(node.Content, child)
-		}
-		return node, nil
-	default:
-		node := &yaml.Node{}
-		if err := node.Encode(t); err != nil {
-			return nil, err
-		}
-		return node, nil
 	}
 }

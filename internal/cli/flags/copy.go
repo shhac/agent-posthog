@@ -10,7 +10,7 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
-	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func copyCommand(globals *shared.GlobalFlags) *cobra.Command {
@@ -68,10 +68,9 @@ func copyCommand(globals *shared.GlobalFlags) *cobra.Command {
 // writeCopy prints the copy plan or, with --yes, applies it and prints
 // PostHog's per-target report, failing the command if any target failed.
 func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOptions, format string) error {
-	result := copyReport(plan)
 	hint := copyHint(plan)
 	if !opts.apply() {
-		result.Set("hint", hint)
+		result := append(copyReport(plan, featureflag.OutcomePlanned), output.Field{Key: "hint", Value: hint})
 		return shared.WriteExact(result, format)
 	}
 	if len(plan.Blocked) > 0 {
@@ -81,40 +80,40 @@ func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOption
 	if applied == nil {
 		return err
 	}
-	result.Set("outcome", applied.Outcome)
-	result.Set("succeeded", applied.Succeeded)
-	result.Set("failed", applied.Failed)
+	result := copyReport(plan, applied.Outcome)
+	result = append(result, output.Field{Key: "succeeded", Value: applied.Succeeded})
+	result = append(result, output.Field{Key: "failed", Value: applied.Failed})
 	if writeErr := shared.WriteExact(result, format); writeErr != nil {
 		return writeErr
 	}
 	return err
 }
 
-// copyReport is the plan as the copy command reports it.
-func copyReport(plan *featureflag.CopyPlan) *flagspec.Ordered {
-	result := flagspec.NewOrdered()
-	result.Set("outcome", featureflag.OutcomePlanned)
-	result.Set("operation", "copy")
-	result.Set("key", plan.Key)
-	result.Set("from_project", plan.From)
+// copyReport is the plan as the copy command reports it, with its outcome.
+func copyReport(plan *featureflag.CopyPlan, outcome string) output.Ordered {
+	result := output.Ordered{}
+	result = append(result, output.Field{Key: "outcome", Value: outcome})
+	result = append(result, output.Field{Key: "operation", Value: "copy"})
+	result = append(result, output.Field{Key: "key", Value: plan.Key})
+	result = append(result, output.Field{Key: "from_project", Value: plan.From})
 	targets := make([]any, 0, len(plan.Targets))
 	for _, t := range plan.Targets {
-		entry := flagspec.NewOrdered()
-		entry.Set("project", t.Target.ID)
+		entry := output.Ordered{}
+		entry = append(entry, output.Field{Key: "project", Value: t.Target.ID})
 		if t.Target.Alias != "" {
-			entry.Set("alias", t.Target.Alias)
+			entry = append(entry, output.Field{Key: "alias", Value: t.Target.Alias})
 		}
-		entry.Set("action", t.Action)
+		entry = append(entry, output.Field{Key: "action", Value: t.Action})
 		if t.Action == "overwrite" {
-			entry.Set("differences", relabel(t.Differences, "source", "target"))
+			entry = append(entry, output.Field{Key: "differences", Value: relabel(t.Differences, "source", "target")})
 		}
 		targets = append(targets, entry)
 	}
-	result.Set("targets", targets)
+	result = append(result, output.Field{Key: "targets", Value: targets})
 	if plan.Dependencies != nil {
-		result.Set("dependencies", plan.Dependencies)
+		result = append(result, output.Field{Key: "dependencies", Value: plan.Dependencies})
 	}
-	result.Set("warnings", plan.Warnings)
+	result = append(result, output.Field{Key: "warnings", Value: plan.Warnings})
 	return result
 }
 

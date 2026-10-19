@@ -1,6 +1,11 @@
 package flagspec
 
-import "fmt"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // BooleanPayloadKey is the filters.payloads key of a boolean or remote_config
 // flag's single payload.
@@ -42,11 +47,14 @@ func DecodePayload(stored any) (any, error) {
 	return value, nil
 }
 
-// encodePayload JSON-encodes a payload value for filters.payloads.
+// encodePayload JSON-encodes a payload value for filters.payloads, leaving
+// characters such as < and & as they are, as PostHog stores them.
 func encodePayload(value any) (string, error) {
-	data, err := marshalUnescaped(value)
-	if err != nil {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
 		return "", err
 	}
-	return string(data), nil
+	return strings.TrimSuffix(buf.String(), "\n"), nil
 }

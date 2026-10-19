@@ -5,7 +5,6 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/shhac/agent-posthog/internal/flagspec"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
@@ -66,15 +65,7 @@ func WriteExact(v any, flagFormat string) error {
 	if err != nil {
 		return err
 	}
-	if format != output.FormatYAML {
-		return output.PrintExact(v, format)
-	}
-	data, err := flagspec.MarshalYAML(v)
-	if err != nil {
-		return err
-	}
-	_, err = output.Stdout().Write(data)
-	return err
+	return output.PrintExact(v, format)
 }
 
 // WriteExactList is WriteExact for a list: NDJSON records then one line per
@@ -86,10 +77,10 @@ func WriteExactList(items []any, meta map[string]any, flagFormat string) error {
 	}
 	keys := slices.Sorted(maps.Keys(meta))
 	if format != output.FormatNDJSON {
-		envelope := flagspec.NewOrdered()
-		envelope.Set("data", items)
+		envelope := output.Ordered{}
+		envelope = append(envelope, output.Field{Key: "data", Value: items})
 		for _, key := range keys {
-			envelope.Set(key, meta[key])
+			envelope = append(envelope, output.Field{Key: key, Value: meta[key]})
 		}
 		return WriteExact(envelope, flagFormat)
 	}

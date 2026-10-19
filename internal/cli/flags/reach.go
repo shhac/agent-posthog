@@ -7,7 +7,7 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
-	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func reachCommand(globals *shared.GlobalFlags) *cobra.Command {
@@ -32,12 +32,12 @@ func reachCommand(globals *shared.GlobalFlags) *cobra.Command {
 				}
 				lines := make([]any, 0, len(reaches))
 				for _, r := range reaches {
-					line := flagspec.NewOrdered()
-					line.Set("index", r.Index)
-					line.Set("matching", r.Matching)
-					line.Set("total", r.Total)
-					line.Set("rollout", r.Rollout)
-					line.Set("aggregation_group_type_index", r.Aggregation)
+					line := output.Ordered{}
+					line = append(line, output.Field{Key: "index", Value: r.Index})
+					line = append(line, output.Field{Key: "matching", Value: r.Matching})
+					line = append(line, output.Field{Key: "total", Value: r.Total})
+					line = append(line, output.Field{Key: "rollout", Value: r.Rollout})
+					line = append(line, output.Field{Key: "aggregation_group_type_index", Value: r.Aggregation})
 					lines = append(lines, line)
 				}
 				note := "matching counts users whose properties pass a condition's filters, before its rollout; conditions overlap, so do not sum them"

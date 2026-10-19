@@ -7,6 +7,7 @@ import (
 
 	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/flagspec"
+	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
@@ -29,15 +30,15 @@ func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				result := flagspec.NewOrdered()
-				result.Set("key", c.Key)
-				result.Set("project", c.Project)
-				result.Set("against", c.Against)
-				result.Set("exists_in_against", c.Exists)
-				result.Set("identical", c.Identical())
-				result.Set("differences", relabel(c.Differences, "project", "against"))
+				result := output.Ordered{}
+				result = append(result, output.Field{Key: "key", Value: c.Key})
+				result = append(result, output.Field{Key: "project", Value: c.Project})
+				result = append(result, output.Field{Key: "against", Value: c.Against})
+				result = append(result, output.Field{Key: "exists_in_against", Value: c.Exists})
+				result = append(result, output.Field{Key: "identical", Value: c.Identical()})
+				result = append(result, output.Field{Key: "differences", Value: relabel(c.Differences, "project", "against")})
 				if len(c.Warnings) > 0 {
-					result.Set("warnings", c.Warnings)
+					result = append(result, output.Field{Key: "warnings", Value: c.Warnings})
 				}
 				return shared.WriteExact(result, globals.Format)
 			})
@@ -52,10 +53,10 @@ func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
 func relabel(changes []flagspec.Change, this, other string) []any {
 	out := make([]any, 0, len(changes))
 	for _, change := range changes {
-		entry := flagspec.NewOrdered()
-		entry.Set("path", change.Path)
-		entry.Set(this, change.Before)
-		entry.Set(other, change.After)
+		entry := output.Ordered{}
+		entry = append(entry, output.Field{Key: "path", Value: change.Path})
+		entry = append(entry, output.Field{Key: this, Value: change.Before})
+		entry = append(entry, output.Field{Key: other, Value: change.After})
 		out = append(out, entry)
 	}
 	return out
