@@ -203,19 +203,23 @@ func writeQueryNDJSON(raw json.RawMessage) error {
 	}
 	columns, _ := payload["columns"].([]any)
 	for _, row := range results {
-		if rowValues, ok := row.([]any); ok && len(columns) == len(rowValues) {
-			record := map[string]any{}
-			for i, col := range columns {
-				record[fmt.Sprint(col)] = rowValues[i]
-			}
-			if err := writer.WriteItem(record); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := writer.WriteItem(row); err != nil {
+		if err := writer.WriteItem(rowRecord(row, columns)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// rowRecord names a result row's values by column, or keeps the row as it is
+// when it does not line up with the columns.
+func rowRecord(row any, columns []any) any {
+	values, ok := row.([]any)
+	if !ok || len(values) != len(columns) {
+		return row
+	}
+	record := make(map[string]any, len(columns))
+	for i, column := range columns {
+		record[fmt.Sprint(column)] = values[i]
+	}
+	return record
 }

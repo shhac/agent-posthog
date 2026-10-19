@@ -121,17 +121,18 @@ func evaluateFlag(flag map[string]any, props map[string]any) (evaluation, error)
 		if !matched {
 			continue
 		}
-		rollout := group["rollout_percentage"]
-		inRollout := rollout == nil || toInt(rollout) == 100
-		if !inRollout && toInt(rollout) != 0 {
-			return evaluation{}, fmt.Errorf("mock evaluator does not support rollout %v", rollout)
-		}
-		if !inRollout {
+		// The mock serves all-or-nothing rollouts only; anything between is
+		// not something it can bucket.
+		switch rollout := group["rollout_percentage"]; {
+		case rollout == nil || toInt(rollout) == 100:
+		case toInt(rollout) == 0:
 			reason = "out_of_rollout_bound"
 			if filters["early_exit"] == true {
 				return evaluation{reason: reason, conditionIndex: i}, nil
 			}
 			continue
+		default:
+			return evaluation{}, fmt.Errorf("mock evaluator does not support rollout %v", rollout)
 		}
 		result := evaluation{enabled: true, reason: "condition_match", conditionIndex: i}
 		payloadKey := "true"

@@ -60,7 +60,7 @@ func handlePreflight(w http.ResponseWriter, r *http.Request) bool {
 		})
 		return true
 	}
-	if path == "/api/mock/rate_limit" || strings.Contains(path, "rate_limit") {
+	if strings.Contains(path, "rate_limit") {
 		w.Header().Set("Retry-After", "0")
 		writeStatus(w, http.StatusTooManyRequests, map[string]any{
 			"type":   "throttled_error",
