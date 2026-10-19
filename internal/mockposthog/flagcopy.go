@@ -17,38 +17,10 @@ func (s *flagStore) copyFlags(w http.ResponseWriter, r *http.Request) {
 	}
 	success, failed := []any{}, []any{}
 	for _, target := range asList(body["target_project_ids"]) {
-		project := toInt(target)
-		if project == approvalProject {
-			failed = append(failed, map[string]any{"project_id": project, "error_message": "Approval required.", "approval_pending": true, "change_request_id": "cr_copy"})
+		item, failure := s.copyInto(toInt(target), key, source, body)
+		if failure != nil {
+			failed = append(failed, failure)
 			continue
-		}
-		flags, ok := s.flags[project]
-		if !ok {
-			failed = append(failed, map[string]any{"project_id": project, "error_message": "Project not found."})
-			continue
-		}
-		existing := findByKey(flags, key)
-		active := source["active"] == true && body["disable_copied_flag"] != true
-		if existing == nil {
-			s.nextID++
-			existing = withFlagDefaults(map[string]any{"id": s.nextID, "key": key, "version": 0})
-			flags[s.nextID] = existing
-		}
-		existing["name"] = source["name"]
-		existing["filters"] = cloneMap(asObject(source["filters"]))
-		existing["active"] = active
-		existing["is_remote_configuration"] = source["is_remote_configuration"]
-		existing["version"] = toInt(existing["version"]) + 1
-		item := map[string]any{
-			"id": existing["id"], "key": key, "name": existing["name"], "active": active,
-			"team_id": project, "updated_existing": toInt(existing["version"]) > 1,
-		}
-		if body["copy_dependencies"] != true && hasFlagDependency(source) {
-			item["flag_dependency_warnings"] = []any{"Dropped a dependency on a flag the target project lacks; the copy is disabled."}
-			item["active"], existing["active"] = false, false
-		}
-		if body["copy_schedule"] == true {
-			item["schedule_copy_warning"] = "Existing schedules in the target project were kept."
 		}
 		success = append(success, item)
 	}
@@ -60,4 +32,40 @@ func dependencyRequirements(w http.ResponseWriter) {
 		"can_copy_dependencies": true, "dependency_count": 0, "copied_dependency_keys": []any{},
 		"reused_dependency_keys": []any{}, "warnings": []any{}, "reason": "",
 	})
+}
+
+// copyInto copies source into project, creating or overwriting the flag with
+// key there, and reports the copy or why it failed.
+func (s *flagStore) copyInto(project int, key string, source, body map[string]any) (item, failure map[string]any) {
+	if project == approvalProject {
+		return nil, map[string]any{"project_id": project, "error_message": "Approval required.", "approval_pending": true, "change_request_id": "cr_copy"}
+	}
+	flags, ok := s.flags[project]
+	if !ok {
+		return nil, map[string]any{"project_id": project, "error_message": "Project not found."}
+	}
+	existing := findByKey(flags, key)
+	active := source["active"] == true && body["disable_copied_flag"] != true
+	if existing == nil {
+		s.nextID++
+		existing = withFlagDefaults(map[string]any{"id": s.nextID, "key": key, "version": 0})
+		flags[s.nextID] = existing
+	}
+	existing["name"] = source["name"]
+	existing["filters"] = cloneMap(asObject(source["filters"]))
+	existing["active"] = active
+	existing["is_remote_configuration"] = source["is_remote_configuration"]
+	existing["version"] = toInt(existing["version"]) + 1
+	item = map[string]any{
+		"id": existing["id"], "key": key, "name": existing["name"], "active": active,
+		"team_id": project, "updated_existing": toInt(existing["version"]) > 1,
+	}
+	if body["copy_dependencies"] != true && hasFlagDependency(source) {
+		item["flag_dependency_warnings"] = []any{"Dropped a dependency on a flag the target project lacks; the copy is disabled."}
+		item["active"], existing["active"] = false, false
+	}
+	if body["copy_schedule"] == true {
+		item["schedule_copy_warning"] = "Existing schedules in the target project were kept."
+	}
+	return item, nil
 }

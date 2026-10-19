@@ -14,12 +14,7 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	project := 0
-	for p, token := range projectTokens {
-		if body["api_key"] == token {
-			project = p
-		}
-	}
+	project := projectForToken(body["api_key"])
 	if project == 0 {
 		writeStatus(w, http.StatusUnauthorized, map[string]any{"type": "authentication_error", "detail": "Project API key invalid."})
 		return
@@ -47,23 +42,8 @@ func (s *flagStore) handlePublicFlags(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		result, err := evaluateFlag(flag, props)
-		if err != nil {
-			failures = true
-			out[fmt.Sprint(flag["key"])] = map[string]any{
-				"key": flag["key"], "enabled": false, "variant": nil, "failed": true,
-				"reason": map[string]any{"code": "evaluation_error", "description": err.Error()},
-			}
-			continue
-		}
-		var variant any
-		if result.variant != "" {
-			variant = result.variant
-		}
-		out[fmt.Sprint(flag["key"])] = map[string]any{
-			"key": flag["key"], "enabled": result.enabled, "variant": variant, "failed": false,
-			"reason":   map[string]any{"code": result.reason, "condition_index": result.conditionIndex, "description": result.reason},
-			"metadata": map[string]any{"id": flag["id"], "version": flag["version"], "payload": result.payload},
-		}
+		failures = failures || err != nil
+		out[fmt.Sprint(flag["key"])] = flagsEntry(flag, result, err)
 	}
 	write(w, map[string]any{"flags": out, "errorsWhileComputingFlags": failures, "requestId": "req_mock"})
 }
@@ -256,4 +236,33 @@ func servedByFlags(flag, body map[string]any) bool {
 		return false
 	}
 	return requested(flag, asList(body["flag_keys"])) && contextsMatch(flag, asList(body["evaluation_contexts"]))
+}
+
+// projectForToken is the project a /flags project token belongs to, or 0.
+func projectForToken(token any) int {
+	for project, t := range projectTokens {
+		if token == t {
+			return project
+		}
+	}
+	return 0
+}
+
+// flagsEntry is one flag's entry in a /flags response.
+func flagsEntry(flag map[string]any, result evaluation, err error) map[string]any {
+	if err != nil {
+		return map[string]any{
+			"key": flag["key"], "enabled": false, "variant": nil, "failed": true,
+			"reason": map[string]any{"code": "evaluation_error", "description": err.Error()},
+		}
+	}
+	var variant any
+	if result.variant != "" {
+		variant = result.variant
+	}
+	return map[string]any{
+		"key": flag["key"], "enabled": result.enabled, "variant": variant, "failed": false,
+		"reason":   map[string]any{"code": result.reason, "condition_index": result.conditionIndex, "description": result.reason},
+		"metadata": map[string]any{"id": flag["id"], "version": flag["version"], "payload": result.payload},
+	}
 }
