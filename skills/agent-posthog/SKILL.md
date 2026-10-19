@@ -123,6 +123,12 @@ agent-posthog flags early-exit <id-or-key> on --yes
 
 - `archive` disables in the same write (PostHog requires it); `unarchive`
   leaves the flag disabled.
+- To have a person review a change before it runs, save it:
+  `--save-plan plan.json` writes the exact patch, and
+  `flags apply-plan --file plan.json --yes` applies exactly that patch, refused
+  if the flag changed since (edits to existing flags only).
+- Plans warn when active flags depend on the one being disabled, archived, or
+  deleted, and when an enable depends on a disabled flag.
 - An approval policy refusal is `fixable_by: human` and names the change
   request; a stale-version conflict is `fixable_by: agent`: re-read and decide again.
 - Flag references: `id:<n>` or `key:<k>` say which you mean. A bare number is

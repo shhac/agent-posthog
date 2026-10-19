@@ -149,6 +149,9 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 			if opts.ifVersion != noVersion {
 				return agenterrors.New("copy does not support --if-version: PostHog's copy cannot check the target's version", agenterrors.FixableByAgent)
 			}
+			if err := opts.refuseSavePlan("copy"); err != nil {
+				return err
+			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				if err := requireProject(resolved); err != nil {
 					return err

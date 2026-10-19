@@ -32,6 +32,7 @@ func registerFlagWrites(flags *cobra.Command, globals *GlobalFlags) {
 		return fieldPatch("deleted", true)
 	}))
 	flags.AddCommand(restoreCommand(globals))
+	flags.AddCommand(applyPlanCommand(globals))
 	flags.AddCommand(earlyExitCommand(globals))
 }
 
@@ -127,6 +128,9 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Restore a soft-deleted feature flag by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := opts.refuseSavePlan("restore"); err != nil {
+				return err
+			}
 			ref, _, err := parseFlagRef(args[0])
 			if err != nil || ref == "" {
 				return agenterrors.New("restore needs the numeric flag ID; deleted flags cannot be looked up by key", agenterrors.FixableByAgent)

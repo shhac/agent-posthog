@@ -183,6 +183,9 @@ func parseVariantArgs(args []string) ([]any, error) {
 }
 
 func createFlag(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, spec *flagspec.Spec, opts writeOptions) error {
+	if err := opts.refuseSavePlan("create"); err != nil {
+		return err
+	}
 	patch, err := flagspec.Build(nil, spec, flagResolver(ctx, resolved, resolved.ProjectID))
 	if err != nil {
 		return agenterrors.Wrap(err, agenterrors.FixableByAgent)

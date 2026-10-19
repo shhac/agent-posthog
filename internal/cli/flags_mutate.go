@@ -24,6 +24,7 @@ type writeOptions struct {
 	yes       bool
 	dryRun    bool
 	ifVersion int
+	savePlan  string
 }
 
 const noVersion = -1
@@ -32,6 +33,16 @@ func addWriteFlags(cmd *cobra.Command, opts *writeOptions) {
 	cmd.Flags().BoolVar(&opts.yes, "yes", false, "Apply the change; without it the plan is printed and nothing is written")
 	cmd.Flags().BoolVar(&opts.dryRun, "dry-run", false, "Print the plan without writing, even with --yes")
 	cmd.Flags().IntVar(&opts.ifVersion, "if-version", noVersion, "Refuse unless the flag is still at this version (from your last read)")
+	cmd.Flags().StringVar(&opts.savePlan, "save-plan", "", "Write the planned change to this file for 'flags apply-plan' instead of applying it")
+}
+
+// refuseSavePlan is for writes that saved plans do not cover (creates, copies,
+// restores): they have no existing flag version to hold the plan to.
+func (o writeOptions) refuseSavePlan(operation string) error {
+	if o.savePlan == "" {
+		return nil
+	}
+	return agenterrors.New("--save-plan covers edits to an existing flag, not "+operation, agenterrors.FixableByAgent)
 }
 
 func (o writeOptions) apply() bool { return o.yes && !o.dryRun }
@@ -104,6 +115,9 @@ func updateFlagVia(ctx context.Context, resolved *resolvedContext, globals *Glob
 	r := newReceipt(operation, resolved, flag)
 	r.Changes = flagspec.Changes(flag, patch)
 	r.Warnings = warnings
+	if opts.savePlan != "" {
+		return savePlan(r, patch, opts, globals.Format)
+	}
 	return commitWrite(r, opts, globals.Format, func() (json.RawMessage, error) {
 		return checkStored(r, patch, func() (json.RawMessage, error) { return send(ctx, flag, patch) })
 	})
