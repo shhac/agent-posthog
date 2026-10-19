@@ -45,11 +45,7 @@ func fetchFlagRecord(ctx context.Context, resolved *shared.Resolved, ref string)
 	if err != nil {
 		return nil, err
 	}
-	id, err := p.ResolveID(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := p.Get(ctx, id)
+	_, raw, err := p.Read(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +59,7 @@ func flagSubresourceCommand(globals *shared.GlobalFlags, use, short, subresource
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				id, err := p.ResolveID(ctx, args[0])
-				if err != nil {
-					return err
-				}
-				raw, err := p.Get(ctx, id, subresource)
+				_, raw, err := p.Read(ctx, args[0], subresource)
 				if err != nil {
 					return err
 				}

@@ -107,11 +107,7 @@ func investigateFlag(globals *shared.GlobalFlags) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return flags.WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
-				id, err := p.ResolveID(ctx, args[0])
-				if err != nil {
-					return err
-				}
-				raw, err := p.Get(ctx, id)
+				id, raw, err := p.Read(ctx, args[0])
 				if err != nil {
 					return err
 				}

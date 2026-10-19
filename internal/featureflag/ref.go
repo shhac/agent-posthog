@@ -67,14 +67,21 @@ func (p Project) Get(ctx context.Context, id string, subresource ...string) (jso
 	return p.Client.Get(ctx, p.flagPath(id, subresource...), nil)
 }
 
+// Read resolves a flag reference and reads the flag, or one of its
+// subresources, as PostHog returns it, with the ID it resolved to.
+func (p Project) Read(ctx context.Context, ref string, subresource ...string) (string, json.RawMessage, error) {
+	id, err := p.ResolveID(ctx, ref)
+	if err != nil {
+		return "", nil, err
+	}
+	raw, err := p.Get(ctx, id, subresource...)
+	return id, raw, err
+}
+
 // Fetch resolves and reads a flag with lossless number decoding, for callers
 // that write back what they read.
 func (p Project) Fetch(ctx context.Context, ref string) (map[string]any, error) {
-	id, err := p.ResolveID(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := p.Get(ctx, id)
+	_, raw, err := p.Read(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
