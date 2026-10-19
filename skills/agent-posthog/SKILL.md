@@ -163,3 +163,27 @@ types (group properties) go in a spec as raw PostHog property objects.
 Rule → JSON config is a **multivariate** flag: conditions pick a variant with
 `variant:`, and each variant carries its payload. `remote_config` serves one
 payload to everyone and ignores conditions.
+
+### Narrow edits
+
+```bash
+agent-posthog flags conditions list beta-gate          # index + version per condition
+agent-posthog flags conditions add beta-gate --where "app_env = staging" --yes   # appends
+agent-posthog flags conditions add beta-gate --where "email = qa@x.com" --at 0 --if-version 3 --yes
+agent-posthog flags conditions set beta-gate 1 --rollout 25 --if-version 3 --yes
+agent-posthog flags conditions set beta-gate 0 --where "plan = pro" --variant debug --if-version 4 --yes
+agent-posthog flags conditions move beta-gate 2 0 --if-version 5 --yes   # <to> is the final index
+agent-posthog flags conditions remove beta-gate 1 --if-version 6 --yes
+agent-posthog flags variants set checkout-config debug=0 default=100 --yes
+agent-posthog flags payload set checkout-config --variant debug --json '{"logLevel":"debug"}' --yes
+agent-posthog flags payload get|unset <id-or-key> [--variant v]
+```
+
+Edits that address a condition by index (`set`, `remove`, `move`, `add --at`)
+need `--if-version` from your last `conditions list`, so a reorder by someone
+else cannot make you edit the wrong condition. A rollout-only `set` uses
+PostHog's strict endpoint. `--where` on `set` replaces that condition's
+filters; `--clear-where` makes it match everyone; `--no-variant` drops the
+override. `variants set` drops payloads of removed variants and refuses while
+a condition still overrides a removed variant. Encrypted payloads are never
+edited.

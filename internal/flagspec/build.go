@@ -160,7 +160,7 @@ func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, 
 			if !variantKeys[key] {
 				return fmt.Errorf("payload %q does not name a variant", key)
 			}
-			encoded, err := keepOrEncode(stored[key], value)
+			encoded, err := KeepOrEncode(stored[key], value)
 			if err != nil {
 				return fmt.Errorf("payload %q: %w", key, err)
 			}
@@ -174,7 +174,7 @@ func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, 
 		if encrypted {
 			return fmt.Errorf("encrypted payloads cannot be changed through agent-posthog")
 		}
-		encoded, err := keepOrEncode(stored["true"], spec.Get("payload"))
+		encoded, err := KeepOrEncode(stored["true"], spec.Get("payload"))
 		if err != nil {
 			return fmt.Errorf("payload: %w", err)
 		}
@@ -193,9 +193,9 @@ func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, 
 	return nil
 }
 
-// keepOrEncode reuses the stored payload string when it already holds value,
+// KeepOrEncode reuses the stored payload string when it already holds value,
 // so untouched payloads are not re-encoded.
-func keepOrEncode(stored, value any) (any, error) {
+func KeepOrEncode(stored, value any) (any, error) {
 	if stored != nil {
 		if decoded, err := DecodePayload(stored); err == nil && Equal(decoded, value) {
 			return stored, nil

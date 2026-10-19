@@ -248,6 +248,7 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	flags.AddCommand(flagGetCommand(globals, "activity <id-or-key>", "Get feature flag activity", "activity"))
 	registerFlagWrites(flags, globals)
 	registerFlagSpecCommands(flags, globals)
+	registerFlagEditCommands(flags, globals)
 	root.AddCommand(flags)
 }
 

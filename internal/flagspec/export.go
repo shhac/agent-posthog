@@ -165,7 +165,7 @@ func Export(flag map[string]any) (*Ordered, error) {
 		}
 	}
 	if flagType != TypeRemoteConfig {
-		spec.Set("conditions", exportConditions(asSlice(filters["groups"])))
+		spec.Set("conditions", ExportConditions(asSlice(filters["groups"])))
 	}
 	if flagType == TypeMultivariate {
 		spec.Set("variants", exportVariants(asSlice(asMap(filters["multivariate"])["variants"])))
@@ -195,7 +195,8 @@ func Export(flag map[string]any) (*Ordered, error) {
 	return spec, nil
 }
 
-func exportConditions(groups []any) []any {
+// ExportConditions renders condition groups in spec form.
+func ExportConditions(groups []any) []any {
 	out := make([]any, 0, len(groups))
 	for _, item := range groups {
 		group := asMap(item)
