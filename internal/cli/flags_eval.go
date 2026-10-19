@@ -190,7 +190,7 @@ func interpretFlags(resp, flag map[string]any) evalResult {
 	case !returned && resp["errorsWhileComputingFlags"] == true:
 		return evalResult{Status: "error", Error: "PostHog reported errors while computing flags and did not return this one"}
 	case !returned:
-		return evalResult{Status: "error", Error: "PostHog did not return this flag; its evaluation runtime or contexts may exclude this request"}
+		return evalResult{Status: "error", Error: "PostHog did not return this flag; a change made in the last few seconds may not have reached /flags yet, or its evaluation runtime or contexts exclude this request"}
 	case detail["failed"] == true:
 		return evalResult{Status: "error", Error: fmt.Sprint("evaluation failed: ", asObject(detail["reason"])["description"])}
 	}

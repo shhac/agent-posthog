@@ -59,13 +59,15 @@ func (p *Patch) Prune(current map[string]any) {
 	}
 }
 
-// normalizeGroups treats a null variant like a missing one; they evaluate the same.
+// normalizeGroups treats null defaults like missing keys; they evaluate the same.
 func normalizeGroups(v any) any {
 	groups := asSlice(Clone(v))
 	for _, item := range groups {
 		group := asMap(item)
-		if variant, ok := group["variant"]; ok && variant == nil {
-			delete(group, "variant")
+		for _, key := range nullAsAbsentGroupKeys {
+			if value, ok := group[key]; ok && value == nil {
+				delete(group, key)
+			}
 		}
 	}
 	if groups == nil {
@@ -73,6 +75,10 @@ func normalizeGroups(v any) any {
 	}
 	return groups
 }
+
+// nullAsAbsentGroupKeys are condition keys PostHog stores as null by default,
+// so a null and a missing key describe the same condition.
+var nullAsAbsentGroupKeys = []string{"variant", "aggregation_group_type_index"}
 
 // Result is the flag as it would be after the patch: fields replaced, filter
 // sections merged shallowly (a nil section cleared), as PostHog applies it.

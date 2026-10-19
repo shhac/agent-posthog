@@ -146,6 +146,7 @@ func (s *flagStore) create(w http.ResponseWriter, r *http.Request, project int) 
 	}
 	s.nextID++
 	flag := withFlagDefaults(body)
+	storeNullDefaults(flag)
 	flag["id"] = s.nextID
 	flag["version"] = 1
 	if _, ok := body["active"]; !ok {
@@ -213,6 +214,7 @@ func (s *flagStore) patch(w http.ResponseWriter, r *http.Request, flag map[strin
 			}
 		}
 	}
+	storeNullDefaults(updated)
 	if updated["archived"] == true && updated["active"] == true {
 		validationError(w, "archived", "Disable the feature flag before archiving it.")
 		return
@@ -245,6 +247,17 @@ func (s *flagStore) patchV2(w http.ResponseWriter, body, flag map[string]any) {
 	}
 	flag["version"] = toInt(flag["version"]) + 1
 	write(w, flag)
+}
+
+// storeNullDefaults fills condition keys PostHog writes as null when a
+// request leaves them out.
+func storeNullDefaults(flag map[string]any) {
+	for _, group := range asList(asObject(flag["filters"])["groups"]) {
+		g := asObject(group)
+		if _, ok := g["aggregation_group_type_index"]; !ok {
+			g["aggregation_group_type_index"] = nil
+		}
+	}
 }
 
 func hasFlagDependency(flag map[string]any) bool {

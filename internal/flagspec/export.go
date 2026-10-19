@@ -117,6 +117,9 @@ func ExportConditions(groups []any) []any {
 			case "properties", "rollout_percentage", "variant":
 				continue
 			}
+			if key == "aggregation_group_type_index" && group[key] == nil {
+				continue
+			}
 			condition.Set(key, group[key])
 		}
 		out = append(out, condition)

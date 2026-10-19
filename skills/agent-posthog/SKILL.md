@@ -231,7 +231,9 @@ and `payload` must match exactly:
 It prints one line per case (`pass`, `fail` with mismatches, or `error`), then
 `@summary`, and exits 1 unless every case passes. An `error` means PostHog could
 not evaluate the flag; it is never a false result. Tests evaluate the **saved**
-flag: a disabled flag is false for everyone. `distinct_id` defaults to
+flag: a disabled flag is false for everyone. A change takes a few seconds to
+reach `/flags`, so a suite run right after a write may report "did not return
+this flag" errors; wait a moment and run it again. `distinct_id` defaults to
 `agent-posthog-test:<name>`, keeping percentage rollouts stable.
 
 `reach` counts users whose properties pass each condition's filters before
