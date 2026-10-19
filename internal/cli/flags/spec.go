@@ -70,12 +70,17 @@ func applyCommand(globals *shared.GlobalFlags) *cobra.Command {
 	return cmd
 }
 
+// createFlags are the inputs of 'flags create'.
+type createFlags struct {
+	flagType, name, payloadJSON     string
+	active                          bool
+	variants, tags, contexts, where []string
+	rollout                         float64
+}
+
 func createCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
-	var flagType, name, payloadJSON string
-	var active bool
-	var variants, tags, contexts, where []string
-	var rollout float64
+	var f createFlags
 	cmd := &cobra.Command{
 		Use:   "create <key>",
 		Short: "Create a feature flag (inactive unless --active)",
@@ -83,39 +88,9 @@ func createCommand(globals *shared.GlobalFlags) *cobra.Command {
 			"Add more conditions afterwards with 'flags conditions add', or create from a full spec with 'flags apply'.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fields := map[string]any{"key": args[0], "type": flagType, "active": active}
-			if name != "" {
-				fields["name"] = name
-			}
-			if len(tags) > 0 {
-				fields["tags"] = tags
-			}
-			if len(contexts) > 0 {
-				fields["evaluation_contexts"] = contexts
-			}
-			if flagType != flagspec.TypeRemoteConfig {
-				fields["conditions"] = []any{map[string]any{"where": append([]string{}, where...), "rollout": rollout}}
-			} else if len(where) > 0 || cmd.Flags().Changed("rollout") {
-				return agenterrors.New("remote_config flags serve one payload to everyone; drop --where and --rollout", agenterrors.FixableByAgent)
-			}
-			if len(variants) > 0 {
-				parsed, err := parseVariantArgs(variants)
-				if err != nil {
-					return err
-				}
-				fields["variants"] = parsed
-			}
-			if payloadJSON != "" {
-				payload, err := flagspec.Decode([]byte(payloadJSON))
-				if err != nil {
-					return agenterrors.New("--payload-json is not valid JSON: "+err.Error(), agenterrors.FixableByAgent)
-				}
-				fields["payload"] = payload
-			}
-			data, _ := json.Marshal(fields)
-			spec, err := flagspec.ParseSpec(data)
+			spec, err := f.spec(args[0], cmd.Flags().Changed("rollout"))
 			if err != nil {
-				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
+				return err
 			}
 			if err := opts.refuseSavePlan("create"); err != nil {
 				return err
@@ -125,17 +100,57 @@ func createCommand(globals *shared.GlobalFlags) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&flagType, "type", flagspec.TypeBoolean, "boolean (gate), multivariate (variants with payloads), or remote_config (one payload for everyone)")
-	cmd.Flags().StringVar(&name, "name", "", "Description shown in PostHog")
-	cmd.Flags().BoolVar(&active, "active", false, "Create the flag enabled")
-	cmd.Flags().StringArrayVar(&where, "where", nil, "Condition filter, e.g. 'email icontains @example.com'; repeat to AND")
-	cmd.Flags().Float64Var(&rollout, "rollout", 100, "Percent of matching users the condition serves")
-	cmd.Flags().StringArrayVar(&variants, "variant", nil, "Variant as key=percent (multivariate); repeat, percents sum to 100")
-	cmd.Flags().StringVar(&payloadJSON, "payload-json", "", "Payload JSON for boolean and remote_config flags")
-	cmd.Flags().StringArrayVar(&tags, "tag", nil, "Tag; repeat (some projects require one)")
-	cmd.Flags().StringArrayVar(&contexts, "evaluation-context", nil, "Evaluation context; repeat (some projects require one)")
+	cmd.Flags().StringVar(&f.flagType, "type", flagspec.TypeBoolean, "boolean (gate), multivariate (variants with payloads), or remote_config (one payload for everyone)")
+	cmd.Flags().StringVar(&f.name, "name", "", "Description shown in PostHog")
+	cmd.Flags().BoolVar(&f.active, "active", false, "Create the flag enabled")
+	cmd.Flags().StringArrayVar(&f.where, "where", nil, "Condition filter, e.g. 'email icontains @example.com'; repeat to AND")
+	cmd.Flags().Float64Var(&f.rollout, "rollout", 100, "Percent of matching users the condition serves")
+	cmd.Flags().StringArrayVar(&f.variants, "variant", nil, "Variant as key=percent (multivariate); repeat, percents sum to 100")
+	cmd.Flags().StringVar(&f.payloadJSON, "payload-json", "", "Payload JSON for boolean and remote_config flags")
+	cmd.Flags().StringArrayVar(&f.tags, "tag", nil, "Tag; repeat (some projects require one)")
+	cmd.Flags().StringArrayVar(&f.contexts, "evaluation-context", nil, "Evaluation context; repeat (some projects require one)")
 	addWriteFlags(cmd, &opts)
 	return cmd
+}
+
+// spec is the flag the inputs describe, as a spec for key.
+func (f createFlags) spec(key string, rolloutChanged bool) (*flagspec.Spec, error) {
+	if f.flagType == flagspec.TypeRemoteConfig && (len(f.where) > 0 || rolloutChanged) {
+		return nil, agenterrors.New("remote_config flags serve one payload to everyone; drop --where and --rollout", agenterrors.FixableByAgent)
+	}
+	fields := map[string]any{"key": key, "type": f.flagType, "active": f.active}
+	if f.name != "" {
+		fields["name"] = f.name
+	}
+	if len(f.tags) > 0 {
+		fields["tags"] = f.tags
+	}
+	if len(f.contexts) > 0 {
+		fields["evaluation_contexts"] = f.contexts
+	}
+	if f.flagType != flagspec.TypeRemoteConfig {
+		fields["conditions"] = []any{map[string]any{"where": append([]string{}, f.where...), "rollout": f.rollout}}
+	}
+	if len(f.variants) > 0 {
+		parsed, err := parseVariantArgs(f.variants)
+		if err != nil {
+			return nil, err
+		}
+		fields["variants"] = parsed
+	}
+	if f.payloadJSON != "" {
+		payload, err := flagspec.Decode([]byte(f.payloadJSON))
+		if err != nil {
+			return nil, agenterrors.New("--payload-json is not valid JSON: "+err.Error(), agenterrors.FixableByAgent)
+		}
+		fields["payload"] = payload
+	}
+	data, _ := json.Marshal(fields)
+	spec, err := flagspec.ParseSpec(data)
+	if err != nil {
+		return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
+	}
+	return spec, nil
 }
 
 func parseVariantArgs(args []string) ([]any, error) {
