@@ -24,7 +24,7 @@ func exactRoutes(store *flagStore) []route {
 			write(w, map[string]any{"id": "org_1", "name": "Acme", "slug": "acme"})
 		}},
 		{http.MethodGet, "/api/organizations/org_1/projects/", func(w http.ResponseWriter, r *http.Request) {
-			writePage(w, r, []any{map[string]any{"id": 123, "name": "Website", "timezone": "UTC"}})
+			writePage(w, r, []any{map[string]any{"id": 123, "name": "Website", "timezone": "UTC", "api_token": projectTokens[123]}})
 		}},
 		{http.MethodGet, "/api/organizations/org_1/projects/123/", func(w http.ResponseWriter, r *http.Request) {
 			write(w, map[string]any{"id": 123, "name": "Website", "timezone": "UTC", "api_token": projectTokens[123]})

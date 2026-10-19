@@ -353,3 +353,40 @@ func TestRawPostOnlySkipsYesForRealQueryEndpoints(t *testing.T) {
 		t.Fatalf("a dot-segment path must be refused before it is sent: %s", errOut)
 	}
 }
+
+func TestListCommandsRedactSecrets(t *testing.T) {
+	for _, args := range [][]string{
+		{"projects", "list", "--full"},
+		{"projects", "list", "--full", "--format", "json"},
+		{"projects", "list", "--full", "--format", "yaml"},
+	} {
+		out, errOut := runCLI(t, args...)
+		if errOut != "" || strings.Contains(out, "phc_mock_project_123") || !strings.Contains(out, "[REDACTED]") {
+			t.Fatalf("%v must redact the project token: %s %s", args, errOut, out)
+		}
+	}
+	exposed, _ := runCLI(t, "--expose", "api_token", "projects", "list", "--full")
+	if !strings.Contains(exposed, "phc_mock_project_123") {
+		t.Fatalf("--expose should reveal the field: %s", exposed)
+	}
+}
+
+func TestCompactOutputKeepsTheUsualFields(t *testing.T) {
+	for _, args := range [][]string{
+		{"projects", "list"},
+		{"api", "get", "/api/organizations/org_1/projects/123/"},
+	} {
+		out, errOut := runCLI(t, args...)
+		if errOut != "" || !strings.Contains(out, `"Website"`) || strings.Contains(out, "timezone") {
+			t.Fatalf("%v should print the compact record: %s %s", args, errOut, out)
+		}
+	}
+	full, _ := runCLI(t, "projects", "list", "--full")
+	if !strings.Contains(full, "timezone") {
+		t.Fatalf("--full should keep every field: %s", full)
+	}
+	got, _ := runCLI(t, "projects", "get", "123")
+	if !strings.Contains(got, "timezone") {
+		t.Fatalf("gets print the whole record: %s", got)
+	}
+}
