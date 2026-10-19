@@ -226,34 +226,6 @@ func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
 	return flagspec.ConditionWarnings(asList(groups), flagType)
 }
 
-// lookupFlagByKey finds a flag by key only, never treating the argument as an
-// ID, so a spec whose key happens to be numeric still matches by key.
-func lookupFlagByKey(ctx context.Context, resolved *resolvedContext, projectID int, key string) (string, bool, error) {
-	for _, archived := range []bool{false, true} {
-		ids, err := flagIDsByKey(ctx, resolved, projectID, key, archived)
-		if err != nil {
-			return "", false, err
-		}
-		switch len(ids) {
-		case 0:
-			continue
-		case 1:
-			return ids[0], true, nil
-		default:
-			return "", false, agenterrors.New("Multiple feature flags matched key "+key, agenterrors.FixableByAgent).
-				WithHint("Resolve the duplicate in PostHog first.")
-		}
-	}
-	return "", false, nil
-}
-
-// flagResolver resolves flag dependency references inside --where expressions.
-func flagResolver(ctx context.Context, resolved *resolvedContext, projectID int) flagspec.FlagResolver {
-	return func(ref string) (string, error) {
-		return resolveFlagIDIn(ctx, resolved, projectID, ref)
-	}
-}
-
 // readInput returns inline JSON when given, else the file's contents. MCP
 // callers have no stdin and a different filesystem, so inline is first-class.
 func readInput(inline, file, inlineFlag, fileFlag string) ([]byte, error) {

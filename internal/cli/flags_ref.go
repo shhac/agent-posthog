@@ -30,25 +30,15 @@ func resolveFlagIDIn(ctx context.Context, resolved *resolvedContext, projectID i
 	if _, err := strconv.Atoi(idOrKey); err == nil {
 		return idOrKey, nil
 	}
-	matches, err := flagIDsByKey(ctx, resolved, projectID, idOrKey, false)
+	id, found, err := lookupFlagByKey(ctx, resolved, projectID, idOrKey)
 	if err != nil {
 		return "", err
 	}
-	if len(matches) == 0 {
-		matches, err = flagIDsByKey(ctx, resolved, projectID, idOrKey, true)
-		if err != nil {
-			return "", err
-		}
-	}
-	if len(matches) == 0 {
+	if !found {
 		return "", agenterrors.New("No feature flag matched key "+idOrKey, agenterrors.FixableByAgent).
 			WithHint("Run 'agent-posthog flags list --search " + idOrKey + "' to inspect matches.")
 	}
-	if len(matches) > 1 {
-		return "", agenterrors.New("Multiple feature flags matched key "+idOrKey, agenterrors.FixableByAgent).
-			WithHint("Use the numeric feature flag ID.")
-	}
-	return matches[0], nil
+	return id, nil
 }
 
 func flagIDsByKey(ctx context.Context, resolved *resolvedContext, projectID int, key string, archived bool) ([]string, error) {
@@ -92,4 +82,55 @@ func fetchFlag(ctx context.Context, resolved *resolvedContext, projectID int, re
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByRetry).WithHint("PostHog returned an unexpected feature flag shape")
 	}
 	return flag, nil
+}
+
+// lookupFlagByKey finds a flag by key only, never treating the argument as an
+// ID, so a spec whose key happens to be numeric still matches by key.
+func lookupFlagByKey(ctx context.Context, resolved *resolvedContext, projectID int, key string) (string, bool, error) {
+	for _, archived := range []bool{false, true} {
+		ids, err := flagIDsByKey(ctx, resolved, projectID, key, archived)
+		if err != nil {
+			return "", false, err
+		}
+		switch len(ids) {
+		case 0:
+			continue
+		case 1:
+			return ids[0], true, nil
+		default:
+			return "", false, agenterrors.New("Multiple feature flags matched key "+key, agenterrors.FixableByAgent).
+				WithHint("Use the numeric feature flag ID.")
+		}
+	}
+	return "", false, nil
+}
+
+// flagResolver resolves flag dependency references inside --where expressions.
+func flagResolver(ctx context.Context, resolved *resolvedContext, projectID int) flagspec.FlagResolver {
+	return func(ref string) (string, error) {
+		return resolveFlagIDIn(ctx, resolved, projectID, ref)
+	}
+}
+
+// flagInProject reads the flag with key in a project, or nil if it has none.
+func flagInProject(ctx context.Context, resolved *resolvedContext, projectID int, key string) (map[string]any, error) {
+	id, found, err := lookupFlagByKey(ctx, resolved, projectID, key)
+	if err != nil || !found {
+		return nil, err
+	}
+	return fetchFlag(ctx, resolved, projectID, id)
+}
+
+func flagKeyByID(ctx context.Context, resolved *resolvedContext, projectID int, id string) (string, error) {
+	raw, err := resolved.Client.Get(ctx, flagPath(projectID, id), nil)
+	if err != nil {
+		return "", err
+	}
+	var flag struct {
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(raw, &flag); err != nil {
+		return "", err
+	}
+	return flag.Key, nil
 }

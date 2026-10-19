@@ -72,20 +72,6 @@ func filterProperty(filter any) (map[string]any, bool) {
 	return asObject(filter), false
 }
 
-func flagKeyByID(ctx context.Context, resolved *resolvedContext, projectID int, id string) (string, error) {
-	raw, err := resolved.Client.Get(ctx, flagPath(projectID, id), nil)
-	if err != nil {
-		return "", err
-	}
-	var flag struct {
-		Key string `json:"key"`
-	}
-	if err := json.Unmarshal(raw, &flag); err != nil {
-		return "", err
-	}
-	return flag.Key, nil
-}
-
 func appendOnce(list []string, item string) []string {
 	for _, existing := range list {
 		if existing == item {
@@ -183,15 +169,6 @@ func relabel(differences []any, this, other string) []any {
 		out = append(out, entry)
 	}
 	return out
-}
-
-// flagInProject reads the flag with key in a project, or nil if it has none.
-func flagInProject(ctx context.Context, resolved *resolvedContext, projectID int, key string) (map[string]any, error) {
-	id, found, err := lookupFlagByKey(ctx, resolved, projectID, key)
-	if err != nil || !found {
-		return nil, err
-	}
-	return fetchFlag(ctx, resolved, projectID, id)
 }
 
 func copyCommand(globals *GlobalFlags) *cobra.Command {
