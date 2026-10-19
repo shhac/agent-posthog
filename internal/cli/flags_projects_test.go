@@ -9,7 +9,7 @@ import (
 
 // stagingSession is a mock session with a "work" profile whose aliases name
 // project 124 staging and 123 prod.
-func stagingSession(t *testing.T) *mockSession {
+func stagingSession(t *testing.T) *cliSession {
 	t.Helper()
 	s := flagSession(t)
 	if err := config.StoreProfile("work", config.Profile{Host: "http://unused", OrganizationID: "org_1", ProjectID: 123}); err != nil {
@@ -116,7 +116,7 @@ func TestDiffNamesFlagDependenciesByKey(t *testing.T) {
 	}
 }
 
-func dependencyID(t *testing.T, s *mockSession, project string) any {
+func dependencyID(t *testing.T, s *cliSession, project string) any {
 	t.Helper()
 	flag := s.mustRun("--project", project, "flags", "get", "dependent-gate")["data"].([]any)[0].(map[string]any)
 	group := flag["filters"].(map[string]any)["groups"].([]any)[0].(map[string]any)

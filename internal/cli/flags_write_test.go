@@ -11,13 +11,13 @@ import (
 	"github.com/shhac/agent-posthog/internal/api"
 )
 
-func flagSession(t *testing.T) *mockSession {
+func flagSession(t *testing.T) *cliSession {
 	t.Helper()
 	return newMockSession(t, "phx_mock", "456")
 }
 
 // mustRun runs a command that must succeed and decodes its single JSON output.
-func (s *mockSession) mustRun(args ...string) map[string]any {
+func (s *cliSession) mustRun(args ...string) map[string]any {
 	s.t.Helper()
 	out, errOut, err := s.run(append(args, "--format", "json")...)
 	if err != nil {
@@ -31,7 +31,7 @@ func (s *mockSession) mustRun(args ...string) map[string]any {
 }
 
 // mustFail runs a command that must fail and returns its stderr.
-func (s *mockSession) mustFail(args ...string) string {
+func (s *cliSession) mustFail(args ...string) string {
 	s.t.Helper()
 	_, errOut, err := s.run(args...)
 	if err == nil {
@@ -40,7 +40,7 @@ func (s *mockSession) mustFail(args ...string) string {
 	return errOut
 }
 
-func (s *mockSession) flag(ref string) map[string]any {
+func (s *cliSession) flag(ref string) map[string]any {
 	s.t.Helper()
 	return s.mustRun("flags", "get", ref)["data"].([]any)[0].(map[string]any)
 }

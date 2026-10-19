@@ -8,7 +8,7 @@ import (
 
 // gateSession creates beta-gate with two conditions at version 1:
 // 0: email icontains @contractor.com at 0%, 1: everyone at 100%.
-func gateSession(t *testing.T) *mockSession {
+func gateSession(t *testing.T) *cliSession {
 	t.Helper()
 	s := flagSession(t)
 	s.mustRun("flags", "apply", "--yes", "--spec-json", `{"key":"beta-gate","early_exit":true,"conditions":[
@@ -17,7 +17,7 @@ func gateSession(t *testing.T) *mockSession {
 	return s
 }
 
-func groupsOf(t *testing.T, s *mockSession, ref string) []any {
+func groupsOf(t *testing.T, s *cliSession, ref string) []any {
 	t.Helper()
 	return s.flag(ref)["filters"].(map[string]any)["groups"].([]any)
 }

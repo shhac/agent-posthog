@@ -309,14 +309,14 @@ func runCLIWithTokenAndEnvironment(t *testing.T, token, envID string, args ...st
 	return out, errOut
 }
 
-// mockSession is one mock PostHog server and isolated config shared by several
-// CLI invocations, for multi-step flows (create, edit, evaluate) whose later
-// steps depend on state the earlier ones wrote.
-type mockSession struct {
+// cliSession runs several CLI invocations against one PostHog (usually a mock
+// from newMockSession), for multi-step flows whose later steps depend on state
+// the earlier ones wrote.
+type cliSession struct {
 	t *testing.T
 }
 
-func newMockSession(t *testing.T, token, envID string) *mockSession {
+func newMockSession(t *testing.T, token, envID string) *cliSession {
 	t.Helper()
 	// Isolate from the developer's real on-disk config: resolve() ranks
 	// profile.{Org,Project,Environment}ID ahead of the env vars set below, so a
@@ -330,12 +330,12 @@ func newMockSession(t *testing.T, token, envID string) *mockSession {
 	t.Setenv("AGENT_POSTHOG_ORGANIZATION_ID", "org_1")
 	t.Setenv("AGENT_POSTHOG_PROJECT_ID", "123")
 	t.Setenv("AGENT_POSTHOG_ENVIRONMENT_ID", envID)
-	return &mockSession{t: t}
+	return &cliSession{t: t}
 }
 
 // run executes one CLI invocation, returning stdout, stderr, and the error
 // Execute bubbled (non-nil means the process would exit 1).
-func (s *mockSession) run(args ...string) (string, string, error) {
+func (s *cliSession) run(args ...string) (string, string, error) {
 	s.t.Helper()
 	var stdout, stderr bytes.Buffer
 	restore := output.SetWritersForTest(&stdout, &stderr)
