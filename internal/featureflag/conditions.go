@@ -68,11 +68,8 @@ func (p Project) AddCondition(ctx context.Context, c Condition, at int) Build {
 func (p Project) EditCondition(ctx context.Context, index int, e ConditionEdit) Build {
 	resolve := p.Resolver(ctx)
 	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
-		groups, err := editableGroups(flag)
+		groups, err := editableGroupsAt(flag, index)
 		if err != nil {
-			return nil, nil, err
-		}
-		if err := checkConditionIndex(groups, index); err != nil {
 			return nil, nil, err
 		}
 		group := flagspec.Object(groups[index])
@@ -101,11 +98,8 @@ func (p Project) EditCondition(ctx context.Context, index int, e ConditionEdit) 
 // changed at all since the version read.
 func (p Project) PlanConditionRollout(ctx context.Context, ref string, ifVersion, index int, rollout float64) (*Pending, error) {
 	build := func(flag map[string]any) (*flagspec.Patch, []string, error) {
-		groups, err := editableGroups(flag)
+		groups, err := editableGroupsAt(flag, index)
 		if err != nil {
-			return nil, nil, err
-		}
-		if err := checkConditionIndex(groups, index); err != nil {
 			return nil, nil, err
 		}
 		flagspec.Object(groups[index])["rollout_percentage"] = rolloutNumber(rollout)
@@ -123,11 +117,8 @@ func (p Project) PlanConditionRollout(ctx context.Context, ref string, ifVersion
 // RemoveCondition removes the condition at index.
 func RemoveCondition(index int) Build {
 	return func(flag map[string]any) (*flagspec.Patch, []string, error) {
-		groups, err := editableGroups(flag)
+		groups, err := editableGroupsAt(flag, index)
 		if err != nil {
-			return nil, nil, err
-		}
-		if err := checkConditionIndex(groups, index); err != nil {
 			return nil, nil, err
 		}
 		return groupsPatch(flag, slices.Delete(groups, index, index+1))
@@ -164,11 +155,17 @@ func moveGroup(groups []any, from, to int) ([]any, error) {
 	return slices.Insert(slices.Delete(groups, from, from+1), to, moved), nil
 }
 
-func checkConditionIndex(groups []any, index int) error {
-	if index < 0 || index >= len(groups) {
-		return fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
+// editableGroupsAt is editableGroups for an edit that names a condition by
+// index, which must exist.
+func editableGroupsAt(flag map[string]any, index int) ([]any, error) {
+	groups, err := editableGroups(flag)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if index < 0 || index >= len(groups) {
+		return nil, fmt.Errorf("the flag has no condition %d (it has %d)", index, len(groups))
+	}
+	return groups, nil
 }
 
 // editableGroups returns a copy of the flag's conditions after checking the
