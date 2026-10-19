@@ -67,14 +67,13 @@ func (p Project) deleteWarnings(ctx context.Context, flag map[string]any) []stri
 // activeDependents warns that switching off a flag that active flags depend
 // on may be refused, or stop them matching. The lookup is best effort.
 func (p Project) activeDependents(ctx context.Context, flag map[string]any) []string {
-	raw, err := p.Get(ctx, fmt.Sprint(flag["id"]), "dependent_flags")
+	dependents, err := p.Related(ctx, fmt.Sprint(flag["id"]), "dependent_flags")
 	if err != nil {
 		return []string{"Could not check which flags depend on this one."}
 	}
-	page, _ := flagspec.DecodeObject(raw)
 	var active []string
-	for _, item := range flagspec.List(page["results"]) {
-		if dep := flagspec.Object(item); dep["active"] == true {
+	for _, raw := range dependents {
+		if dep, _ := flagspec.DecodeObject(raw); dep["active"] == true {
 			active = append(active, fmt.Sprint(dep["key"]))
 		}
 	}
