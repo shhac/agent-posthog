@@ -2,6 +2,8 @@ package cli
 
 import (
 	"encoding/json"
+	"maps"
+	"slices"
 
 	"github.com/shhac/agent-posthog/internal/flagspec"
 	"github.com/shhac/agent-posthog/internal/output"
@@ -139,4 +141,33 @@ func writeExact(v any, flagFormat string) error {
 // writeExactLine writes v as one exact NDJSON line.
 func writeExactLine(v any) error {
 	return output.PrintExact(v, output.FormatNDJSON)
+}
+
+// writeExactList is writeExact for a list: NDJSON records then one line per
+// meta key, or one {"data":[...], <meta>} document under --format json|yaml.
+func writeExactList(items []any, meta map[string]any, flagFormat string) error {
+	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
+	if err != nil {
+		return err
+	}
+	keys := slices.Sorted(maps.Keys(meta))
+	if format != output.FormatNDJSON {
+		envelope := flagspec.NewOrdered()
+		envelope.Set("data", items)
+		for _, key := range keys {
+			envelope.Set(key, meta[key])
+		}
+		return writeExact(envelope, flagFormat)
+	}
+	for _, item := range items {
+		if err := writeExactLine(item); err != nil {
+			return err
+		}
+	}
+	for _, key := range keys {
+		if err := writeExactLine(map[string]any{key: meta[key]}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

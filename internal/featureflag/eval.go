@@ -1,12 +1,12 @@
-package cli
+package featureflag
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"slices"
+	"time"
 
 	agenterrors "github.com/shhac/lib-agent-output"
 
@@ -18,12 +18,12 @@ import (
 // and accepts property overrides. diagnostic calls the private test_evaluation
 // endpoint, which uses stored person properties only.
 const (
-	enginePublic     = "public"
-	engineDiagnostic = "diagnostic"
+	EnginePublic     = "public"
+	EngineDiagnostic = "diagnostic"
 )
 
-// evalContext is who a flag is evaluated for.
-type evalContext struct {
+// Subject is who a flag is evaluated for.
+type Subject struct {
 	DistinctID      string
 	PersonProps     map[string]any
 	Groups          map[string]any
@@ -34,9 +34,9 @@ type evalContext struct {
 	EvaluationContexts []string
 }
 
-// evalResult is one evaluation. Status "error" means PostHog could not
-// evaluate the flag: it is never reported as false.
-type evalResult struct {
+// Result is one evaluation. Status "error" means PostHog could not evaluate
+// the flag: it is never reported as false.
+type Result struct {
 	Status         string
 	Enabled        bool
 	Variant        any
@@ -48,24 +48,27 @@ type evalResult struct {
 	Error          string
 }
 
-type evaluator struct {
-	resolved  *resolvedContext
+// Evaluator evaluates one flag with one engine.
+type Evaluator struct {
+	p         Project
 	flag      map[string]any
 	engine    string
 	public    *api.Client
 	projToken string
 }
 
-func newEvaluator(ctx context.Context, resolved *resolvedContext, flag map[string]any, engine, flagsHostOverride string) (*evaluator, error) {
-	e := &evaluator{resolved: resolved, flag: flag, engine: engine}
+// NewEvaluator prepares to evaluate flag. The public engine reads the
+// project token and sends /flags requests to flagsHost (see FlagsHost).
+func (p Project) NewEvaluator(ctx context.Context, flag map[string]any, engine, flagsHost string) (*Evaluator, error) {
+	e := &Evaluator{p: p, flag: flag, engine: engine}
 	switch engine {
-	case engineDiagnostic:
+	case EngineDiagnostic:
 		return e, nil
-	case enginePublic:
+	case EnginePublic:
 	default:
 		return nil, agenterrors.New("--engine must be public or diagnostic", agenterrors.FixableByAgent)
 	}
-	raw, err := resolved.Client.Get(ctx, api.ProjectPath(resolved.ProjectID), nil)
+	raw, err := p.Client.Get(ctx, api.ProjectPath(p.ID), nil)
 	if err != nil {
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByHuman).
 			WithHint("The public engine reads the project token from the project; the personal API key needs project read access. Or use --engine diagnostic.")
@@ -78,20 +81,14 @@ func newEvaluator(ctx context.Context, resolved *resolvedContext, flag map[strin
 			WithHint("Use --engine diagnostic, which needs no project token.")
 	}
 	e.projToken = project.APIToken
-	e.public = resolved.Client.WithBase(flagsHost(resolved.Host, flagsHostOverride), "")
+	e.public = p.Client.WithBase(flagsHost, "")
 	return e, nil
 }
 
-// flagsHost maps a PostHog app host to the host that serves /flags. Cloud
+// FlagsHost maps a PostHog app host to the host that serves /flags. Cloud
 // splits them; self-hosted and proxied setups serve both from one host or
-// need AGENT_POSTHOG_FLAGS_HOST / --flags-host.
-func flagsHost(appHost, override string) string {
-	if override != "" {
-		return override
-	}
-	if env := os.Getenv("AGENT_POSTHOG_FLAGS_HOST"); env != "" {
-		return env
-	}
+// name theirs explicitly.
+func FlagsHost(appHost string) string {
 	u, err := url.Parse(appHost)
 	if err != nil {
 		return appHost
@@ -105,14 +102,15 @@ func flagsHost(appHost, override string) string {
 	return u.String()
 }
 
-func (e *evaluator) evaluate(ctx context.Context, in evalContext) evalResult {
-	if e.engine == engineDiagnostic {
+// Evaluate evaluates the flag for in.
+func (e *Evaluator) Evaluate(ctx context.Context, in Subject) Result {
+	if e.engine == EngineDiagnostic {
 		return e.diagnostic(ctx, in)
 	}
 	return e.publicEval(ctx, in)
 }
 
-func (e *evaluator) diagnostic(ctx context.Context, in evalContext) evalResult {
+func (e *Evaluator) diagnostic(ctx context.Context, in Subject) Result {
 	body := map[string]any{"distinct_id": in.DistinctID}
 	if len(in.Groups) > 0 {
 		body["groups"] = in.Groups
@@ -120,15 +118,15 @@ func (e *evaluator) diagnostic(ctx context.Context, in evalContext) evalResult {
 	if in.At != "" {
 		body["timestamp"] = in.At
 	}
-	raw, err := e.resolved.Client.Post(ctx, flagPath(e.resolved.ProjectID, fmt.Sprint(e.flag["id"]), "test_evaluation"), nil, body)
+	raw, err := e.p.Client.Post(ctx, e.p.flagPath(fmt.Sprint(e.flag["id"]), "test_evaluation"), nil, body)
 	if err != nil {
-		return evalResult{Status: "error", Error: err.Error()}
+		return Result{Status: "error", Error: err.Error()}
 	}
 	resp, err := flagspec.DecodeObject(raw)
 	if err != nil {
-		return evalResult{Status: "error", Error: "unexpected test_evaluation response"}
+		return Result{Status: "error", Error: "unexpected test_evaluation response"}
 	}
-	r := evalResult{Status: "ok", Reason: resp["reason"], Description: resp["reason_description"], ConditionIndex: resp["condition_index"]}
+	r := Result{Status: "ok", Reason: resp["reason"], Description: resp["reason_description"], ConditionIndex: resp["condition_index"]}
 	switch value := resp["result"].(type) {
 	case bool:
 		r.Enabled = value
@@ -141,7 +139,7 @@ func (e *evaluator) diagnostic(ctx context.Context, in evalContext) evalResult {
 	return r
 }
 
-func (e *evaluator) publicEval(ctx context.Context, in evalContext) evalResult {
+func (e *Evaluator) publicEval(ctx context.Context, in Subject) Result {
 	body := map[string]any{"api_key": e.projToken, "distinct_id": in.DistinctID, "flag_keys": []string{fmt.Sprint(e.flag["key"])}}
 	if in.DeviceID != "" {
 		body["device_id"] = in.DeviceID
@@ -160,34 +158,34 @@ func (e *evaluator) publicEval(ctx context.Context, in evalContext) evalResult {
 	}
 	raw, err := e.public.Post(ctx, "/flags", url.Values{"v": {"2"}}, body)
 	if err != nil {
-		return evalResult{Status: "error", Error: err.Error()}
+		return Result{Status: "error", Error: err.Error()}
 	}
 	resp, err := flagspec.DecodeObject(raw)
 	if err != nil {
-		return evalResult{Status: "error", Error: "unexpected /flags response"}
+		return Result{Status: "error", Error: "unexpected /flags response"}
 	}
 	return interpretFlags(resp, e.flag)
 }
 
 // interpretFlags reads one flag's result out of a /flags response. A flag
 // PostHog did not return or could not evaluate is an error, never false.
-func interpretFlags(resp, flag map[string]any) evalResult {
+func interpretFlags(resp, flag map[string]any) Result {
 	if slices.Contains(flagspec.List(resp["quotaLimited"]), any("feature_flags")) {
-		return evalResult{Status: "error", Error: "the project is over its feature flag quota, so PostHog did not evaluate flags"}
+		return Result{Status: "error", Error: "the project is over its feature flag quota, so PostHog did not evaluate flags"}
 	}
 	detail, returned := flagspec.Object(resp["flags"])[fmt.Sprint(flag["key"])].(map[string]any)
 	switch {
 	case !returned && flag["active"] != true:
-		return evalResult{Status: "ok", Reason: "flag_disabled"}
+		return Result{Status: "ok", Reason: "flag_disabled"}
 	case !returned && resp["errorsWhileComputingFlags"] == true:
-		return evalResult{Status: "error", Error: "PostHog reported errors while computing flags and did not return this one"}
+		return Result{Status: "error", Error: "PostHog reported errors while computing flags and did not return this one"}
 	case !returned:
-		return evalResult{Status: "error", Error: "PostHog did not return this flag; a change made in the last few seconds may not have reached /flags yet, or its evaluation runtime or contexts exclude this request"}
+		return Result{Status: "error", Error: "PostHog did not return this flag; a change made in the last few seconds may not have reached /flags yet, or its evaluation runtime or contexts exclude this request"}
 	case detail["failed"] == true:
-		return evalResult{Status: "error", Error: fmt.Sprint("evaluation failed: ", flagspec.Object(detail["reason"])["description"])}
+		return Result{Status: "error", Error: fmt.Sprint("evaluation failed: ", flagspec.Object(detail["reason"])["description"])}
 	}
 	reason := flagspec.Object(detail["reason"])
-	r := evalResult{
+	r := Result{
 		Status:         "ok",
 		Enabled:        detail["enabled"] == true,
 		Variant:        detail["variant"],
@@ -212,7 +210,8 @@ func decodeEvalPayload(stored any) (any, bool) {
 	return value, true
 }
 
-func (e *evaluator) record(in evalContext, r evalResult) *flagspec.Ordered {
+// Record reports an evaluation, with the condition that matched as a spec.
+func (e *Evaluator) Record(in Subject, r Result) *flagspec.Ordered {
 	out := flagspec.NewOrdered()
 	out.Set("engine", e.engine)
 	out.Set("key", e.flag["key"])
@@ -244,13 +243,45 @@ func (e *evaluator) record(in evalContext, r evalResult) *flagspec.Ordered {
 	return out
 }
 
-func (e *evaluator) warnings() []string {
+// Warnings are what the flag's state means for any evaluation of it.
+func (e *Evaluator) Warnings() []string {
 	var warnings []string
 	if e.flag["active"] != true {
 		warnings = append(warnings, "The flag is disabled, so it evaluates to false for everyone; this tests the saved definition only once it is enabled.")
 	}
-	if e.engine == enginePublic && flagspec.Object(e.flag["filters"])["early_exit"] == true {
+	if e.engine == EnginePublic && flagspec.Object(e.flag["filters"])["early_exit"] == true {
 		warnings = append(warnings, "Early exit is on: /flags honors it, but SDKs evaluating locally honor it only in recent versions.")
 	}
 	return warnings
+}
+
+// Engine is the evaluator's engine.
+func (e *Evaluator) Engine() string { return e.engine }
+
+// CheckSubject refuses inputs the engine cannot honor.
+func CheckSubject(engine string, in Subject) error {
+	if engine == EngineDiagnostic && (in.PersonProps != nil || in.GroupProperties != nil) {
+		return agenterrors.New("the diagnostic engine uses stored properties only; drop property overrides or use --engine public", agenterrors.FixableByAgent)
+	}
+	if engine == EngineDiagnostic && (in.DeviceID != "" || len(in.EvaluationContexts) > 0) {
+		return agenterrors.New("--device-id and evaluation contexts apply to /flags; use --engine public", agenterrors.FixableByAgent)
+	}
+	if engine != EngineDiagnostic && in.At != "" {
+		return agenterrors.New("evaluating as of a past moment needs --engine diagnostic, which rebuilds the flag and person as they were", agenterrors.FixableByAgent)
+	}
+	return nil
+}
+
+// NormalizeAt checks a point in time for historical evaluation, reading a
+// zoneless timestamp as UTC the way PostHog does.
+func NormalizeAt(at string) (string, error) {
+	if at == "" {
+		return "", nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, at); err == nil {
+			return t.UTC().Format(time.RFC3339), nil
+		}
+	}
+	return "", agenterrors.New("--at must be an ISO 8601 time such as 2026-04-29T15:30:00Z", agenterrors.FixableByAgent)
 }

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
 const gateSpec = `{"key":"beta-gate","active":true,"early_exit":true,"conditions":[
@@ -42,6 +44,19 @@ func TestFlagTestStrictGateWithDenyBranch(t *testing.T) {
 	}
 	if strings.Contains(out, "phc_mock") {
 		t.Fatalf("project token leaked: %s", out)
+	}
+}
+
+func TestFlagTestAndReachHonorFormat(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "apply", "--spec-json", gateSpec, "--yes")
+	suite := s.mustRun("flags", "test", "beta-gate", "--cases", writeTemp(t, "cases.yaml", gateCases), "--format", "json")
+	if data, _ := suite["data"].([]any); len(data) != 5 || flagspec.Object(suite["@summary"])["pass"] != float64(5) {
+		t.Fatalf("test --format json = %v", suite)
+	}
+	reach := s.mustRun("flags", "reach", "beta-gate", "--format", "json")
+	if data, _ := reach["data"].([]any); len(data) != 3 || reach["@note"] == nil {
+		t.Fatalf("reach --format json = %v", reach)
 	}
 }
 

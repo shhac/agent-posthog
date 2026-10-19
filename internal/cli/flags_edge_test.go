@@ -84,17 +84,6 @@ func TestCopyReportsDroppedDependencies(t *testing.T) {
 	}
 }
 
-func TestScenarioDistinctIDsAreStable(t *testing.T) {
-	cases, err := parseCases([]byte(`[{"name":"same","expect":{"enabled":true}}]`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	again, _ := parseCases([]byte(`[{"name":"same","expect":{"enabled":true}}]`))
-	if cases[0].In.DistinctID != "agent-posthog-test:same" || cases[0].In.DistinctID != again[0].In.DistinctID {
-		t.Fatalf("distinct ids = %s / %s", cases[0].In.DistinctID, again[0].In.DistinctID)
-	}
-}
-
 func TestExplicitIDAndKeyReferences(t *testing.T) {
 	s := flagSession(t)
 	s.mustRun("flags", "apply", "--spec-json", `{"key":"2024","conditions":[{}]}`, "--yes")

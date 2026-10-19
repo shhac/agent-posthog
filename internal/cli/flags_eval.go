@@ -2,11 +2,13 @@ package cli
 
 import (
 	"context"
-	"time"
+	"os"
 
+	"github.com/shhac/lib-agent-cli/creds"
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
@@ -22,7 +24,7 @@ type evalFlags struct {
 }
 
 func (f *evalFlags) add(cmd *cobra.Command) {
-	cmd.Flags().StringVar(&f.engine, "engine", enginePublic, "public (/flags, as an SDK sees it; accepts property overrides) or diagnostic (stored properties only)")
+	cmd.Flags().StringVar(&f.engine, "engine", featureflag.EnginePublic, "public (/flags, as an SDK sees it; accepts property overrides) or diagnostic (stored properties only)")
 	cmd.Flags().StringVar(&f.flagsHost, "flags-host", "", "Host serving /flags (default: derived from the PostHog host, or AGENT_POSTHOG_FLAGS_HOST)")
 }
 
@@ -46,25 +48,21 @@ func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := checkEngineContext(f.engine, in); err != nil {
+			if err := featureflag.CheckSubject(f.engine, in); err != nil {
 				return err
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				flag, err := currentFlag(ctx, resolved, args[0])
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				e, err := f.evaluator(ctx, p, args[0])
 				if err != nil {
 					return err
 				}
-				e, err := newEvaluator(ctx, resolved, flag, f.engine, f.flagsHost)
-				if err != nil {
-					return err
-				}
-				r := e.evaluate(ctx, in)
+				r := e.Evaluate(ctx, in)
 				if r.Status == "error" {
 					return agenterrors.New("Could not evaluate the flag: "+r.Error, agenterrors.FixableByRetry).
 						WithHint("This is not a false result. Retry, or try the other --engine.")
 				}
-				record := e.record(in, r)
-				if warnings := e.warnings(); len(warnings) > 0 {
+				record := e.Record(in, r)
+				if warnings := e.Warnings(); len(warnings) > 0 {
 					record.Set("warnings", warnings)
 				}
 				return writeExact(record, globals.Format)
@@ -78,15 +76,25 @@ func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func (f *evalFlags) context(distinctID, at string) (evalContext, error) {
-	if distinctID == "" {
-		return evalContext{}, agenterrors.New("--distinct-id is required; it decides percentage rollouts", agenterrors.FixableByAgent)
-	}
-	at, err := normalizeAt(at)
+// evaluator reads the flag ref names and prepares the chosen engine.
+func (f *evalFlags) evaluator(ctx context.Context, p featureflag.Project, ref string) (*featureflag.Evaluator, error) {
+	flag, err := p.Fetch(ctx, ref)
 	if err != nil {
-		return evalContext{}, err
+		return nil, err
 	}
-	in := evalContext{DistinctID: distinctID, At: at, DeviceID: f.deviceID, EvaluationContexts: f.contexts}
+	host := creds.FirstNonEmpty(f.flagsHost, os.Getenv("AGENT_POSTHOG_FLAGS_HOST"), featureflag.FlagsHost(p.Host))
+	return p.NewEvaluator(ctx, flag, f.engine, host)
+}
+
+func (f *evalFlags) context(distinctID, at string) (featureflag.Subject, error) {
+	if distinctID == "" {
+		return featureflag.Subject{}, agenterrors.New("--distinct-id is required; it decides percentage rollouts", agenterrors.FixableByAgent)
+	}
+	at, err := featureflag.NormalizeAt(at)
+	if err != nil {
+		return featureflag.Subject{}, err
+	}
+	in := featureflag.Subject{DistinctID: distinctID, At: at, DeviceID: f.deviceID, EvaluationContexts: f.contexts}
 	for _, field := range []struct {
 		name, value string
 		target      *map[string]any
@@ -100,36 +108,9 @@ func (f *evalFlags) context(distinctID, at string) (evalContext, error) {
 		}
 		obj, err := flagspec.DecodeObject([]byte(field.value))
 		if err != nil {
-			return evalContext{}, agenterrors.New("--"+field.name+" must be a JSON object: "+err.Error(), agenterrors.FixableByAgent)
+			return featureflag.Subject{}, agenterrors.New("--"+field.name+" must be a JSON object: "+err.Error(), agenterrors.FixableByAgent)
 		}
 		*field.target = obj
 	}
 	return in, nil
-}
-
-func checkEngineContext(engine string, in evalContext) error {
-	if engine == engineDiagnostic && (in.PersonProps != nil || in.GroupProperties != nil) {
-		return agenterrors.New("the diagnostic engine uses stored properties only; drop property overrides or use --engine public", agenterrors.FixableByAgent)
-	}
-	if engine == engineDiagnostic && (in.DeviceID != "" || len(in.EvaluationContexts) > 0) {
-		return agenterrors.New("--device-id and evaluation contexts apply to /flags; use --engine public", agenterrors.FixableByAgent)
-	}
-	if engine != engineDiagnostic && in.At != "" {
-		return agenterrors.New("evaluating as of a past moment needs --engine diagnostic, which rebuilds the flag and person as they were", agenterrors.FixableByAgent)
-	}
-	return nil
-}
-
-// normalizeAt checks a point in time for historical evaluation, reading a
-// zoneless timestamp as UTC the way PostHog does.
-func normalizeAt(at string) (string, error) {
-	if at == "" {
-		return "", nil
-	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
-		if t, err := time.Parse(layout, at); err == nil {
-			return t.UTC().Format(time.RFC3339), nil
-		}
-	}
-	return "", agenterrors.New("--at must be an ISO 8601 time such as 2026-04-29T15:30:00Z", agenterrors.FixableByAgent)
 }

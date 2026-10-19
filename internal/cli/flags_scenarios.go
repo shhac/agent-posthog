@@ -3,110 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
-	"strings"
-	"sync"
 
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
-
-// testCase is one scenario in a test suite.
-type testCase struct {
-	Name   string
-	In     evalContext
-	Expect map[string]any
-}
-
-var caseFields = map[string]bool{"name": true, "distinct_id": true, "props": true, "groups": true, "group_props": true, "at": true, "device_id": true, "evaluation_contexts": true, "expect": true}
-
-var expectFields = map[string]bool{"enabled": true, "variant": true, "payload": true, "condition_index": true, "reason": true}
-
-func parseCases(data []byte) ([]testCase, error) {
-	doc, err := flagspec.ParseDocument(data)
-	if err != nil {
-		return nil, err
-	}
-	if obj, ok := doc.(map[string]any); ok {
-		doc = obj["cases"]
-	}
-	list, ok := doc.([]any)
-	if !ok || len(list) == 0 {
-		return nil, fmt.Errorf("expected a non-empty list of cases (or {\"cases\": [...]})")
-	}
-	seen := map[string]bool{}
-	cases := make([]testCase, 0, len(list))
-	for i, item := range list {
-		raw, ok := item.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("case %d must be an object", i)
-		}
-		for field := range raw {
-			if !caseFields[field] {
-				return nil, fmt.Errorf("case %d: unknown field %q", i, field)
-			}
-		}
-		name, _ := raw["name"].(string)
-		if name == "" || seen[name] {
-			return nil, fmt.Errorf("case %d needs a unique name", i)
-		}
-		seen[name] = true
-		expect, _ := raw["expect"].(map[string]any)
-		if len(expect) == 0 {
-			return nil, fmt.Errorf("case %q has nothing to expect", name)
-		}
-		for field := range expect {
-			if !expectFields[field] {
-				return nil, fmt.Errorf("case %q: unknown expectation %q (use %s)", name, field, strings.Join(slices.Sorted(maps.Keys(expectFields)), ", "))
-			}
-		}
-		distinctID, _ := raw["distinct_id"].(string)
-		if distinctID == "" {
-			distinctID = "agent-posthog-test:" + name
-		}
-		rawAt, _ := raw["at"].(string)
-		at, err := normalizeAt(rawAt)
-		if err != nil {
-			return nil, fmt.Errorf("case %q: %w", name, err)
-		}
-		deviceID, _ := raw["device_id"].(string)
-		var contexts []string
-		for _, c := range flagspec.List(raw["evaluation_contexts"]) {
-			contexts = append(contexts, fmt.Sprint(c))
-		}
-		in := evalContext{
-			DistinctID: distinctID, PersonProps: flagspec.Object(raw["props"]), Groups: flagspec.Object(raw["groups"]),
-			GroupProperties: flagspec.Object(raw["group_props"]), At: at, DeviceID: deviceID, EvaluationContexts: contexts,
-		}
-		cases = append(cases, testCase{Name: name, In: in, Expect: expect})
-	}
-	return cases, nil
-}
-
-// mismatches compares only the fields a case names. A payload must match
-// exactly; a null expectation means "none".
-func mismatches(expect map[string]any, r evalResult) []any {
-	actual := map[string]any{
-		"enabled": r.Enabled, "variant": r.Variant, "reason": r.Reason, "condition_index": r.ConditionIndex,
-	}
-	if r.PayloadSet {
-		actual["payload"] = r.Payload
-	} else {
-		actual["payload"] = nil
-	}
-	var out []any
-	for _, field := range slices.Sorted(maps.Keys(expectFields)) {
-		want, ok := expect[field]
-		if !ok || flagspec.Equal(want, actual[field]) {
-			continue
-		}
-		out = append(out, map[string]any{"field": field, "expected": want, "actual": actual[field]})
-	}
-	return out
-}
 
 func testCommand(globals *GlobalFlags) *cobra.Command {
 	var f evalFlags
@@ -122,106 +25,70 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 			"agent-posthog-test:<name> so percentage rollouts are stable. Prints one line per case, then @summary.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if parallel < 1 || parallel > maxParallelCases {
-				return agenterrors.New(fmt.Sprintf("--parallel must be from 1 to %d", maxParallelCases), agenterrors.FixableByAgent)
+			if parallel < 1 || parallel > featureflag.MaxParallelCases {
+				return agenterrors.New(fmt.Sprintf("--parallel must be from 1 to %d", featureflag.MaxParallelCases), agenterrors.FixableByAgent)
 			}
 			data, err := readInput(casesJSON, casesFile, "cases-json", "cases")
 			if err != nil {
 				return err
 			}
-			cases, err := parseCases(data)
+			cases, err := featureflag.ParseCases(data)
 			if err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
 			for _, c := range cases {
-				if err := checkEngineContext(f.engine, c.In); err != nil {
+				if err := featureflag.CheckSubject(f.engine, c.In); err != nil {
 					return err
 				}
 			}
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				flag, err := currentFlag(ctx, resolved, args[0])
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				e, err := f.evaluator(ctx, p, args[0])
 				if err != nil {
 					return err
 				}
-				e, err := newEvaluator(ctx, resolved, flag, f.engine, f.flagsHost)
-				if err != nil {
-					return err
-				}
-				return runCases(ctx, e, cases, parallel)
+				results, summary := e.Run(ctx, cases, parallel)
+				return writeCaseResults(e, results, summary, globals.Format)
 			})
 		},
 	}
 	cmd.Flags().StringVar(&casesFile, "cases", "", "Cases file (JSON or YAML)")
-	cmd.Flags().IntVar(&parallel, "parallel", 1, fmt.Sprintf("Cases evaluated at once (1-%d); results print in case order", maxParallelCases))
+	cmd.Flags().IntVar(&parallel, "parallel", 1, fmt.Sprintf("Cases evaluated at once (1-%d); results print in case order", featureflag.MaxParallelCases))
 	cmd.Flags().StringVar(&casesJSON, "cases-json", "", "Cases as inline JSON")
 	f.add(cmd)
 	return cmd
 }
 
-// maxParallelCases bounds --parallel so a suite cannot flood /flags.
-const maxParallelCases = 8
-
-// evaluateCases runs up to parallel evaluations at once and returns results in
-// case order, so output is the same whatever the parallelism.
-func evaluateCases(ctx context.Context, e *evaluator, cases []testCase, parallel int) []evalResult {
-	results := make([]evalResult, len(cases))
-	slots := make(chan struct{}, parallel)
-	var wg sync.WaitGroup
-	for i, c := range cases {
-		wg.Add(1)
-		slots <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-slots }()
-			results[i] = e.evaluate(ctx, c.In)
-		}()
-	}
-	wg.Wait()
-	return results
-}
-
-func runCases(ctx context.Context, e *evaluator, cases []testCase, parallel int) error {
-	counts := map[string]int{"pass": 0, "fail": 0, "error": 0}
-	results := evaluateCases(ctx, e, cases, parallel)
-	for i, c := range cases {
-		r := results[i]
+// writeCaseResults prints one line per case and an @summary, then fails the
+// command if any case did not pass.
+func writeCaseResults(e *featureflag.Evaluator, results []featureflag.CaseResult, summary featureflag.Summary, format string) error {
+	lines := make([]any, 0, len(results))
+	for _, cr := range results {
 		line := flagspec.NewOrdered()
-		line.Set("case", c.Name)
-		diff := mismatches(c.Expect, r)
-		switch {
-		case r.Status == "error":
-			line.Set("result", "error")
-			line.Set("error", r.Error)
-			counts["error"]++
-		case len(diff) == 0:
-			line.Set("result", "pass")
-			counts["pass"]++
-		default:
-			line.Set("result", "fail")
-			line.Set("mismatches", diff)
-			counts["fail"]++
+		line.Set("case", cr.Case.Name)
+		line.Set("result", cr.Outcome)
+		switch cr.Outcome {
+		case "error":
+			line.Set("error", cr.Result.Error)
+		case "fail":
+			line.Set("mismatches", cr.Mismatches)
 		}
-		line.Set("actual", e.record(c.In, r))
-		if err := writeExactLine(line); err != nil {
-			return err
-		}
+		line.Set("actual", e.Record(cr.Case.In, cr.Result))
+		lines = append(lines, line)
 	}
-	summary := flagspec.NewOrdered()
-	summary.Set("engine", e.engine)
-	summary.Set("pass", counts["pass"])
-	summary.Set("fail", counts["fail"])
-	summary.Set("error", counts["error"])
-	if warnings := e.warnings(); len(warnings) > 0 {
-		summary.Set("warnings", warnings)
+	totals := flagspec.NewOrdered()
+	totals.Set("engine", e.Engine())
+	totals.Set("pass", summary.Pass)
+	totals.Set("fail", summary.Fail)
+	totals.Set("error", summary.Error)
+	if warnings := e.Warnings(); len(warnings) > 0 {
+		totals.Set("warnings", warnings)
 	}
-	wrapper := flagspec.NewOrdered()
-	wrapper.Set("@summary", summary)
-	if err := writeExactLine(wrapper); err != nil {
+	if err := writeExactList(lines, map[string]any{"@summary": totals}, format); err != nil {
 		return err
 	}
-	if bad := counts["fail"] + counts["error"]; bad > 0 {
-		return agenterrors.New(fmt.Sprintf("%d of %d cases did not pass", bad, len(cases)), agenterrors.FixableByAgent).
-			WithHint("Read the per-case mismatches on stdout.")
+	if summary.Passed() {
+		return nil
 	}
-	return nil
+	return agenterrors.New(fmt.Sprintf("%d of %d cases did not pass", summary.Fail+summary.Error, len(results)), agenterrors.FixableByAgent).
+		WithHint("Read the per-case mismatches on stdout.")
 }
