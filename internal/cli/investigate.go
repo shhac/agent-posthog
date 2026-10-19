@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -30,7 +29,8 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 		Short: "Resolve a user and stream recent context",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireEnvironment(resolved); err != nil {
+				path, err := resolved.path(scopeEnvironment, "persons")
+				if err != nil {
 					return err
 				}
 				q := baseValues(limit)
@@ -40,7 +40,7 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 				if distinctID != "" {
 					q.Set("distinct_id", distinctID)
 				}
-				page, err := resolved.Client.List(ctx, apiPath("environments", strconv.Itoa(resolved.EnvironmentID), "persons"), q)
+				page, err := resolved.Client.List(ctx, path, q)
 				if err != nil {
 					return err
 				}
@@ -83,7 +83,8 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 		Short: "Sample recent events through HogQL",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireEnvironment(resolved); err != nil {
+				path, err := resolved.path(scopeEnvironment, "query")
+				if err != nil {
 					return err
 				}
 				writer := output.NewNDJSONWriter(output.Stdout())
@@ -92,7 +93,7 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 				}
 				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = {event} order by timestamp desc limit %d", limit)
 				body := hogQLBody(sql, map[string]any{"event": event})
-				raw, err := resolved.Client.Post(ctx, apiPath("environments", strconv.Itoa(resolved.EnvironmentID), "query"), nil, body)
+				raw, err := resolved.Client.Post(ctx, path, nil, body)
 				if err != nil {
 					return err
 				}
@@ -137,29 +138,31 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 						return err
 					}
 				}
-				for _, evidence := range []struct {
-					name string
-					path string
-				}{
-					{name: "dependent_flags", path: flagPath(resolved.ProjectID, id, "dependent_flags")},
-					{name: "activity", path: flagPath(resolved.ProjectID, id, "activity")},
-				} {
-					page, err := resolved.Client.List(ctx, evidence.path, nil)
-					if err != nil {
+				for _, name := range []string{"dependent_flags", "activity"} {
+					if err := writeEvidence(ctx, resolved, writer, name, flagPath(resolved.ProjectID, id, name)); err != nil {
 						return err
-					}
-					for _, raw := range page.Results {
-						var data any
-						_ = json.Unmarshal(raw, &data)
-						if err := writer.WriteItem(queryResultRecord(evidence.name, data)); err != nil {
-							return err
-						}
 					}
 				}
 				return writer.WriteItem(nextStepRecord(fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])))
 			})
 		},
 	}
+}
+
+// writeEvidence streams each record of a related collection as a query result.
+func writeEvidence(ctx context.Context, resolved *resolvedContext, writer *output.NDJSONWriter, name, path string) error {
+	page, err := resolved.Client.List(ctx, path, nil)
+	if err != nil {
+		return err
+	}
+	for _, raw := range page.Results {
+		var data any
+		_ = json.Unmarshal(raw, &data)
+		if err := writer.WriteItem(queryResultRecord(name, data)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func entityRecord(entity string, id any, data any) map[string]any {
