@@ -118,6 +118,12 @@ func PrintExact(data any, format Format) error {
 	return out.Print(Stdout(), data, format, nil)
 }
 
+// WriteExactList is WriteList without cleaning, for records whose nulls and
+// values are the point.
+func WriteExactList(format Format, items []any, meta map[string]any) error {
+	return out.WriteList(Stdout(), format, items, meta, nil)
+}
+
 // Clean prunes nils and redacts secrets from a decoded value, for records
 // handed to a writer that does not clean (such as the shared multi-get
 // printer).

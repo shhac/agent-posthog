@@ -45,16 +45,15 @@ func conditionsListCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if format != output.FormatNDJSON {
 					return shared.WriteExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
 				}
+				lines := make([]any, 0, len(conditions))
 				for i, condition := range conditions {
 					line := flagspec.NewOrdered()
 					line.Set("index", i)
 					line.Set("version", flag["version"])
 					line.Set("condition", condition)
-					if err := shared.WriteExactLine(line); err != nil {
-						return err
-					}
+					lines = append(lines, line)
 				}
-				return nil
+				return output.WriteExactList(output.FormatNDJSON, lines, nil)
 			})
 		},
 	}

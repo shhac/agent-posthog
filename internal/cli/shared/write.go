@@ -77,11 +77,6 @@ func WriteExact(v any, flagFormat string) error {
 	return err
 }
 
-// WriteExactLine writes v as one exact NDJSON line.
-func WriteExactLine(v any) error {
-	return output.PrintExact(v, output.FormatNDJSON)
-}
-
 // WriteExactList is WriteExact for a list: NDJSON records then one line per
 // meta key, or one {"data":[...], <meta>} document under --format json|yaml.
 func WriteExactList(items []any, meta map[string]any, flagFormat string) error {
@@ -98,15 +93,5 @@ func WriteExactList(items []any, meta map[string]any, flagFormat string) error {
 		}
 		return WriteExact(envelope, flagFormat)
 	}
-	for _, item := range items {
-		if err := WriteExactLine(item); err != nil {
-			return err
-		}
-	}
-	for _, key := range keys {
-		if err := WriteExactLine(map[string]any{key: meta[key]}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return output.WriteExactList(output.FormatNDJSON, items, meta)
 }
