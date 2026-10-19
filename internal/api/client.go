@@ -28,7 +28,8 @@ type Client struct {
 	MaxRetries int
 	Debug      bool
 	DebugOut   io.Writer
-	Sleep      func(time.Duration)
+	// Sleep, when set, replaces the context-aware wait between retries (tests).
+	Sleep func(time.Duration)
 	// Guard, when set, runs before every state-changing request and can refuse
 	// it, so a write policy holds for every command that writes.
 	Guard func() error
@@ -45,9 +46,12 @@ func New(baseURL, token string) *Client {
 		Token:      token,
 		HTTPClient: http.DefaultClient,
 		MaxRetries: 2,
-		Sleep:      time.Sleep,
 	}
 }
+
+// maxRetryWait is the longest Retry-After the client waits out itself; a longer
+// one comes back to the caller as a retry-later error instead of a hang.
+const maxRetryWait = 30 * time.Second
 
 // HTTPError carries the raw status and body of a non-2xx response as the Cause
 // of the agent-facing error, so callers can classify responses (approval
@@ -111,80 +115,124 @@ func (c *Client) List(ctx context.Context, path string, query url.Values) (*Page
 }
 
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body any, idempotent bool) (json.RawMessage, error) {
-	if c.HTTPClient == nil {
-		c.HTTPClient = http.DefaultClient
-	}
-	if c.Sleep == nil {
-		c.Sleep = time.Sleep
-	}
-
 	var payload []byte
-	var err error
 	if body != nil {
-		payload, err = json.Marshal(body)
+		encoded, err := json.Marshal(body)
 		if err != nil {
 			return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
 		}
+		payload = encoded
 	}
 
 	attempts := c.MaxRetries + 1
 	for attempt := range attempts {
+		lastAttempt := attempt == attempts-1
 		req, err := c.newRequest(ctx, method, path, query, payload)
 		if err != nil {
 			return nil, err
 		}
-		if c.Debug && c.DebugOut != nil {
-			_ = json.NewEncoder(c.DebugOut).Encode(map[string]any{
-				"debug":  "request",
-				"method": method,
-				"url":    redactURL(req.URL.String()),
-			})
-		}
-		resp, err := c.HTTPClient.Do(req)
+		status, header, raw, err := c.send(req)
 		if err != nil {
-			if !idempotent {
-				return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent).WithHint(outcomeUnknownHint)
+			if retry, failure := transportFailure(ctx, err, idempotent, lastAttempt); !retry {
+				return nil, failure
 			}
-			if ctx.Err() != nil {
-				return nil, agenterrors.Wrap(ctx.Err(), agenterrors.FixableByRetry).WithHint("The request ran out of time; retry, or raise --timeout.")
+			if err := c.wait(ctx, backoff(attempt, 0)); err != nil {
+				return nil, timedOut(err)
 			}
-			if attempt < attempts-1 {
-				c.Sleep(backoff(attempt, 0))
-				continue
-			}
-			return nil, agenterrors.Wrap(err, agenterrors.FixableByRetry).WithHint("Network request failed after retries")
-		}
-		raw, readErr := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if readErr != nil {
-			return nil, agenterrors.Wrap(readErr, agenterrors.FixableByRetry)
-		}
-		if c.Debug && c.DebugOut != nil {
-			_ = json.NewEncoder(c.DebugOut).Encode(map[string]any{
-				"debug":  "response",
-				"status": resp.StatusCode,
-				"url":    redactURL(req.URL.String()),
-			})
-		}
-		retry := retryable(resp.StatusCode) && (idempotent || resp.StatusCode == http.StatusTooManyRequests)
-		if retry && attempt < attempts-1 && ctx.Err() == nil {
-			c.Sleep(backoff(attempt, retryAfter(resp.Header.Get("Retry-After"))))
 			continue
 		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			mapped := mapError(resp.StatusCode, raw, retryAfter(resp.Header.Get("Retry-After")))
-			if !idempotent && resp.StatusCode >= 500 {
-				mapped = mapped.WithHint(outcomeUnknownHint)
-				mapped.FixableBy = agenterrors.FixableByAgent
+		after := retryAfter(header.Get("Retry-After"))
+		if shouldRetry(status, idempotent) && !lastAttempt && after <= maxRetryWait {
+			if err := c.wait(ctx, backoff(attempt, after)); err != nil {
+				return nil, timedOut(err)
 			}
-			return nil, mapped
+			continue
 		}
-		if len(raw) == 0 {
-			return json.RawMessage(`{}`), nil
-		}
-		return json.RawMessage(raw), nil
+		return responseResult(status, raw, after, idempotent)
 	}
 	return nil, agenterrors.New("request failed after retries", agenterrors.FixableByRetry)
+}
+
+// send performs one request and reads the whole response.
+func (c *Client) send(req *http.Request) (int, http.Header, []byte, error) {
+	c.debug(map[string]any{"debug": "request", "method": req.Method, "url": redactURL(req.URL.String())})
+	httpClient := c.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, nil, nil, agenterrors.Wrap(err, agenterrors.FixableByRetry)
+	}
+	c.debug(map[string]any{"debug": "response", "status": resp.StatusCode, "url": redactURL(req.URL.String())})
+	return resp.StatusCode, resp.Header, raw, nil
+}
+
+func (c *Client) debug(fields map[string]any) {
+	if c.Debug && c.DebugOut != nil {
+		_ = json.NewEncoder(c.DebugOut).Encode(fields)
+	}
+}
+
+// wait pauses between retries, ending early when the command's deadline does.
+func (c *Client) wait(ctx context.Context, d time.Duration) error {
+	if c.Sleep != nil {
+		c.Sleep(d)
+		return ctx.Err()
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// transportFailure decides what a request that got no response means. A
+// write may already have happened, so it is never retried.
+func transportFailure(ctx context.Context, err error, idempotent, lastAttempt bool) (bool, error) {
+	switch {
+	case !idempotent:
+		return false, agenterrors.Wrap(err, agenterrors.FixableByAgent).WithHint(outcomeUnknownHint)
+	case ctx.Err() != nil:
+		return false, timedOut(ctx.Err())
+	case lastAttempt:
+		return false, agenterrors.Wrap(err, agenterrors.FixableByRetry).WithHint("Network request failed after retries")
+	default:
+		return true, nil
+	}
+}
+
+func timedOut(err error) error {
+	return agenterrors.Wrap(err, agenterrors.FixableByRetry).WithHint("The request ran out of time; retry, or raise --timeout.")
+}
+
+// shouldRetry: reads retry on 429 and gateway errors; writes only on 429,
+// which PostHog sends before doing anything.
+func shouldRetry(status int, idempotent bool) bool {
+	return retryable(status) && (idempotent || status == http.StatusTooManyRequests)
+}
+
+func responseResult(status int, raw []byte, after time.Duration, idempotent bool) (json.RawMessage, error) {
+	if status < 200 || status >= 300 {
+		mapped := mapError(status, raw, after)
+		if !idempotent && status >= 500 {
+			mapped = mapped.WithHint(outcomeUnknownHint)
+			mapped.FixableBy = agenterrors.FixableByAgent
+		}
+		return nil, mapped
+	}
+	if len(raw) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+	return json.RawMessage(raw), nil
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, query url.Values, payload []byte) (*http.Request, error) {

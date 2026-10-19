@@ -253,3 +253,54 @@ func TestDebugLogsRedactKeysInURLs(t *testing.T) {
 		t.Fatalf("non-secret parameters should stay: %s", log.String())
 	}
 }
+
+func TestRetryAfterIsCappedAndHonorsTheDeadline(t *testing.T) {
+	status := http.StatusTooManyRequests
+	retryAfterHeader := "3600"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", retryAfterHeader)
+		w.WriteHeader(status)
+	}))
+	defer server.Close()
+
+	var waits []time.Duration
+	client := New(server.URL, "phx_test")
+	client.Sleep = func(d time.Duration) { waits = append(waits, d) }
+	_, err := client.Get(context.Background(), "/api/x/", nil)
+	var apiErr *agenterrors.APIError
+	if !errors.As(err, &apiErr) || apiErr.FixableBy != agenterrors.FixableByRetry || apiErr.RetryAfterSeconds != 3600 || len(waits) != 0 {
+		t.Fatalf("an hour-long Retry-After must come back to the caller, not be slept: err=%#v waits=%v", err, waits)
+	}
+
+	retryAfterHeader = "2"
+	waits = nil
+	_, _ = client.Get(context.Background(), "/api/x/", nil)
+	if len(waits) != 2 || waits[0] != 2*time.Second {
+		t.Fatalf("a short Retry-After is honored: %v", waits)
+	}
+
+	retryAfterHeader = time.Now().Add(10 * time.Second).UTC().Format(http.TimeFormat)
+	waits = nil
+	_, _ = client.Get(context.Background(), "/api/x/", nil)
+	if len(waits) == 0 || waits[0] < 8*time.Second || waits[0] > 11*time.Second {
+		t.Fatalf("an HTTP-date Retry-After is honored: %v", waits)
+	}
+
+	retryAfterHeader = "20"
+	client.Sleep = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = client.Get(ctx, "/api/x/", nil)
+	if time.Since(start) > time.Second || err == nil || !strings.Contains(apiErrHint(err), "--timeout") {
+		t.Fatalf("a wait must end with the deadline: took %v, err=%v", time.Since(start), err)
+	}
+}
+
+func apiErrHint(err error) string {
+	var apiErr *agenterrors.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Hint
+	}
+	return ""
+}
