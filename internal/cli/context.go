@@ -44,13 +44,8 @@ func withClient(cmdCtx context.Context, flags *GlobalFlags, fn func(context.Cont
 
 func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	cfg := config.Read()
-	profileName := creds.FirstNonEmpty(flags.Profile, os.Getenv("AGENT_POSTHOG_PROFILE"), cfg.DefaultProfile)
-	profile := config.Profile{}
-	if profileName != "" {
-		if found, ok := cfg.Profiles[profileName]; ok {
-			profile = found
-		}
-	}
+	profileName := selectedProfile(flags, cfg)
+	profile := cfg.Profiles[profileName]
 
 	// Resolution order: explicit flag, AGENT_POSTHOG_* env var, profile metadata,
 	// PostHog-native env var, built-in default. The namespaced AGENT_POSTHOG_* var
@@ -74,7 +69,6 @@ func resolve(flags *GlobalFlags) (*resolvedContext, error) {
 	}
 	token := creds.FirstNonEmpty(flags.APIKey, os.Getenv("POSTHOG_PERSONAL_API_KEY"), os.Getenv("AGENT_POSTHOG_PERSONAL_API_KEY"))
 	if token == "" && profileName != "" {
-		var err error
 		token, err = credential.Get(profileName)
 		if err != nil {
 			return nil, agenterrors.Wrap(err, agenterrors.FixableByHuman).
@@ -129,6 +123,12 @@ func (r *resolvedContext) projectRef(ref string) (int, error) {
 		return 0, agenterrors.New("missing project", agenterrors.FixableByAgent)
 	}
 	return projectFromRef(ref, r.Profile, r.ProjectAliases)
+}
+
+// selectedProfile is the profile a command acts as: --profile, then
+// AGENT_POSTHOG_PROFILE, then the configured default.
+func selectedProfile(flags *GlobalFlags, cfg *config.Config) string {
+	return creds.FirstNonEmpty(flags.Profile, os.Getenv("AGENT_POSTHOG_PROFILE"), cfg.DefaultProfile)
 }
 
 func requireOrg(ctx *resolvedContext) error {

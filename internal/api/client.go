@@ -55,6 +55,15 @@ type HTTPError struct {
 
 func (e *HTTPError) Error() string { return fmt.Sprintf("PostHog returned HTTP %d", e.Status) }
 
+// WithBase returns a client with the same transport, retry, and debug
+// settings for another host and token.
+func (c *Client) WithBase(baseURL, token string) *Client {
+	clone := *c
+	clone.BaseURL = strings.TrimRight(baseURL, "/")
+	clone.Token = token
+	return &clone
+}
+
 func (c *Client) Get(ctx context.Context, path string, query url.Values) (json.RawMessage, error) {
 	return c.do(ctx, http.MethodGet, path, query, nil, true)
 }

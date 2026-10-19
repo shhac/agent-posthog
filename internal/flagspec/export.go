@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strconv"
 
 	"gopkg.in/yaml.v3"
@@ -116,7 +117,7 @@ func yamlNode(v any) (*yaml.Node, error) {
 		return node, nil
 	case map[string]any:
 		ordered := NewOrdered()
-		for _, key := range sortedKeys(t) {
+		for _, key := range slices.Sorted(maps.Keys(t)) {
 			ordered.Set(key, t[key])
 		}
 		return yamlNode(ordered)
@@ -189,7 +190,7 @@ func Export(flag map[string]any) (*Ordered, error) {
 		return spec, nil
 	}
 	decoded := map[string]any{}
-	for _, key := range sortedKeys(payloads) {
+	for _, key := range slices.Sorted(maps.Keys(payloads)) {
 		value, err := DecodePayload(payloads[key])
 		if err != nil {
 			return nil, fmt.Errorf("payload %q: %w", key, err)
@@ -231,7 +232,7 @@ func ExportConditions(groups []any) []any {
 		if variant, ok := group["variant"]; ok && variant != nil {
 			condition.Set("variant", variant)
 		}
-		for _, key := range sortedKeys(group) {
+		for _, key := range slices.Sorted(maps.Keys(group)) {
 			switch key {
 			case "properties", "rollout_percentage", "variant":
 				continue
@@ -253,7 +254,7 @@ func exportVariants(variants []any) []any {
 		if name, ok := variant["name"]; ok {
 			entry.Set("name", name)
 		}
-		for _, key := range sortedKeys(variant) {
+		for _, key := range slices.Sorted(maps.Keys(variant)) {
 			switch key {
 			case "key", "rollout_percentage", "name":
 				continue
@@ -306,13 +307,4 @@ func RequireV1(filters map[string]any) error {
 		return nil
 	}
 	return fmt.Errorf("this flag's filters use config version %v, which agent-posthog cannot edit; change it in the PostHog UI", v)
-}
-
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

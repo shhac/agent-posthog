@@ -2,12 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"unicode"
 
-	"github.com/shhac/lib-agent-cli/creds"
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/config"
@@ -137,12 +135,13 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 }
 
 func aliasProfile(globals *GlobalFlags) (string, error) {
-	profile := creds.FirstNonEmpty(globals.Profile, os.Getenv("AGENT_POSTHOG_PROFILE"), config.Read().DefaultProfile)
+	cfg := config.Read()
+	profile := selectedProfile(globals, cfg)
 	if profile == "" {
 		return "", agenterrors.New("project aliases belong to a profile, and none is selected", agenterrors.FixableByAgent).
 			WithHint("Pass -p <profile>, or create one with 'agent-posthog auth add <profile> --form'.")
 	}
-	if _, ok := config.Read().Profiles[profile]; !ok {
+	if _, ok := cfg.Profiles[profile]; !ok {
 		return "", agenterrors.New("profile "+profile+" is not configured", agenterrors.FixableByAgent).
 			WithHint("Run 'agent-posthog auth list'.")
 	}

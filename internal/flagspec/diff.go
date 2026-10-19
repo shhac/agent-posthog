@@ -2,7 +2,8 @@ package flagspec
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // Absent marks a side of a change where the field does not exist, as opposed
@@ -22,12 +23,12 @@ func Changes(current map[string]any, p *Patch) []Change {
 		current = map[string]any{}
 	}
 	var out []Change
-	for _, key := range sortedKeys(p.Fields) {
+	for _, key := range slices.Sorted(maps.Keys(p.Fields)) {
 		before, ok := current[key]
 		out = append(out, diffValues(key, presence(before, ok), p.Fields[key])...)
 	}
 	filters := asMap(current["filters"])
-	for _, key := range sortedKeys(p.Filters) {
+	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
 		before, ok := filters[key]
 		after := p.Filters[key]
 		if key == "groups" {
@@ -59,7 +60,7 @@ func diffValues(path string, before, after any) []Change {
 			keys[k] = true
 		}
 		var out []Change
-		for _, k := range sortedSet(keys) {
+		for _, k := range slices.Sorted(maps.Keys(keys)) {
 			bv, bin := bm[k]
 			av, ain := am[k]
 			out = append(out, diffValues(joinPath(path, k), presence(bv, bin), presence(av, ain))...)
@@ -90,13 +91,4 @@ func presence(v any, ok bool) any {
 		return Absent
 	}
 	return v
-}
-
-func sortedSet(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

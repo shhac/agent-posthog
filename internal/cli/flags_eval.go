@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -81,10 +82,7 @@ func newEvaluator(ctx context.Context, resolved *resolvedContext, flag map[strin
 			WithHint("Use --engine diagnostic, which needs no project token.")
 	}
 	e.projToken = project.APIToken
-	e.public = api.New(flagsHost(resolved.Host, flagsHostOverride), "")
-	e.public.MaxRetries = resolved.Client.MaxRetries
-	e.public.Debug = resolved.Client.Debug
-	e.public.DebugOut = resolved.Client.DebugOut
+	e.public = resolved.Client.WithBase(flagsHost(resolved.Host, flagsHostOverride), "")
 	return e, nil
 }
 
@@ -375,7 +373,7 @@ func parseCases(data []byte) ([]testCase, error) {
 		}
 		for field := range expect {
 			if !expectFields[field] {
-				return nil, fmt.Errorf("case %q: unknown expectation %q (use %s)", name, field, strings.Join(sortedFields(expectFields), ", "))
+				return nil, fmt.Errorf("case %q: unknown expectation %q (use %s)", name, field, strings.Join(slices.Sorted(maps.Keys(expectFields)), ", "))
 			}
 		}
 		distinctID, _ := raw["distinct_id"].(string)
@@ -386,15 +384,6 @@ func parseCases(data []byte) ([]testCase, error) {
 		cases = append(cases, testCase{Name: name, In: in, Expect: expect})
 	}
 	return cases, nil
-}
-
-func sortedFields(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // mismatches compares only the fields a case names. A payload must match
@@ -409,7 +398,7 @@ func mismatches(expect map[string]any, r evalResult) []any {
 		actual["payload"] = nil
 	}
 	var out []any
-	for _, field := range sortedFields(expectFields) {
+	for _, field := range slices.Sorted(maps.Keys(expectFields)) {
 		want, ok := expect[field]
 		if !ok || flagspec.Equal(want, actual[field]) {
 			continue
