@@ -52,13 +52,14 @@ func payloadGetCommand(globals *shared.GlobalFlags) *cobra.Command {
 
 func payloadSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
-	var variant, inline, file string
+	var variant string
+	var input *shared.Input
 	cmd := &cobra.Command{
 		Use:   "set <id-or-key>",
 		Short: "Set the payload for a boolean/remote_config flag, or for one --variant",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := shared.ReadInput(inline, file, "json", "file")
+			data, err := input.Read()
 			if err != nil {
 				return err
 			}
@@ -70,8 +71,7 @@ func payloadSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&variant, "variant", "", "Variant key (multivariate flags)")
-	cmd.Flags().StringVar(&inline, "json", "", "Payload as inline JSON")
-	cmd.Flags().StringVar(&file, "file", "", "File holding the payload JSON")
+	input = shared.AddInput(cmd, "json", "Payload as inline JSON", "file", "File holding the payload JSON", "")
 	addWriteFlags(cmd, &opts)
 	return cmd
 }

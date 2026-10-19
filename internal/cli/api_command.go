@@ -29,7 +29,7 @@ func registerAPI(root *cobra.Command, globals *shared.GlobalFlags) {
 
 func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 	var queryPairs []string
-	var bodyFile, inline string
+	var body *shared.Input
 	var yes, printRequest bool
 	cmd := &cobra.Command{
 		Use:   strings.ToLower(method) + " <api-path>",
@@ -58,7 +58,7 @@ func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 						"headers": map[string]string{"Authorization": "Bearer phx_..."},
 					}, globals.Format)
 				}
-				raw, err := sendRaw(ctx, resolved.Client, method, path, q, inline, bodyFile)
+				raw, err := sendRaw(ctx, resolved.Client, method, path, q, body)
 				if err != nil {
 					return err
 				}
@@ -69,8 +69,7 @@ func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 	cmd.Flags().StringArrayVar(&queryPairs, "query", nil, "Query parameter as key=value; repeatable")
 	cmd.Flags().BoolVar(&printRequest, "print-request", false, "Print a redacted request preview without sending")
 	if method == http.MethodPost {
-		cmd.Flags().StringVar(&bodyFile, "body", "", "JSON body file")
-		cmd.Flags().StringVar(&inline, "json", "", "JSON body inline (for callers without a shared filesystem, such as MCP)")
+		body = shared.AddInput(cmd, "json", "JSON body inline (for callers without a shared filesystem, such as MCP)", "body", "JSON body file", "")
 		cmd.Flags().BoolVar(&yes, "yes", false, "Allow raw POST outside query endpoints")
 	}
 	return cmd
@@ -79,13 +78,13 @@ func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 // sendRaw sends a raw request. Query POSTs are safe to repeat; any other POST
 // may change state, so it goes through Mutate (never retried, and refused
 // through MCP unless writes are on).
-func sendRaw(ctx context.Context, client *api.Client, method, path string, q url.Values, inline, bodyFile string) (json.RawMessage, error) {
+func sendRaw(ctx context.Context, client *api.Client, method, path string, q url.Values, input *shared.Input) (json.RawMessage, error) {
 	if method == http.MethodGet {
 		return client.Get(ctx, path, q)
 	}
 	body := map[string]any{}
-	if inline != "" || bodyFile != "" {
-		parsed, err := shared.ReadJSONObject(inline, bodyFile, "json", "body")
+	if input.Given() {
+		parsed, err := input.ReadObject()
 		if err != nil {
 			return nil, err
 		}

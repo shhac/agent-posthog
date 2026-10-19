@@ -87,24 +87,20 @@ func hogQLText(args []string, file string) (string, error) {
 }
 
 func queryJSONCommand(globals *shared.GlobalFlags) *cobra.Command {
-	var bodyFile, inline string
+	var input *shared.Input
 	cmd := &cobra.Command{
 		Use:   "json",
 		Short: "Run a raw PostHog query JSON body",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inline != "" {
-				bodyFile = ""
-			}
-			body, err := shared.ReadJSONObject(inline, bodyFile, "json", "body")
+			body, err := input.ReadObject()
 			if err != nil {
 				return err
 			}
 			return runQuery(cmd.Context(), globals, body)
 		},
 	}
-	cmd.Flags().StringVar(&bodyFile, "body", "-", "JSON body file or - for stdin")
-	cmd.Flags().StringVar(&inline, "json", "", "JSON body inline (for callers without stdin, such as MCP)")
+	input = shared.AddInput(cmd, "json", "JSON body inline (for callers without stdin, such as MCP)", "body", "JSON body file or - for stdin", "-")
 	return cmd
 }
 

@@ -14,7 +14,7 @@ import (
 
 func testCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var f evalFlags
-	var casesFile, casesJSON string
+	var input *shared.Input
 	var parallel int
 	cmd := &cobra.Command{
 		Use:   "test <id-or-key>",
@@ -29,7 +29,7 @@ func testCommand(globals *shared.GlobalFlags) *cobra.Command {
 			if parallel < 1 || parallel > featureflag.MaxParallelCases {
 				return agenterrors.New(fmt.Sprintf("--parallel must be from 1 to %d", featureflag.MaxParallelCases), agenterrors.FixableByAgent)
 			}
-			data, err := shared.ReadInput(casesJSON, casesFile, "cases-json", "cases")
+			data, err := input.Read()
 			if err != nil {
 				return err
 			}
@@ -52,9 +52,8 @@ func testCommand(globals *shared.GlobalFlags) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&casesFile, "cases", "", "Cases file (JSON or YAML)")
+	input = shared.AddInput(cmd, "cases-json", "Cases as inline JSON", "cases", "Cases file (JSON or YAML)", "")
 	cmd.Flags().IntVar(&parallel, "parallel", 1, fmt.Sprintf("Cases evaluated at once (1-%d); results print in case order", featureflag.MaxParallelCases))
-	cmd.Flags().StringVar(&casesJSON, "cases-json", "", "Cases as inline JSON")
 	f.add(cmd)
 	return cmd
 }

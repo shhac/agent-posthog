@@ -43,7 +43,7 @@ func exportCommand(globals *shared.GlobalFlags) *cobra.Command {
 
 func applyCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
-	var specJSON, file string
+	var input *shared.Input
 	cmd := &cobra.Command{
 		Use:   "apply",
 		Short: "Create or update a flag from a spec (fields the spec omits stay as they are)",
@@ -52,7 +52,7 @@ func applyCommand(globals *shared.GlobalFlags) *cobra.Command {
 			"Start from 'flags export <key>' to edit an existing flag.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := shared.ReadInput(specJSON, file, "spec-json", "file")
+			data, err := input.Read()
 			if err != nil {
 				return err
 			}
@@ -65,8 +65,7 @@ func applyCommand(globals *shared.GlobalFlags) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&specJSON, "spec-json", "", "Spec as inline JSON")
-	cmd.Flags().StringVar(&file, "file", "", "Spec file (JSON or YAML)")
+	input = shared.AddInput(cmd, "spec-json", "Spec as inline JSON", "file", "Spec file (JSON or YAML)", "")
 	addWriteFlags(cmd, &opts)
 	return cmd
 }
