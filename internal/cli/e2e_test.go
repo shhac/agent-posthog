@@ -360,3 +360,17 @@ func (s *cliSession) run(args ...string) (string, string, error) {
 	}
 	return stdout.String(), stderr.String(), err
 }
+
+func TestGetCommandsRedactSecrets(t *testing.T) {
+	out, errOut := runCLI(t, "projects", "get", "123")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if strings.Contains(out, "phc_mock_project_123") || !strings.Contains(out, "[REDACTED]") {
+		t.Fatalf("get must redact like list does: %s", out)
+	}
+	exposed, _ := runCLI(t, "--expose", "api_token", "projects", "get", "123")
+	if !strings.Contains(exposed, "phc_mock_project_123") {
+		t.Fatalf("--expose should reveal the field: %s", exposed)
+	}
+}

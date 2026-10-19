@@ -98,6 +98,16 @@ func PrintExact(data any, format Format) error {
 	return out.Print(Stdout(), data, format, nil)
 }
 
+// Clean prunes nils and redacts secrets, for records handed to a writer that
+// does not clean (such as the shared multi-get printer).
+func Clean(data any) any {
+	cleaned, ok := toCleanAny(data, true)
+	if !ok {
+		return data
+	}
+	return cleaned
+}
+
 func WriteRawJSON(raw json.RawMessage, format Format, prune bool) {
 	var data any
 	if err := json.Unmarshal(raw, &data); err != nil {

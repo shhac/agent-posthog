@@ -131,7 +131,7 @@ func dispatch(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "/api/organizations/org_1/projects/":
 		writePage(w, r, []any{map[string]any{"id": 123, "name": "Website", "timezone": "UTC"}})
 	case r.Method == http.MethodGet && path == "/api/organizations/org_1/projects/123/":
-		write(w, map[string]any{"id": 123, "name": "Website", "timezone": "UTC"})
+		write(w, map[string]any{"id": 123, "name": "Website", "timezone": "UTC", "api_token": projectTokens[123]})
 	case r.Method == http.MethodGet && path == "/api/projects/123/environments/":
 		writePage(w, r, []any{map[string]any{"id": 456, "name": "Production", "type": "production"}})
 	case r.Method == http.MethodGet && path == "/api/projects/123/environments/456/":

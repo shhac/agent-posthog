@@ -124,7 +124,11 @@ func registerSchema(root *cobra.Command, globals *GlobalFlags) {
 				if err != nil {
 					return nil, err
 				}
-				return resolveByField(page.Results, "name", id, "event definition")
+				record, err := resolveByField(page.Results, "name", id, "event definition")
+				if err != nil {
+					return nil, err
+				}
+				return output.Clean(record), nil
 			})
 		},
 	})
@@ -457,7 +461,8 @@ func flagEntityGetCommand(globals *GlobalFlags) *cobra.Command {
 	}
 }
 
-// decodeRaw unmarshals a JSON blob into an any so EntityGet can re-encode it.
+// decodeRaw unmarshals a JSON blob for EntityGet, cleaned like every other
+// read (nils pruned, secrets redacted), since EntityGet's printer does not.
 // Falls back to the raw bytes on decode failure to preserve the graceful
 // degradation property: never hard-fail on output that doesn't parse.
 func decodeRaw(raw json.RawMessage) any {
@@ -465,7 +470,7 @@ func decodeRaw(raw json.RawMessage) any {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return raw
 	}
-	return v
+	return output.Clean(v)
 }
 
 // resolveByField looks up a single record by the given field value in a list.

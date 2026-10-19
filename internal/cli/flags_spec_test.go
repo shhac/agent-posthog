@@ -142,10 +142,6 @@ func TestStoredNullDefaultsAreNotChanges(t *testing.T) {
 	if created["warnings"] != nil && strings.Contains(mustJSON(created["warnings"]), "differently than sent") {
 		t.Fatalf("server-filled null defaults are not a normalization: %v", created["warnings"])
 	}
-	group := s.flag("hand-written")["filters"].(map[string]any)["groups"].([]any)[0].(map[string]any)
-	if v, ok := group["aggregation_group_type_index"]; !ok || v != nil {
-		t.Fatalf("fixture should store the null default: %v", group)
-	}
 	if again := s.mustRun("flags", "apply", "--spec-json", spec, "--yes"); again["outcome"] != "unchanged" {
 		t.Fatalf("re-applying the same spec must not plan changes: %v", again)
 	}

@@ -98,3 +98,15 @@ func TestPublicFlagsEvaluatesWithoutPersonalKey(t *testing.T) {
 		t.Fatalf("gate = %v", gate)
 	}
 }
+
+func TestStoreFillsNullAggregationLikePostHog(t *testing.T) {
+	server := httptest.NewServer(NewServer())
+	defer server.Close()
+	_, flag := request(t, server, http.MethodPost, "/api/projects/123/feature_flags/", map[string]any{
+		"key": "plain", "filters": map[string]any{"groups": []any{map[string]any{"properties": []any{}, "rollout_percentage": 100}}},
+	}, true)
+	group := flag["filters"].(map[string]any)["groups"].([]any)[0].(map[string]any)
+	if v, ok := group["aggregation_group_type_index"]; !ok || v != nil {
+		t.Fatalf("group = %v", group)
+	}
+}
