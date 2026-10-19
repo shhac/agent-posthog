@@ -60,7 +60,6 @@ func Export(flag map[string]any) (*Ordered, error) {
 	return spec, nil
 }
 
-// ExportConditions renders condition groups in spec form.
 // exportCommon sets the fields every spec carries, whatever the filters format.
 func exportCommon(flag map[string]any, withType bool) *Ordered {
 	spec := NewOrdered()
@@ -89,6 +88,7 @@ func exportCommon(flag map[string]any, withType bool) *Ordered {
 	return spec
 }
 
+// ExportConditions renders condition groups in spec form.
 func ExportConditions(groups []any) []any {
 	out := make([]any, 0, len(groups))
 	for _, item := range groups {
@@ -147,62 +147,4 @@ func exportVariants(variants []any) []any {
 		out = append(out, entry)
 	}
 	return out
-}
-
-// DecodePayload turns a stored payload (a JSON-encoded string) into its value.
-func DecodePayload(stored any) (any, error) {
-	s, ok := stored.(string)
-	if !ok {
-		return stored, nil
-	}
-	value, err := Decode([]byte(s))
-	if err != nil {
-		return nil, fmt.Errorf("stored payload is not valid JSON")
-	}
-	return value, nil
-}
-
-// EncodePayload JSON-encodes a payload value for filters.payloads.
-func EncodePayload(value any) (string, error) {
-	data, err := marshalUnescaped(value)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// TypeOf classifies a flag as boolean, multivariate, or remote_config.
-func TypeOf(flag map[string]any) string {
-	if flag["is_remote_configuration"] == true {
-		return TypeRemoteConfig
-	}
-	if len(List(Object(Object(flag["filters"])["multivariate"])["variants"])) > 0 {
-		return TypeMultivariate
-	}
-	return TypeBoolean
-}
-
-// ConfigVersion reports a filters document's PostHog config format: 1 (the
-// classic groups/multivariate/payloads shape) or 2 (a pilot document PostHog
-// validates itself).
-func ConfigVersion(filters map[string]any) (int, error) {
-	v, ok := filters["version"]
-	switch {
-	case !ok || v == nil || Equal(v, number(1)):
-		return 1, nil
-	case Equal(v, number(2)):
-		return 2, nil
-	default:
-		return 0, fmt.Errorf("this flag's filters use config version %v, which agent-posthog does not support", v)
-	}
-}
-
-// RequireV1 refuses edits that address parts of the classic filters shape on
-// a flag stored in another format.
-func RequireV1(filters map[string]any) error {
-	version, err := ConfigVersion(filters)
-	if err != nil || version == 1 {
-		return err
-	}
-	return fmt.Errorf("this flag uses PostHog's config version 2 filters; edit them as a whole with 'flags export' and 'flags apply' (filters_document)")
 }

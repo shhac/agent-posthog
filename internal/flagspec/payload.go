@@ -1,0 +1,52 @@
+package flagspec
+
+import "fmt"
+
+// BooleanPayloadKey is the filters.payloads key of a boolean or remote_config
+// flag's single payload.
+const BooleanPayloadKey = "true"
+
+// PrunePayloads drops payloads no longer reachable on a flag of flagType with
+// the given variants, reporting whether anything was dropped.
+func PrunePayloads(stored map[string]any, flagType string, variantKeys map[string]bool) (map[string]any, bool) {
+	kept := map[string]any{}
+	for key, value := range stored {
+		if flagType == TypeMultivariate && variantKeys[key] || flagType != TypeMultivariate && key == BooleanPayloadKey {
+			kept[key] = value
+		}
+	}
+	return kept, len(kept) != len(stored)
+}
+
+// KeepOrEncode reuses the stored payload string when it already holds value,
+// so untouched payloads are not re-encoded.
+func KeepOrEncode(stored, value any) (any, error) {
+	if stored != nil {
+		if decoded, err := DecodePayload(stored); err == nil && Equal(decoded, value) {
+			return stored, nil
+		}
+	}
+	return EncodePayload(value)
+}
+
+// DecodePayload turns a stored payload (a JSON-encoded string) into its value.
+func DecodePayload(stored any) (any, error) {
+	s, ok := stored.(string)
+	if !ok {
+		return stored, nil
+	}
+	value, err := Decode([]byte(s))
+	if err != nil {
+		return nil, fmt.Errorf("stored payload is not valid JSON")
+	}
+	return value, nil
+}
+
+// EncodePayload JSON-encodes a payload value for filters.payloads.
+func EncodePayload(value any) (string, error) {
+	data, err := marshalUnescaped(value)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"iter"
 	"reflect"
 	"slices"
 )
@@ -100,21 +99,6 @@ func Equal(a, b any) bool {
 		return true
 	default:
 		return reflect.DeepEqual(a, b)
-	}
-}
-
-// ConditionProperties yields every property filter of a flag's release
-// conditions, as the live maps, so callers may edit them in place.
-func ConditionProperties(flag map[string]any) iter.Seq[map[string]any] {
-	return func(yield func(map[string]any) bool) {
-		for _, group := range List(Object(flag["filters"])["groups"]) {
-			for _, item := range List(Object(group)["properties"]) {
-				prop, ok := item.(map[string]any)
-				if ok && !yield(prop) {
-					return
-				}
-			}
-		}
 	}
 }
 
