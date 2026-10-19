@@ -1,8 +1,9 @@
 # agent-posthog
 
-PostHog product analytics CLI for AI agents. It is designed for read-heavy
-investigation workflows where an LLM needs compact structured output, actionable
-error hints, and no direct access to PostHog secrets.
+PostHog product analytics CLI for AI agents. It is designed for investigation
+workflows where an LLM needs compact structured output, actionable error hints,
+and no direct access to PostHog secrets, and for setting up feature flags
+(gates and per-rule JSON config) with plans, tests, and staging-to-prod copies.
 
 ## Features
 
@@ -13,7 +14,11 @@ error hints, and no direct access to PostHog secrets.
   `--project`. Override `--env` only to target a non-default environment.
 - LLM-shaped output: lists and queries default to NDJSON. Entity gets (`get <id>...`) default to NDJSON (one line per id); pass `--format json` for a single pretty object. Multi-id gets interleave `{"@unresolved":{...}}` lines for missing ids (exit 0); command-level failures go to stderr with exit 1.
 - Structured errors: stderr JSON `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
-- Mock server: `mockposthog` provides deterministic E2E fixtures.
+- Feature flag management: create, apply specs, narrow edits, archive/delete,
+  evaluate, scenario test suites, and diff/copy between projects. Every write
+  prints a plan unless `--yes` is passed, and refuses stale overlapping edits.
+- Mock server: `mockposthog` provides deterministic E2E fixtures, including a
+  stateful flag store.
 
 ## Quick Start
 
@@ -30,6 +35,7 @@ make build
 ./agent-posthog schema events list --search signup
 ./agent-posthog query hogql "select event, count() from events group by event order by count() desc limit 20"
 ./agent-posthog flags get checkout-v2
+./agent-posthog flags create beta-gate --where "email icontains @example.com"   # plan; add --yes
 ```
 
 When an LLM is guiding setup, prefer `--form` over `--api-key`. A native OS

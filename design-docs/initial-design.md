@@ -299,16 +299,38 @@ The private feature flag get endpoint is ID-addressed. Key lookup should resolve
 by listing/searching flags first, then fetching the matched numeric ID. Ambiguous
 or missing key matches are agent-fixable errors with a hint to run `flags list`.
 
-Create/update should exist but require explicit inputs and produce a clear diff:
+Writes follow one path: read the flag, build the minimal change, print a plan
+(`outcome: planned`, leaf-level `changes`), and write only with `--yes`.
+`--dry-run` forces a plan even with `--yes`, because the MCP bridge appends
+`--yes` once the host has confirmed a tool call. Every PATCH sends `version`
+and `original_flag`, PostHog's field-level conflict check; edits that address a
+condition by index require `--if-version`, and rollout-only edits use the
+strict `set_release_condition_rollout` endpoint. PostHog merges `filters`
+shallowly, so the CLI sends only the sections that change.
 
 ```bash
-agent-posthog flags create --key checkout-v2 --name "Checkout v2" --active false --body flag.json
-agent-posthog flags update checkout-v2 --set active=false
-agent-posthog flags disable checkout-v2
+agent-posthog flags create beta-gate --where "email icontains @example.com" --yes
+agent-posthog flags apply --file spec.yaml --yes        # JSON/YAML spec; upsert by key
+agent-posthog flags export beta-gate --format yaml
+agent-posthog flags conditions add|set|remove|move ...
+agent-posthog flags variants set checkout-config a=50 b=50 --yes
+agent-posthog flags payload set checkout-config --variant a --json '{}' --yes
+agent-posthog flags enable|disable|archive|unarchive|delete|restore ...
+agent-posthog flags evaluate beta-gate --distinct-id u_1 --props-json '{"app_env":"staging"}'
+agent-posthog flags test beta-gate --cases cases.yaml
+agent-posthog flags diff beta-gate --against prod
+agent-posthog flags copy beta-gate --to prod --yes
 ```
 
-The first implementation can make mutating commands opt-in behind `--yes` for
-anything that changes rollout, active state, or targeting.
+The spec and `--where` grammar live in `internal/flagspec` (pure, no HTTP).
+Specs are presence-aware (an omitted field is left alone), decode numbers
+losslessly, keep unknown condition and variant keys, and refuse flags whose
+`filters.version` is not 1, encrypted payload edits, and remote-config
+conditions. Evaluation errors are never reported as `false`.
+
+Decided not to add a config-level write opt-in: raw `api post --yes` already
+treats MCP host confirmation as consent, and gating typed flag writes alone
+would not make a connection read-only.
 
 ## Investigation commands
 
@@ -427,7 +449,7 @@ The release command should cover:
   make environment the analytics default, but allow project fallback where the
   official API still supports both.
 - Whether direct project-token public endpoints belong in v1. Current choice:
-  no, except maybe later `capture`/`flags eval` commands if a real LLM workflow
-  needs them.
+  only `/flags`, for `flags evaluate`/`flags test`, using the project token read
+  from the project (never printed); no `capture`.
 - Whether mutating feature flag commands should require `--yes`. Current choice:
-  yes for active/rollout/targeting changes.
+  every flag write plans by default and applies only with `--yes`.

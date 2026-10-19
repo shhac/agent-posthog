@@ -109,9 +109,14 @@ CLI behavior:
 | `flags get` | `GET /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:read` |
 | `flags dependent` | `GET /api/projects/:project_id/feature_flags/:id/dependent_flags/` | project | `feature_flag:read` |
 | `flags activity` | `GET /api/projects/:project_id/feature_flags/:id/activity/` | project | `feature_flag:read` |
-| `flags create` | `POST /api/projects/:project_id/feature_flags/` | project | `feature_flag:write` |
-| `flags update` | `PATCH /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:write` |
-| `flags disable` | `PATCH /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:write` |
+| `flags export`, `conditions list`, `payload get` | `GET /api/projects/:project_id/feature_flags/:id/` | project | `feature_flag:read` |
+| `flags create`, `flags apply` (new key) | `POST /api/projects/:project_id/feature_flags/` | project | `feature_flag:write` |
+| `flags apply`, `enable`, `disable`, `archive`, `unarchive`, `delete`, `restore`, `early-exit`, `conditions add/set/remove/move`, `variants set`, `payload set/unset` | `PATCH /api/projects/:project_id/feature_flags/:id/` (with `version` + `original_flag`) | project | `feature_flag:write` |
+| `flags conditions set` (rollout only) | `POST /api/projects/:project_id/feature_flags/:id/set_release_condition_rollout/` | project | `feature_flag:write` |
+| `flags evaluate`, `flags test` (`--engine diagnostic`) | `POST /api/projects/:project_id/feature_flags/:id/test_evaluation/` | project | `feature_flag:read` |
+| `flags evaluate`, `flags test` (`--engine public`) | `GET /api/projects/:project_id/` (`api_token`), then `POST {flags host}/flags?v=2` with the project token | project | project read |
+| `flags reach` | `POST /api/projects/:project_id/feature_flags/user_blast_radius/` | project | `feature_flag:read` |
+| `flags copy` | `POST /api/organizations/:org_id/feature_flags/copy_flags/` (+ `copy_flags/dependency_requirements/` with `--copy-dependencies`) | organization | `feature_flag:write` |
 
 ## Projects vs environments (ID model and migration direction)
 
