@@ -365,11 +365,3 @@ func parseIndex(arg string) (int, error) {
 func rolloutNumber(pct float64) json.Number {
 	return json.Number(strconv.FormatFloat(pct, 'f', -1, 64))
 }
-
-func stringsToAny(values []string) []any {
-	out := make([]any, len(values))
-	for i, v := range values {
-		out[i] = v
-	}
-	return out
-}

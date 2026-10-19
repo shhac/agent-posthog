@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -58,15 +57,6 @@ func comparableSpec(ctx context.Context, resolved *resolvedContext, projectID in
 	}
 	delete(spec, "schema_version")
 	return spec, warnings, nil
-}
-
-func appendOnce(list []string, items ...string) []string {
-	for _, item := range items {
-		if !slices.Contains(list, item) {
-			list = append(list, item)
-		}
-	}
-	return list
 }
 
 // otherSpec is the comparable spec of the same-key flag in another project,

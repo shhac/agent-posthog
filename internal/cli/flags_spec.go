@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -211,28 +210,4 @@ func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
 		return nil
 	}
 	return flagspec.ConditionWarnings(asList(groups), flagspec.TypeOf(flagspec.Result(current, patch)))
-}
-
-// readInput returns inline JSON when given, else the file's contents. MCP
-// callers have no stdin and a different filesystem, so inline is first-class.
-func readInput(inline, file, inlineFlag, fileFlag string) ([]byte, error) {
-	switch {
-	case inline != "" && file != "":
-		return nil, agenterrors.New(fmt.Sprintf("use --%s or --%s, not both", inlineFlag, fileFlag), agenterrors.FixableByAgent)
-	case inline != "":
-		return []byte(inline), nil
-	case file != "":
-		data, err := os.ReadFile(file)
-		if err != nil {
-			return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
-		}
-		return data, nil
-	default:
-		return nil, agenterrors.New(fmt.Sprintf("pass --%s or --%s", inlineFlag, fileFlag), agenterrors.FixableByAgent)
-	}
-}
-
-func asList(v any) []any {
-	l, _ := v.([]any)
-	return l
 }

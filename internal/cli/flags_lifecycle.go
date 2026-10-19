@@ -139,22 +139,3 @@ func earlyExitWarnings(on bool) []string {
 	}
 	return []string{"SDKs evaluating flags locally honor early exit only in recent versions (posthog-python, posthog-go >= 1.15.0); older ones evaluate every condition."}
 }
-
-func asObject(v any) map[string]any {
-	m, _ := v.(map[string]any)
-	return m
-}
-
-func jsonInt(v any) int {
-	switch t := v.(type) {
-	case json.Number:
-		n, _ := t.Int64()
-		return int(n)
-	case float64:
-		return int(t)
-	case int:
-		return t
-	default:
-		return 0
-	}
-}
