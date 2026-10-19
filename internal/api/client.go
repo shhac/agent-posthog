@@ -4,12 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -49,20 +46,6 @@ func New(baseURL, token string) *Client {
 		MaxRetries: 2,
 	}
 }
-
-// maxRetryWait is the longest Retry-After the client waits out itself; a longer
-// one comes back to the caller as a retry-later error instead of a hang.
-const maxRetryWait = 30 * time.Second
-
-// HTTPError carries the raw status and body of a non-2xx response as the Cause
-// of the agent-facing error, so callers can classify responses (approval
-// policies, version conflicts) that the message alone cannot distinguish.
-type HTTPError struct {
-	Status int
-	Body   json.RawMessage
-}
-
-func (e *HTTPError) Error() string { return fmt.Sprintf("PostHog returned HTTP %d", e.Status) }
 
 // WithBase returns a client with the same transport, retry, and debug
 // settings for another host and token.
@@ -198,62 +181,6 @@ func (c *Client) debug(fields map[string]any) {
 	}
 }
 
-// wait pauses between retries, ending early when the command's deadline does.
-func (c *Client) wait(ctx context.Context, d time.Duration) error {
-	if c.Sleep != nil {
-		c.Sleep(d)
-		return ctx.Err()
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-// transportFailure decides what a request that got no response means. A
-// write may already have happened, so it is never retried.
-func transportFailure(ctx context.Context, err error, idempotent, lastAttempt bool) (bool, error) {
-	switch {
-	case !idempotent:
-		return false, agenterrors.Wrap(err, agenterrors.FixableByAgent).WithHint(outcomeUnknownHint)
-	case ctx.Err() != nil:
-		return false, timedOut(ctx.Err())
-	case lastAttempt:
-		return false, agenterrors.Wrap(err, agenterrors.FixableByRetry).WithHint("Network request failed after retries")
-	default:
-		return true, nil
-	}
-}
-
-func timedOut(err error) error {
-	return agenterrors.Wrap(err, agenterrors.FixableByRetry).WithHint("The request ran out of time; retry, or raise --timeout.")
-}
-
-// shouldRetry: reads retry on 429 and gateway errors; writes only on 429,
-// which PostHog sends before doing anything.
-func shouldRetry(status int, idempotent bool) bool {
-	return retryable(status) && (idempotent || status == http.StatusTooManyRequests)
-}
-
-func responseResult(status int, raw []byte, after time.Duration, idempotent bool) (json.RawMessage, error) {
-	if status < 200 || status >= 300 {
-		mapped := mapError(status, raw, after)
-		if !idempotent && status >= 500 {
-			mapped = mapped.WithHint(outcomeUnknownHint)
-			mapped.FixableBy = agenterrors.FixableByAgent
-		}
-		return nil, mapped
-	}
-	if len(raw) == 0 {
-		return json.RawMessage(`{}`), nil
-	}
-	return json.RawMessage(raw), nil
-}
-
 func (c *Client) newRequest(ctx context.Context, method, path string, query url.Values, payload []byte) (*http.Request, error) {
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
@@ -301,83 +228,4 @@ func (c *Client) newRequest(ctx context.Context, method, path string, query url.
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 	return req, nil
-}
-
-const outcomeUnknownHint = "The write may or may not have been applied. Re-read the resource before retrying."
-
-func mapError(status int, raw []byte, retryAfter time.Duration) *agenterrors.Error {
-	err := classifyError(status, raw, retryAfter)
-	err.Cause = &HTTPError{Status: status, Body: append(json.RawMessage(nil), raw...)}
-	return err
-}
-
-func classifyError(status int, raw []byte, retryAfter time.Duration) *agenterrors.Error {
-	detail := strings.TrimSpace(string(raw))
-	var payload struct {
-		Type   string `json:"type"`
-		Code   string `json:"code"`
-		Detail string `json:"detail"`
-		Attr   string `json:"attr"`
-		Error  string `json:"error"`
-	}
-	if err := json.Unmarshal(raw, &payload); err == nil && payload.Detail == "" {
-		payload.Detail = payload.Error
-	}
-	if payload.Detail != "" {
-		detail = payload.Detail
-		if payload.Attr != "" {
-			detail = payload.Attr + ": " + detail
-		}
-	}
-	if detail == "" {
-		detail = http.StatusText(status)
-	}
-
-	switch {
-	case status == http.StatusUnauthorized:
-		return agenterrors.New("Authentication failed: "+detail, agenterrors.FixableByHuman).
-			WithHint("Run 'agent-posthog auth check <profile>' or update the personal API key with 'agent-posthog auth add <profile> --form'.")
-	case status == http.StatusForbidden:
-		return agenterrors.New("Permission denied: "+detail, agenterrors.FixableByHuman).
-			WithHint("The personal API key may need additional PostHog scopes for this resource.")
-	case status == http.StatusNotFound:
-		return agenterrors.New("Not found: "+detail, agenterrors.FixableByAgent).
-			WithHint("Check the current profile, organization, project, and environment IDs.")
-	case status == http.StatusTooManyRequests:
-		err := agenterrors.New("Rate limited: "+detail, agenterrors.FixableByRetry).
-			WithHint("Wait and retry, or narrow the query/list page size.")
-		if retryAfter > 0 {
-			err = err.WithRetryAfter(retryAfter)
-		}
-		return err
-	case status >= 500:
-		return agenterrors.New(fmt.Sprintf("PostHog server error (%d): %s", status, detail), agenterrors.FixableByRetry)
-	default:
-		return agenterrors.New(detail, agenterrors.FixableByAgent)
-	}
-}
-
-func retryable(status int) bool {
-	return status == http.StatusTooManyRequests || status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout
-}
-
-func retryAfter(value string) time.Duration {
-	if value == "" {
-		return 0
-	}
-	if seconds, err := strconv.Atoi(value); err == nil {
-		return time.Duration(seconds) * time.Second
-	}
-	if when, err := http.ParseTime(value); err == nil {
-		return time.Until(when)
-	}
-	return 0
-}
-
-func backoff(attempt int, retryAfter time.Duration) time.Duration {
-	if retryAfter > 0 {
-		return retryAfter
-	}
-	ms := int(math.Pow(2, float64(attempt))) * 250
-	return time.Duration(ms) * time.Millisecond
 }
