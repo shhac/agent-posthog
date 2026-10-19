@@ -10,7 +10,7 @@ import (
 func TestSavedPlanAppliesExactlyWhatWasReviewed(t *testing.T) {
 	s := gateSession(t)
 	plan := filepath.Join(t.TempDir(), "plan.json")
-	saved := s.mustRun("flags", "conditions", "add", "beta-gate", "--where", "app_env = staging", "--save-plan", plan)
+	saved := s.mustRun("flags", "conditions", "add", "beta-gate", "--where", "app_env = staging", "--rollout", "50", "--save-plan", plan)
 	if saved["outcome"] != "planned" || !strings.Contains(saved["hint"].(string), "apply-plan") {
 		t.Fatalf("save = %v", saved)
 	}
@@ -23,6 +23,9 @@ func TestSavedPlanAppliesExactlyWhatWasReviewed(t *testing.T) {
 	r := s.mustRun("flags", "apply-plan", "--file", plan, "--yes")
 	if r["outcome"] != "applied" || mustJSON(r["changes"]) != mustJSON(saved["changes"]) {
 		t.Fatalf("applied %v, reviewed %v", r["changes"], saved["changes"])
+	}
+	if strings.Contains(mustJSON(r["warnings"]), "stored") {
+		t.Fatalf("a plan applied as reviewed must not warn that PostHog stored it differently: %v", r["warnings"])
 	}
 	if groups := groupsOf(t, s, "beta-gate"); len(groups) != 3 || !strings.Contains(mustJSON(groups[2]), "staging") {
 		t.Fatalf("groups = %v", groups)

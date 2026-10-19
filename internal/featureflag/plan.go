@@ -1,6 +1,7 @@
 package featureflag
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -58,8 +59,12 @@ func ReadPlan(path string) (*SavedPlan, error) {
 	if err != nil {
 		return nil, agenterrors.Wrap(err, agenterrors.FixableByAgent)
 	}
+	// Numbers stay json.Number, as in a flag read from PostHog, so the stored
+	// flag compares equal to what the plan sends.
 	var plan SavedPlan
-	if err := json.Unmarshal(data, &plan); err != nil || plan.Format != planFormat {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&plan); err != nil || plan.Format != planFormat {
 		return nil, agenterrors.New(path+" is not an agent-posthog plan", agenterrors.FixableByAgent)
 	}
 	return &plan, nil
