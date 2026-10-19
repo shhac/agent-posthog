@@ -21,11 +21,11 @@ func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				otherProject, err := resolved.ProjectRef(against)
+				other, err := target(resolved, against)
 				if err != nil {
 					return err
 				}
-				c, err := p.Compare(ctx, args[0], p.In(otherProject, shared.AliasName(against)))
+				c, err := p.Compare(ctx, args[0], p.In(other.ID, other.Alias))
 				if err != nil {
 					return err
 				}

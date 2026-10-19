@@ -41,11 +41,11 @@ func copyCommand(globals *shared.GlobalFlags) *cobra.Command {
 				}
 				targets := make([]featureflag.Target, 0, len(to))
 				for _, ref := range to {
-					id, err := resolved.ProjectRef(ref)
+					t, err := target(resolved, ref)
 					if err != nil {
 						return err
 					}
-					targets = append(targets, featureflag.Target{ID: id, Alias: shared.AliasName(ref)})
+					targets = append(targets, t)
 				}
 				plan, err := p.PlanCopy(ctx, args[0], targets, o)
 				if err != nil {
@@ -68,6 +68,30 @@ func copyCommand(globals *shared.GlobalFlags) *cobra.Command {
 // writeCopy prints the copy plan or, with --yes, applies it and prints
 // PostHog's per-target report, failing the command if any target failed.
 func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOptions, format string) error {
+	result := copyReport(plan)
+	hint := copyHint(plan)
+	if !opts.apply() {
+		result.Set("hint", hint)
+		return shared.WriteExact(result, format)
+	}
+	if len(plan.Blocked) > 0 {
+		return agenterrors.New("Not copied: "+hint, agenterrors.FixableByAgent)
+	}
+	applied, err := plan.Apply(ctx)
+	if applied == nil {
+		return err
+	}
+	result.Set("outcome", applied.Outcome)
+	result.Set("succeeded", applied.Succeeded)
+	result.Set("failed", applied.Failed)
+	if writeErr := shared.WriteExact(result, format); writeErr != nil {
+		return writeErr
+	}
+	return err
+}
+
+// copyReport is the plan as the copy command reports it.
+func copyReport(plan *featureflag.CopyPlan) *flagspec.Ordered {
 	result := flagspec.NewOrdered()
 	result.Set("outcome", featureflag.OutcomePlanned)
 	result.Set("operation", "copy")
@@ -91,25 +115,7 @@ func writeCopy(ctx context.Context, plan *featureflag.CopyPlan, opts writeOption
 		result.Set("dependencies", plan.Dependencies)
 	}
 	result.Set("warnings", plan.Warnings)
-	hint := copyHint(plan)
-	if !opts.apply() {
-		result.Set("hint", hint)
-		return shared.WriteExact(result, format)
-	}
-	if len(plan.Blocked) > 0 {
-		return agenterrors.New("Not copied: "+hint, agenterrors.FixableByAgent)
-	}
-	applied, err := plan.Apply(ctx)
-	if applied == nil {
-		return err
-	}
-	result.Set("outcome", applied.Outcome)
-	result.Set("succeeded", applied.Succeeded)
-	result.Set("failed", applied.Failed)
-	if writeErr := shared.WriteExact(result, format); writeErr != nil {
-		return writeErr
-	}
-	return err
+	return result
 }
 
 func copyHint(plan *featureflag.CopyPlan) string {

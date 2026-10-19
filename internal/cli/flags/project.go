@@ -28,3 +28,12 @@ func project(r *shared.Resolved) (featureflag.Project, error) {
 	}
 	return featureflag.Project{Client: r.Client, ID: r.ProjectID, OrgID: r.OrgID, Host: r.Host, Alias: r.ProjectAlias}, nil
 }
+
+// target is another project of the profile, named by ID or alias.
+func target(resolved *shared.Resolved, ref string) (featureflag.Target, error) {
+	id, err := resolved.ProjectRef(ref)
+	if err != nil {
+		return featureflag.Target{}, err
+	}
+	return featureflag.Target{ID: id, Alias: shared.AliasName(ref)}, nil
+}
