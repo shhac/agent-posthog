@@ -29,6 +29,24 @@ Use request paths, query parameters, and fake token values to trigger edge cases
 - `query log query_complete`: archived query log details
 - `api get /api/projects/123/session_recordings/rec_1/sharing/`: sharing payload with redacted access token
 
+Feature flags live in a stateful per-server store (`internal/mockposthog/flagstore.go`),
+so a test can create, edit, and evaluate a flag across several CLI invocations
+against one server:
+
+- projects `123` (default) and `124` (a separate staging project); each has a
+  project token (`phc_mock_project_<id>`) on `GET /api/projects/<id>/`
+- PATCH merges `filters` shallowly and detects stale writes from `version` +
+  `original_flag` the way PostHog does (field overlap only)
+- `approval-flag` (26): any PATCH returns the approval-policy 409
+- `policy-flag` (27): any PATCH returns the 400 `policy_conflict`
+- archiving an active flag is a 400; DELETE is a 405; delete is `deleted: true`
+- `POST /flags?v=2` evaluates with the project token, no personal key. Its
+  evaluator supports only person properties with `exact`, `is_not`, `icontains`,
+  `is_set`, `is_not_set`, and rollouts of 0 or 100; anything else marks that
+  flag `failed`. Distinct ID `user_123` carries the fixture person's properties;
+  `mock-error` returns `errorsWhileComputingFlags: true`.
+- `copy_flags` to project `125` comes back approval-pending inside the HTTP 200
+
 ## Fixture values
 
 Stable IDs:
@@ -37,7 +55,7 @@ Stable IDs:
 - project: `123`
 - environment: `456`
 - person: `44`
-- feature flag: `22`, key `checkout-v2`
+- feature flag: `22`, key `checkout-v2` (also `23`/`24` sharing key `ambiguous-flag`)
 - session recording: `rec_1`
 - dashboard: `66`
 - experiment: `33`

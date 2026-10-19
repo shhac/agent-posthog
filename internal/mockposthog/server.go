@@ -8,9 +8,14 @@ import (
 	"strings"
 )
 
+// NewServer returns a mock with its own flag store, so each test server starts
+// from the same fixtures.
 func NewServer() http.Handler {
+	store := newFlagStore()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handle)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		handle(w, r, store)
+	})
 	return mux
 }
 
@@ -23,10 +28,19 @@ func Routes() []string {
 		"GET  /api/projects/{project}/environments/",
 		"GET  /api/projects/{project}/event_definitions/",
 		"GET  /api/projects/{project}/property_definitions/",
+		"GET  /api/projects/{project}/",
 		"GET  /api/projects/{project}/feature_flags/",
+		"POST /api/projects/{project}/feature_flags/",
+		"POST /api/projects/{project}/feature_flags/user_blast_radius/",
 		"GET  /api/projects/{project}/feature_flags/{id}/",
+		"PATCH /api/projects/{project}/feature_flags/{id}/",
+		"POST /api/projects/{project}/feature_flags/{id}/set_release_condition_rollout/",
+		"POST /api/projects/{project}/feature_flags/{id}/test_evaluation/",
 		"GET  /api/projects/{project}/feature_flags/{id}/activity/",
 		"GET  /api/projects/{project}/feature_flags/{id}/dependent_flags/",
+		"POST /api/organizations/{org}/feature_flags/copy_flags/",
+		"POST /api/organizations/{org}/feature_flags/copy_flags/dependency_requirements/",
+		"POST /flags?v=2  (project token in body, no personal key)",
 		"GET  /api/projects/{project}/experiments/",
 		"GET  /api/projects/{project}/experiments/{id}/",
 		"GET  /api/projects/{project}/session_recordings/{id}/sharing/",
@@ -42,12 +56,26 @@ func Routes() []string {
 	}
 }
 
-func handle(w http.ResponseWriter, r *http.Request) {
+func handle(w http.ResponseWriter, r *http.Request, store *flagStore) {
 	w.Header().Set("Content-Type", "application/json")
+	if r.Method == http.MethodPost && r.URL.Path == "/flags" {
+		store.handlePublicFlags(w, r)
+		return
+	}
 	if handled := handlePreflight(w, r); handled {
 		return
 	}
-	dispatch(w, r)
+	if store.handle(w, r) {
+		return
+	}
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/api/organizations/org_1/feature_flags/copy_flags/":
+		store.copyFlags(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == "/api/organizations/org_1/feature_flags/copy_flags/dependency_requirements/":
+		dependencyRequirements(w)
+	default:
+		dispatch(w, r)
+	}
 }
 
 func handlePreflight(w http.ResponseWriter, r *http.Request) bool {
@@ -114,18 +142,9 @@ func dispatch(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"id": 1, "name": "$pageview"})
 	case r.Method == http.MethodGet && path == "/api/projects/123/property_definitions/":
 		writePage(w, r, propertyDefinitions())
-	case r.Method == http.MethodGet && path == "/api/projects/123/feature_flags/":
-		writeFeatureFlags(w, r)
-	case r.Method == http.MethodGet && path == "/api/projects/123/feature_flags/22/":
-		write(w, checkoutFlag())
-	case r.Method == http.MethodGet && path == "/api/projects/123/feature_flags/23/":
-		write(w, billingFlag(23))
-	case r.Method == http.MethodGet && path == "/api/projects/123/feature_flags/24/":
-		write(w, billingFlag(24))
-	case r.Method == http.MethodGet && path == "/api/projects/123/feature_flags/22/dependent_flags/":
-		writePage(w, r, []any{map[string]any{"id": 25, "key": "checkout-v2-dependent", "name": "Checkout dependent", "active": true}})
-	case r.Method == http.MethodGet && path == "/api/projects/123/feature_flags/22/activity/":
-		writePage(w, r, flagActivity())
+	case r.Method == http.MethodGet && (path == "/api/projects/123/" || path == "/api/projects/124/"):
+		id, _ := strconv.Atoi(strings.Trim(strings.TrimPrefix(path, "/api/projects/"), "/"))
+		write(w, map[string]any{"id": id, "name": map[int]string{123: "Website", 124: "Website staging"}[id], "api_token": projectTokens[id]})
 	case r.Method == http.MethodGet && path == "/api/projects/123/experiments/":
 		writePage(w, r, experiments())
 	case r.Method == http.MethodGet && path == "/api/projects/123/experiments/33/":
@@ -177,17 +196,6 @@ func writeOrganizations(w http.ResponseWriter, r *http.Request) {
 		map[string]any{"id": "org_1", "name": "Acme", "slug": "acme"},
 		map[string]any{"id": "org_2", "name": "Beta", "slug": "beta"},
 	})
-}
-
-func writeFeatureFlags(w http.ResponseWriter, r *http.Request) {
-	switch r.URL.Query().Get("search") {
-	case "missing-flag":
-		writePage(w, r, []any{})
-	case "ambiguous-flag":
-		writePage(w, r, []any{billingFlag(23), billingFlag(24)})
-	default:
-		writePage(w, r, []any{checkoutFlag(), billingFlag(23)})
-	}
 }
 
 func writePersons(w http.ResponseWriter, r *http.Request) {
