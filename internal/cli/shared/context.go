@@ -69,25 +69,12 @@ func Resolve(flags *GlobalFlags) (*Resolved, error) {
 	if environmentID == 0 {
 		environmentID = projectID
 	}
-	token := creds.FirstNonEmpty(flags.APIKey, os.Getenv("POSTHOG_PERSONAL_API_KEY"), os.Getenv("AGENT_POSTHOG_PERSONAL_API_KEY"))
-	if token == "" && profileName != "" {
-		token, err = credential.Get(profileName)
-		if err != nil {
-			return nil, agenterrors.Wrap(err, agenterrors.FixableByHuman).
-				WithHint("Run 'agent-posthog auth add <profile> --form' to store a personal API key.")
-		}
+	token, err := resolveToken(flags, profileName)
+	if err != nil {
+		return nil, err
 	}
-	if token == "" {
-		return nil, agenterrors.New("missing PostHog personal API key", agenterrors.FixableByHuman).
-			WithHint("Run 'agent-posthog auth add <profile> --form' or set POSTHOG_PERSONAL_API_KEY for direct auth.")
-	}
-	client := api.New(host, token)
-	client.Guard = requireWriteAllowed
-	client.MaxRetries = flags.MaxRetries
-	client.Debug = flags.Debug
-	client.DebugOut = output.Stderr()
 	return &Resolved{
-		Client:         client,
+		Client:         newClient(host, token, flags),
 		Profile:        profileName,
 		Host:           host,
 		OrgID:          orgID,
@@ -96,6 +83,35 @@ func Resolve(flags *GlobalFlags) (*Resolved, error) {
 		ProjectAliases: profile.ProjectAliases,
 		ProjectAlias:   AliasName(flags.Project),
 	}, nil
+}
+
+// resolveToken finds the personal API key: the flag, then the environment,
+// then the profile's stored credential.
+func resolveToken(flags *GlobalFlags, profileName string) (string, error) {
+	token := creds.FirstNonEmpty(flags.APIKey, os.Getenv("POSTHOG_PERSONAL_API_KEY"), os.Getenv("AGENT_POSTHOG_PERSONAL_API_KEY"))
+	if token == "" && profileName != "" {
+		stored, err := credential.Get(profileName)
+		if err != nil {
+			return "", agenterrors.Wrap(err, agenterrors.FixableByHuman).
+				WithHint("Run 'agent-posthog auth add <profile> --form' to store a personal API key.")
+		}
+		token = stored
+	}
+	if token == "" {
+		return "", agenterrors.New("missing PostHog personal API key", agenterrors.FixableByHuman).
+			WithHint("Run 'agent-posthog auth add <profile> --form' or set POSTHOG_PERSONAL_API_KEY for direct auth.")
+	}
+	return token, nil
+}
+
+// newClient is the API client every command uses, with the MCP write guard.
+func newClient(host, token string, flags *GlobalFlags) *api.Client {
+	client := api.New(host, token)
+	client.Guard = requireWriteAllowed
+	client.MaxRetries = flags.MaxRetries
+	client.Debug = flags.Debug
+	client.DebugOut = output.Stderr()
+	return client
 }
 
 // projectFromRef turns a --project value into an ID: a number is an ID, any
