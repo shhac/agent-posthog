@@ -16,7 +16,7 @@ func SetVariants(parsed []any) Build {
 		if flagspec.TypeOf(flag) != flagspec.TypeMultivariate {
 			return nil, nil, fmt.Errorf("the flag is not multivariate; convert it with 'flags apply' and type: multivariate")
 		}
-		filters := flagspec.Object(flag["filters"])
+		filters := flagspec.Filters(flag)
 		existing := map[string]map[string]any{}
 		var oldOrder []string
 		for _, v := range flagspec.List(flagspec.Object(filters["multivariate"])["variants"]) {

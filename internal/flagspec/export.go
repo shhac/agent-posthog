@@ -13,7 +13,7 @@ import (
 // property object. Encrypted payloads are omitted and the spec is marked
 // incomplete so it cannot be applied back over the flag.
 func Export(flag map[string]any) (agentoutput.Ordered, error) {
-	filters := Object(flag["filters"])
+	filters := Filters(flag)
 	version, err := configVersion(filters)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func Export(flag map[string]any) (agentoutput.Ordered, error) {
 // remote_config flags, one per variant for multivariate flags. Encrypted
 // payloads cannot be read back, so the spec is marked incomplete instead.
 func exportPayloads(spec agentoutput.Ordered, flag map[string]any, flagType string) (agentoutput.Ordered, error) {
-	payloads := Object(Object(flag["filters"])["payloads"])
+	payloads := Object(Filters(flag)["payloads"])
 	if flag["has_encrypted_payloads"] == true && len(payloads) > 0 {
 		return append(spec, agentoutput.Field{Key: "incomplete", Value: []any{"encrypted payloads omitted"}}), nil
 	}

@@ -44,7 +44,7 @@ func Lifecycle(operation string) Build {
 // of falling through.
 func EarlyExit(on bool) Build {
 	return func(_ context.Context, _ Project, flag map[string]any) (*flagspec.Patch, []string, error) {
-		if err := flagspec.RequireV1(flagspec.Object(flag["filters"])); err != nil {
+		if err := flagspec.RequireV1(flagspec.Filters(flag)); err != nil {
 			return nil, nil, err
 		}
 		patch := flagspec.NewPatch()

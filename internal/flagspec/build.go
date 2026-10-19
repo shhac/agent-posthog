@@ -22,7 +22,7 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 	if !creating && current["key"] != spec.Key() {
 		return nil, fmt.Errorf("spec key %q does not match flag key %v; renaming is not supported", spec.Key(), current["key"])
 	}
-	filters := Object(current["filters"])
+	filters := Filters(current)
 	if spec.Has("filters_document") {
 		return buildDocument(current, creating, spec)
 	}
@@ -122,7 +122,7 @@ func buildConditionGroups(p *Patch, spec *Spec, filters map[string]any, creating
 // validates the document itself and admits these writes per project.
 func buildDocument(current map[string]any, creating bool, spec *Spec) (*Patch, error) {
 	if !creating {
-		version, err := configVersion(Object(current["filters"]))
+		version, err := configVersion(Filters(current))
 		if err != nil {
 			return nil, err
 		}

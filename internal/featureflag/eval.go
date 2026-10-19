@@ -242,7 +242,7 @@ func (e *Evaluator) Record(in Subject, r Result) output.Ordered {
 	}
 	out = append(out, output.Field{Key: "condition_index", Value: r.ConditionIndex})
 	if index, ok := r.ConditionIndex.(json.Number); ok {
-		groups := flagspec.List(flagspec.Object(e.flag["filters"])["groups"])
+		groups := flagspec.Groups(e.flag)
 		if i := flagspec.Int(index); i >= 0 && i < len(groups) {
 			out = append(out, output.Field{Key: "condition", Value: flagspec.ExportConditions(groups[i : i+1])[0]})
 		}
@@ -256,7 +256,7 @@ func (e *Evaluator) Warnings() []string {
 	if e.flag["active"] != true {
 		warnings = append(warnings, "The flag is disabled, so it evaluates to false for everyone; this tests the saved definition only once it is enabled.")
 	}
-	if e.engine == EnginePublic && flagspec.Object(e.flag["filters"])["early_exit"] == true {
+	if e.engine == EnginePublic && flagspec.Filters(e.flag)["early_exit"] == true {
 		warnings = append(warnings, "Early exit is on: /flags honors it, but SDKs evaluating locally honor it only in recent versions.")
 	}
 	return warnings

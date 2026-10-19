@@ -169,7 +169,7 @@ func editableGroupsAt(flag map[string]any, index int) ([]any, error) {
 // editableGroups returns a copy of the flag's conditions after checking the
 // flag is one whose conditions can be edited.
 func editableGroups(flag map[string]any) ([]any, error) {
-	filters := flagspec.Object(flag["filters"])
+	filters := flagspec.Filters(flag)
 	if err := flagspec.RequireV1(filters); err != nil {
 		return nil, err
 	}

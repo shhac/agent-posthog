@@ -10,7 +10,7 @@ func TypeOf(flag map[string]any) string {
 	if flag["is_remote_configuration"] == true {
 		return TypeRemoteConfig
 	}
-	if len(List(Object(Object(flag["filters"])["multivariate"])["variants"])) > 0 {
+	if len(Variants(flag)) > 0 {
 		return TypeMultivariate
 	}
 	return TypeBoolean
@@ -43,7 +43,7 @@ func RequireV1(filters map[string]any) error {
 
 // VariantKeys returns the keys of a flag's variants.
 func VariantKeys(flag map[string]any) map[string]bool {
-	return variantKeySet(List(Object(Object(flag["filters"])["multivariate"])["variants"]))
+	return variantKeySet(Variants(flag))
 }
 
 func variantKeySet(variants []any) map[string]bool {
@@ -58,7 +58,7 @@ func variantKeySet(variants []any) map[string]bool {
 // conditions, as the live maps, so callers may edit them in place.
 func ConditionProperties(flag map[string]any) iter.Seq[map[string]any] {
 	return func(yield func(map[string]any) bool) {
-		for _, group := range List(Object(flag["filters"])["groups"]) {
+		for _, group := range Groups(flag) {
 			for _, item := range List(Object(group)["properties"]) {
 				prop, ok := item.(map[string]any)
 				if ok && !yield(prop) {
@@ -67,4 +67,15 @@ func ConditionProperties(flag map[string]any) iter.Seq[map[string]any] {
 			}
 		}
 	}
+}
+
+// Filters is a flag's filters object, or nil.
+func Filters(flag map[string]any) map[string]any { return Object(flag["filters"]) }
+
+// Groups is a flag's release conditions, in evaluation order.
+func Groups(flag map[string]any) []any { return List(Filters(flag)["groups"]) }
+
+// Variants is a multivariate flag's variants.
+func Variants(flag map[string]any) []any {
+	return List(Object(Filters(flag)["multivariate"])["variants"])
 }

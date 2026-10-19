@@ -25,7 +25,7 @@ func ReadPayload(flag map[string]any, variant string) (*Payload, error) {
 	if err != nil {
 		return nil, err
 	}
-	stored, ok := flagspec.Object(flagspec.Object(flag["filters"])["payloads"])[slot]
+	stored, ok := flagspec.Object(flagspec.Filters(flag)["payloads"])[slot]
 	payload := &Payload{Key: flag["key"], Slot: slot, Set: ok}
 	if !ok {
 		return payload, nil
@@ -61,14 +61,14 @@ func payloadEdit(variant string, edit func(payloads map[string]any, slot string)
 		if flag["has_encrypted_payloads"] == true {
 			return nil, nil, fmt.Errorf("this flag has encrypted payloads, which agent-posthog does not change; edit them in PostHog")
 		}
-		if err := flagspec.RequireV1(flagspec.Object(flag["filters"])); err != nil {
+		if err := flagspec.RequireV1(flagspec.Filters(flag)); err != nil {
 			return nil, nil, err
 		}
 		slot, err := payloadSlot(flag, variant)
 		if err != nil {
 			return nil, nil, err
 		}
-		payloads, _ := flagspec.Clone(flagspec.Object(flagspec.Object(flag["filters"])["payloads"])).(map[string]any)
+		payloads, _ := flagspec.Clone(flagspec.Object(flagspec.Filters(flag)["payloads"])).(map[string]any)
 		if payloads == nil {
 			payloads = map[string]any{}
 		}

@@ -22,7 +22,7 @@ type ConditionReach struct {
 // Reach counts the users each condition of flag matches, or only the
 // condition at only when it is not negative.
 func (p Project) Reach(ctx context.Context, flag map[string]any, only int) ([]ConditionReach, error) {
-	filters := flagspec.Object(flag["filters"])
+	filters := flagspec.Filters(flag)
 	groups := flagspec.List(filters["groups"])
 	var out []ConditionReach
 	for i, item := range groups {

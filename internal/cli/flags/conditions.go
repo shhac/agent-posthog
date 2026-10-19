@@ -37,13 +37,13 @@ func conditionsListCommand(globals *shared.GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				conditions := flagspec.ExportConditions(flagspec.List(flagspec.Object(flag["filters"])["groups"]))
+				conditions := flagspec.ExportConditions(flagspec.Groups(flag))
 				format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
 				if err != nil {
 					return err
 				}
 				if format != output.FormatNDJSON {
-					return shared.WriteExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
+					return shared.WriteExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Filters(flag)["early_exit"], "conditions": conditions}, globals.Format)
 				}
 				lines := make([]any, 0, len(conditions))
 				for i, condition := range conditions {

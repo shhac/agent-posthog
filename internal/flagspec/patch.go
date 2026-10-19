@@ -70,7 +70,7 @@ func (p *Patch) entries(flag map[string]any) iter.Seq[patchEntry] {
 				return
 			}
 		}
-		filters := Object(flag["filters"])
+		filters := Filters(flag)
 		for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
 			current, present := filters[key]
 			value := p.Filters[key]
@@ -115,7 +115,7 @@ func Result(current map[string]any, p *Patch) map[string]any {
 	for key, value := range p.Fields {
 		result[key] = Clone(value)
 	}
-	filters, _ := Clone(Object(result["filters"])).(map[string]any)
+	filters, _ := Clone(Filters(result)).(map[string]any)
 	if filters == nil {
 		filters = map[string]any{}
 	}
