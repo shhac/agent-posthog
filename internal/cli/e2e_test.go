@@ -334,3 +334,22 @@ func TestGetCommandsFailFastWhenTheScopeIsMissing(t *testing.T) {
 		t.Fatalf("an unknown key stays an item-level miss: %s", out)
 	}
 }
+
+func TestRawPostOnlySkipsYesForRealQueryEndpoints(t *testing.T) {
+	for path, query := range map[string]bool{
+		"/api/environments/456/query/":              true,
+		"/api/projects/123/query/":                  true,
+		"/api/projects/123/feature_flags/":          false,
+		"/api/projects/123/feature_flags/query/":    false,
+		"/api/projects/123/query/../feature_flags/": false,
+		"/api/organizations/org_1/query/":           false,
+	} {
+		if got := isQueryPath(path); got != query {
+			t.Fatalf("isQueryPath(%s) = %v", path, got)
+		}
+	}
+	s := newMockSession(t, "phx_mock", "456")
+	if errOut := s.mustFail("api", "post", "/api/projects/123/query/../feature_flags/", "--json", `{"key":"sneaky"}`); !strings.Contains(errOut, ". or .. segments") {
+		t.Fatalf("a dot-segment path must be refused before it is sent: %s", errOut)
+	}
+}

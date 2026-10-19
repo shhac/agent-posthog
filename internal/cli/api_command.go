@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
+	"slices"
 	"strings"
 
 	agenterrors "github.com/shhac/lib-agent-output"
@@ -36,6 +38,9 @@ func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 			path := args[0]
 			if !strings.HasPrefix(path, "/api/") {
 				return agenterrors.New("raw API paths must start with /api/", agenterrors.FixableByAgent)
+			}
+			if hasDotSegment(path) {
+				return agenterrors.New("raw API paths must not contain . or .. segments", agenterrors.FixableByAgent)
 			}
 			if method == http.MethodPost && !isQueryPath(path) && !yes {
 				return agenterrors.New("raw POST outside query endpoints requires --yes", agenterrors.FixableByHuman).
@@ -91,8 +96,20 @@ func sendRaw(ctx context.Context, client *api.Client, method, path string, q url
 	return client.Mutate(ctx, http.MethodPost, path, q, body)
 }
 
+// queryPath matches the query endpoints a raw POST may reach without --yes:
+// running a query in an environment or project.
+var queryPath = regexp.MustCompile(`^/api/(environments|projects)/[^/]+/query/`)
+
 func isQueryPath(path string) bool {
-	return strings.Contains(path, "/query/")
+	return queryPath.MatchString(path) && !hasDotSegment(path)
+}
+
+// hasDotSegment reports a path a proxy might resolve to a different
+// endpoint than the one checked here.
+func hasDotSegment(path string) bool {
+	return slices.ContainsFunc(strings.Split(path, "/"), func(segment string) bool {
+		return segment == "." || segment == ".."
+	})
 }
 
 func queryValuesFromPairs(pairs []string) url.Values {
