@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/featureflag"
+	"github.com/shhac/agent-posthog/internal/hogql"
 	"github.com/shhac/agent-posthog/internal/output"
-	"github.com/shhac/agent-posthog/internal/query"
 )
 
 func registerInvestigate(root *cobra.Command, globals *GlobalFlags) {
@@ -79,7 +79,7 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = {event} order by timestamp desc limit %d", limit)
-				raw, err := resolved.Client.Post(ctx, path, nil, query.HogQL(sql, map[string]any{"event": event}))
+				raw, err := resolved.Client.Post(ctx, path, nil, hogql.Body(sql, map[string]any{"event": event}))
 				if err != nil {
 					return err
 				}

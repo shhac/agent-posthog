@@ -1,4 +1,4 @@
-package query
+package hogql
 
 import (
 	"context"

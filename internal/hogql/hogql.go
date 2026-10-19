@@ -1,6 +1,6 @@
-// Package query builds PostHog query requests and follows async queries to
+// Package hogql builds PostHog query requests and follows async queries to
 // completion.
-package query
+package hogql
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-// HogQL builds a HogQL query request. values fill {placeholder}s in sql, so
+// Body builds a HogQL query request. values fill {placeholder}s in sql, so
 // user input never has to be escaped into the query text.
-func HogQL(sql string, values map[string]any) map[string]any {
+func Body(sql string, values map[string]any) map[string]any {
 	q := map[string]any{"kind": "HogQLQuery", "query": sql}
 	if len(values) > 0 {
 		q["values"] = values

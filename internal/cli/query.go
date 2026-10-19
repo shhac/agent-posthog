@@ -11,8 +11,8 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/hogql"
 	"github.com/shhac/agent-posthog/internal/output"
-	"github.com/shhac/agent-posthog/internal/query"
 )
 
 func registerQuery(root *cobra.Command, globals *GlobalFlags) {
@@ -64,7 +64,7 @@ func queryHogQLCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			body := query.HogQL(sql, nil)
+			body := hogql.Body(sql, nil)
 			if async {
 				body["async"] = true
 			}
@@ -137,8 +137,8 @@ func queryWaitCommand(globals *GlobalFlags) *cobra.Command {
 				fetch := func(ctx context.Context) (json.RawMessage, error) {
 					return resolved.Client.Get(ctx, path, nil)
 				}
-				raw, status, err := query.Wait(ctx, fetch, interval, maxWait)
-				if errors.Is(err, query.ErrStillRunning) {
+				raw, status, err := hogql.Wait(ctx, fetch, interval, maxWait)
+				if errors.Is(err, hogql.ErrStillRunning) {
 					return agenterrors.New("query did not complete before --max-wait", agenterrors.FixableByRetry).
 						WithHint("Run 'agent-posthog query wait " + args[0] + "' again, or 'query get' to inspect its status.")
 				}

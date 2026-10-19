@@ -372,7 +372,7 @@ The spec and `--where` grammar live in `internal/flagspec` (pure, no HTTP).
 Reading, planning, and writing flags against PostHog live in
 `internal/featureflag`, which returns receipts, plans, and results and never
 prints; `internal/cli` parses flags, calls it, and presents what comes back.
-HogQL requests and async-query waits are `internal/query`.
+HogQL requests and async-query waits are `internal/hogql`.
 Specs are presence-aware (an omitted field is left alone), decode numbers
 losslessly, keep unknown condition and variant keys, and refuse encrypted
 payload edits and remote-config conditions. Flags in PostHog's config version
