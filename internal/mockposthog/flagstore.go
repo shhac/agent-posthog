@@ -91,7 +91,7 @@ func (s *flagStore) handleFlag(w http.ResponseWriter, r *http.Request, project i
 	case action == "test_evaluation" && r.Method == http.MethodPost:
 		testEvaluation(w, r, flag)
 	case action == "dependent_flags" && r.Method == http.MethodGet:
-		writePage(w, r, []any{map[string]any{"id": 25, "key": "checkout-v2-dependent", "name": "Checkout dependent", "active": true}})
+		writePage(w, r, s.dependents(project, flag))
 	case action == "activity" && r.Method == http.MethodGet:
 		writePage(w, r, flagActivity())
 	default:
@@ -258,6 +258,30 @@ func storeNullDefaults(flag map[string]any) {
 			g["aggregation_group_type_index"] = nil
 		}
 	}
+}
+
+// dependents lists flags whose conditions depend on flag (plus the legacy
+// fixture dependent of checkout-v2).
+func (s *flagStore) dependents(project int, flag map[string]any) []any {
+	out := []any{}
+	if toInt(flag["id"]) == 22 {
+		out = append(out, map[string]any{"id": 25, "key": "checkout-v2-dependent", "name": "Checkout dependent", "active": true})
+	}
+	for _, id := range sortedIDs(s.flags[project]) {
+		other := s.flags[project][id]
+		if other["deleted"] == true {
+			continue
+		}
+		for _, group := range asList(asObject(other["filters"])["groups"]) {
+			for _, prop := range asList(asObject(group)["properties"]) {
+				p := asObject(prop)
+				if p["type"] == "flag" && fmt.Sprint(p["key"]) == fmt.Sprint(flag["id"]) {
+					out = append(out, map[string]any{"id": other["id"], "key": other["key"], "active": other["active"]})
+				}
+			}
+		}
+	}
+	return out
 }
 
 func hasFlagDependency(flag map[string]any) bool {

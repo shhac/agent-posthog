@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -49,7 +50,8 @@ func lifecycleCommand(globals *GlobalFlags, use, short, operation string, patch 
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				return updateFlag(ctx, resolved, globals, args[0], operation, opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					return patch(flag), lifecycleWarnings(operation, flag), nil
+					warnings := append(lifecycleWarnings(operation, flag), dependencyWarnings(ctx, resolved, operation, flag)...)
+					return patch(flag), warnings, nil
 				})
 			})
 		},
@@ -67,6 +69,52 @@ func lifecycleWarnings(operation string, flag map[string]any) []string {
 		warnings = append(warnings, "This flag backs an experiment; PostHog may refuse the delete or rename the key.")
 	}
 	return warnings
+}
+
+// dependencyWarnings flags what PostHog may refuse or what may change
+// elsewhere: switching off a flag that active flags depend on, or switching
+// on one that depends on a disabled flag. Lookups are best effort.
+func dependencyWarnings(ctx context.Context, resolved *resolvedContext, operation string, flag map[string]any) []string {
+	switch operation {
+	case "disable", "archive", "delete":
+		raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]))+"dependent_flags/", nil)
+		if err != nil {
+			return []string{"Could not check which flags depend on this one."}
+		}
+		page, _ := flagspec.DecodeObject(raw)
+		var active []string
+		for _, item := range asList(page["results"]) {
+			if dep := asObject(item); dep["active"] == true {
+				active = append(active, fmt.Sprint(dep["key"]))
+			}
+		}
+		if len(active) == 0 {
+			return nil
+		}
+		return []string{fmt.Sprintf("Active flags depend on this one (%s): PostHog may refuse this, or they will stop matching.", strings.Join(active, ", "))}
+	case "enable":
+		var warnings []string
+		for _, group := range asList(asObject(flag["filters"])["groups"]) {
+			for _, item := range asList(asObject(group)["properties"]) {
+				prop := asObject(item)
+				if prop["type"] != flagspec.PropertyFlag {
+					continue
+				}
+				raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(prop["key"])), nil)
+				if err != nil {
+					warnings = appendOnce(warnings, "Could not check a flag this one depends on.")
+					continue
+				}
+				dep, _ := flagspec.DecodeObject(raw)
+				if dep["active"] != true {
+					warnings = appendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
+				}
+			}
+		}
+		return warnings
+	default:
+		return nil
+	}
 }
 
 // restoreCommand undeletes by ID. Deleted flags cannot be listed or read, so

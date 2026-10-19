@@ -231,3 +231,24 @@ func TestCheckStoredWarnsWhenPostHogNormalizes(t *testing.T) {
 		t.Fatalf("warnings = %v", r.Warnings)
 	}
 }
+
+func TestLifecyclePlansWarnAboutDependencies(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "create", "base", "--active", "--yes")
+	s.mustRun("flags", "apply", "--spec-json", `{"key":"needs-base","active":true,"conditions":[{"where":["flag:base = true"]}]}`, "--yes")
+	for _, op := range []string{"disable", "archive", "delete"} {
+		r := s.mustRun("flags", op, "base")
+		if !strings.Contains(mustJSON(r["warnings"]), "Active flags depend on this one (needs-base)") {
+			t.Fatalf("%s plan = %v", op, r)
+		}
+	}
+	s.mustRun("flags", "disable", "needs-base", "--yes")
+	s.mustRun("flags", "disable", "base", "--yes")
+	r := s.mustRun("flags", "enable", "needs-base")
+	if !strings.Contains(mustJSON(r["warnings"]), "depends on disabled flag base") {
+		t.Fatalf("enable plan = %v", r)
+	}
+	if r := s.mustRun("flags", "disable", "needs-base"); r["warnings"] != nil && strings.Contains(mustJSON(r["warnings"]), "depend") {
+		t.Fatalf("a flag nothing depends on should not warn: %v", r)
+	}
+}
