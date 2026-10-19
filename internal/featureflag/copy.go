@@ -3,6 +3,7 @@ package featureflag
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 
 	agenterrors "github.com/shhac/lib-agent-output"
@@ -90,34 +91,32 @@ func (p Project) PlanCopy(ctx context.Context, ref string, targets []Target, o C
 	ids := make([]int, 0, len(targets))
 	for _, target := range targets {
 		ids = append(ids, target.ID)
-		dest := p.In(target.ID, target.Alias)
-		existing, err := dest.WithKey(ctx, key)
+		existing, err := p.In(target.ID, target.Alias).counterpart(ctx, key, source)
 		if err != nil {
 			return nil, err
 		}
-		if existing == nil {
+		if !existing.exists {
 			plan.Targets = append(plan.Targets, TargetPlan{Target: target, Action: "create"})
 			continue
 		}
-		targetSpec, targetWarnings, err := dest.comparableSpec(ctx, existing)
-		if err != nil {
-			return nil, err
-		}
-		plan.Warnings = flagspec.AppendOnce(plan.Warnings, targetWarnings...)
-		plan.Targets = append(plan.Targets, TargetPlan{Target: target, Action: "overwrite", Differences: flagspec.Diff("", source, targetSpec)})
+		plan.Warnings = flagspec.AppendOnce(plan.Warnings, existing.warnings...)
+		plan.Targets = append(plan.Targets, TargetPlan{Target: target, Action: "overwrite", Differences: existing.differences})
 		if !o.Overwrite {
 			plan.Blocked = append(plan.Blocked, target.ID)
 		}
 	}
-	plan.request = map[string]any{"feature_flag_key": key, "from_project": p.ID, "target_project_ids": ids}
+	// The dependency check is asked only which flag goes where; the copy
+	// options are added after it, for the copy itself.
+	which := map[string]any{"feature_flag_key": key, "from_project": p.ID, "target_project_ids": ids}
 	if o.Dependencies {
-		raw, err := p.Client.Post(ctx, p.copyFlagsPath("dependency_requirements"), nil, plan.request)
+		raw, err := p.Client.Post(ctx, p.copyFlagsPath("dependency_requirements"), nil, which)
 		if err != nil {
 			return nil, err
 		}
 		plan.Dependencies, _ = flagspec.DecodeObject(raw)
 	}
 	plan.Warnings = append(plan.Warnings, o.warnings()...)
+	plan.request = maps.Clone(which)
 	plan.request["copy_schedule"] = o.Schedules
 	plan.request["disable_copied_flag"] = o.Disable
 	plan.request["copy_dependencies"] = o.Dependencies

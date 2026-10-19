@@ -34,27 +34,43 @@ func (p Project) Compare(ctx context.Context, ref string, against Project) (*Com
 		return nil, err
 	}
 	key := fmt.Sprint(flag["key"])
-	other, err := against.WithKey(ctx, key)
-	if err != nil {
-		return nil, err
-	}
 	spec, warnings, err := p.comparableSpec(ctx, flag)
 	if err != nil {
 		return nil, err
 	}
-	againstSpec := map[string]any{}
-	if other != nil {
-		var againstWarnings []string
-		againstSpec, againstWarnings, err = against.comparableSpec(ctx, other)
-		if err != nil {
-			return nil, err
-		}
-		warnings = flagspec.AppendOnce(warnings, againstWarnings...)
+	other, err := against.counterpart(ctx, key, spec)
+	if err != nil {
+		return nil, err
+	}
+	differences := other.differences
+	if !other.exists {
+		differences = flagspec.Diff("", spec, map[string]any{})
 	}
 	return &Comparison{
-		Key: key, Project: p.ID, Against: against.ID, Exists: other != nil,
-		Differences: flagspec.Diff("", spec, againstSpec), Warnings: warnings,
+		Key: key, Project: p.ID, Against: against.ID, Exists: other.exists,
+		Differences: differences, Warnings: flagspec.AppendOnce(warnings, other.warnings...),
 	}, nil
+}
+
+// counterpart is the same-key flag in another project, set against a source
+// spec.
+type counterpart struct {
+	exists      bool
+	differences []flagspec.Change
+	warnings    []string
+}
+
+// counterpart compares source with the flag that has key in p, if p has one.
+func (p Project) counterpart(ctx context.Context, key string, source map[string]any) (counterpart, error) {
+	other, err := p.WithKey(ctx, key)
+	if err != nil || other == nil {
+		return counterpart{}, err
+	}
+	spec, warnings, err := p.comparableSpec(ctx, other)
+	if err != nil {
+		return counterpart{}, err
+	}
+	return counterpart{exists: true, differences: flagspec.Diff("", source, spec), warnings: warnings}, nil
 }
 
 // comparableSpec exports a flag for comparison across projects. Flag
