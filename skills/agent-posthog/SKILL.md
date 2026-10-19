@@ -94,9 +94,12 @@ Prefer `schema events list` and `schema properties list` before writing HogQL, s
 queries use real event/property names.
 
 `query json` and `api post` take a body as `--json '<inline>'` (use this over
-MCP) or `--body <file>`; `-` reads stdin, which is `query json`'s default.
+MCP) or `--body <file>`; `-` reads stdin, which is `query json`'s default
+(`--json` wins over it; an explicit `--body` with `--json` is refused).
 `query wait` prints a failed query's status on stdout, then exits 1 with
-PostHog's error. `api post` outside `/query/` paths needs `--yes`.
+PostHog's error. `api post` needs `--yes` except for
+`/api/environments|projects/<id>/query/` paths; raw paths with `.` or `..`
+segments are refused.
 
 ## Output
 

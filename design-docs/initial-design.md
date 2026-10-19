@@ -443,12 +443,14 @@ agent-posthog api post /api/environments/456/query/ --json '{"query":{"kind":"Ho
 
 Rules:
 
-- require paths to start with `/api/`
+- require paths to start with `/api/` and refuse `.`/`..` segments, which a
+  proxy could resolve to a different endpoint than the one checked
 - no custom `Authorization` header flag
 - redact secrets in debug
 - `post` reads its body from `--body <file|->` (`-` is stdin) or inline
   `--json`; with neither it sends `{}`
-- allow `post` by default only for query endpoints; require `--yes` for other raw
+- allow `post` by default only for query endpoints
+  (`/api/environments|projects/<id>/query/`); require `--yes` for other raw
   POST endpoints because many PostHog POST routes mutate state. Those go through
   the client's write path: never replayed after a `5xx`, and refused through MCP
   unless `config set mcp_writes on`

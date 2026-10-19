@@ -56,6 +56,8 @@ CLI behavior:
 - respect `Retry-After` when present, up to 30 seconds; a longer one is not
   waited out but returned as `fixable_by: retry` with `retry_after_seconds`
 - every wait ends at the command's `--timeout` deadline
+- follow `next` links only on the configured scheme and host; the personal
+  API key never goes anywhere else
 - after retries, emit `fixable_by: retry`
 - include endpoint family and limit hints when known
 

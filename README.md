@@ -27,7 +27,9 @@ and no direct access to PostHog secrets, and for setting up feature flags
 - Structured errors: stderr JSON `{"error":"...","fixable_by":"agent"|"human"|"retry","hint"?:"...","retry_after_seconds"?:N}`, exit 1.
   Reads retry rate limits and gateway errors within `--timeout`; a
   `Retry-After` over 30 seconds comes back as a `retry` error instead of a wait.
-  `--debug` logs mask keys and tokens, including ones inside request URLs.
+  `--debug` logs mask keys and tokens, including ones inside request URLs, and
+  the personal API key is only sent to the configured host (a `next` link to
+  another host is refused).
 - Feature flag management: create, apply specs, narrow edits, archive/delete,
   evaluate, scenario test suites, and diff/copy between projects. Every write
   prints a plan unless `--yes` is passed, and refuses stale overlapping edits.
