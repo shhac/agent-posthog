@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
 func TestFlagEvaluateEngines(t *testing.T) {
@@ -49,5 +51,32 @@ func TestFlagsHostMapping(t *testing.T) {
 	}
 	if got := flagsHost("https://us.posthog.com", "https://proxy.example"); got != "https://proxy.example" {
 		t.Fatalf("override ignored: %s", got)
+	}
+}
+
+func TestInterpretFlagsNeverTurnsFailureIntoFalse(t *testing.T) {
+	active := map[string]any{"key": "gate", "active": true}
+	cases := []struct {
+		name, resp string
+		flag       map[string]any
+		status     string
+		enabled    bool
+	}{
+		{"disabled flag omitted", `{"flags":{}}`, map[string]any{"key": "gate", "active": false}, "ok", false},
+		{"active flag omitted", `{"flags":{}}`, active, "error", false},
+		{"omitted with errors", `{"flags":{},"errorsWhileComputingFlags":true}`, active, "error", false},
+		{"failed", `{"flags":{"gate":{"enabled":false,"failed":true,"reason":{"description":"timeout"}}}}`, active, "error", false},
+		{"evaluated false", `{"flags":{"gate":{"enabled":false,"reason":{"code":"no_condition_match"}}}}`, active, "ok", false},
+		{"evaluated true", `{"flags":{"gate":{"enabled":true,"reason":{"code":"condition_match","condition_index":0},"metadata":{"payload":"{\"a\":1}"}}}}`, active, "ok", true},
+	}
+	for _, tc := range cases {
+		resp, _ := flagspec.DecodeObject([]byte(tc.resp))
+		r := interpretFlags(resp, tc.flag)
+		if r.Status != tc.status || r.Enabled != tc.enabled {
+			t.Fatalf("%s: %+v", tc.name, r)
+		}
+		if tc.enabled && mustJSON(r.Payload) != `{"a":1}` {
+			t.Fatalf("%s: payload %v", tc.name, r.Payload)
+		}
 	}
 }

@@ -156,3 +156,30 @@ func TestErrorFieldUsedWhenDetailMissing(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+type failingDoer struct{ calls int }
+
+func (d *failingDoer) Do(*http.Request) (*http.Response, error) {
+	d.calls++
+	return nil, errors.New("connection reset")
+}
+
+func TestNetworkErrorsRetryReadsButNeverWrites(t *testing.T) {
+	read := &failingDoer{}
+	client := New("http://posthog.invalid", "phx_test")
+	client.HTTPClient, client.MaxRetries, client.Sleep = read, 3, func(time.Duration) {}
+	if _, err := client.Get(context.Background(), "/api/x/", nil); err == nil {
+		t.Fatal("expected error")
+	}
+	if read.calls != 4 {
+		t.Fatalf("read attempts = %d, want 4", read.calls)
+	}
+
+	write := &failingDoer{}
+	client.HTTPClient = write
+	_, err := client.Mutate(context.Background(), http.MethodPost, "/api/x/", nil, map[string]any{})
+	var apiErr *agenterrors.APIError
+	if write.calls != 1 || !errors.As(err, &apiErr) || apiErr.FixableBy != agenterrors.FixableByAgent || !strings.Contains(apiErr.Hint, "Re-read") {
+		t.Fatalf("write attempts = %d, err = %#v", write.calls, err)
+	}
+}

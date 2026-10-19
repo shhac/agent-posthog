@@ -375,6 +375,19 @@ func approvalFlag() map[string]any {
 	return map[string]any{"id": 26, "key": approvalFlagKey, "name": "Approval gated", "active": false, "version": 1}
 }
 
+// encryptedFlag is a remote-config flag with encrypted payloads, which the CLI
+// must never rewrite.
+func encryptedFlag() map[string]any {
+	return map[string]any{
+		"id": 28, "key": "secret-config", "name": "Encrypted config", "active": true, "version": 1,
+		"is_remote_configuration": true, "has_encrypted_payloads": true,
+		"filters": map[string]any{
+			"groups":   []any{map[string]any{"properties": []any{}, "rollout_percentage": 100}},
+			"payloads": map[string]any{"true": `{"api_secret":"s3cret"}`},
+		},
+	}
+}
+
 func policyFlag() map[string]any {
 	return map[string]any{"id": 27, "key": policyFlagKey, "name": "Policy conflicted", "active": false, "version": 1}
 }

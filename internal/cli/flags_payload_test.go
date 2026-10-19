@@ -49,3 +49,38 @@ func TestFlagOutputKeepsURLsUnescaped(t *testing.T) {
 		}
 	}
 }
+
+func TestEncryptedPayloadsAreNeverRewritten(t *testing.T) {
+	s := flagSession(t)
+	before := s.flag("secret-config")
+	for _, args := range [][]string{
+		{"flags", "payload", "set", "secret-config", "--json", "1", "--yes"},
+		{"flags", "payload", "unset", "secret-config", "--yes"},
+		{"flags", "apply", "--spec-json", `{"key":"secret-config","payload":{"x":1}}`, "--yes"},
+	} {
+		if errOut := s.mustFail(args...); !strings.Contains(errOut, "encrypted") {
+			t.Fatalf("%v: stderr = %s", args, errOut)
+		}
+	}
+	if after := s.flag("secret-config"); after["version"] != before["version"] {
+		t.Fatalf("encrypted flag changed: %v", after)
+	}
+	out, _, _ := s.run("flags", "export", "secret-config")
+	if strings.Contains(out, "s3cret") || !strings.Contains(out, "incomplete") {
+		t.Fatalf("export leaked or did not flag encrypted payloads: %s", out)
+	}
+}
+
+func TestCreateRemoteConfigServesItsPayload(t *testing.T) {
+	s := flagSession(t)
+	if errOut := s.mustFail("flags", "create", "cfg", "--type", "remote_config", "--where", "plan = pro"); !strings.Contains(errOut, "drop --where") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	s.mustRun("flags", "create", "cfg", "--type", "remote_config", "--payload-json", `{"a":1}`, "--active", "--yes")
+	if got := s.mustRun("flags", "payload", "get", "cfg"); mustJSON(got["payload"]) != `{"a":1}` {
+		t.Fatalf("payload = %v", got)
+	}
+	if r := s.mustRun("flags", "evaluate", "cfg", "--distinct-id", "anyone"); r["enabled"] != true || mustJSON(r["payload"]) != `{"a":1}` {
+		t.Fatalf("evaluate = %v", r)
+	}
+}

@@ -130,3 +130,21 @@ func TestMoveGroupLandsAtFinalIndex(t *testing.T) {
 		t.Fatal("expected out-of-range error")
 	}
 }
+
+func TestConditionsSetRolloutPlansAndChecksIndex(t *testing.T) {
+	s := gateSession(t)
+	plan := s.mustRun("flags", "conditions", "set", "beta-gate", "1", "--rollout", "0", "--if-version", "1")
+	change := plan["changes"].([]any)[0].(map[string]any)
+	if plan["outcome"] != "planned" || change["path"] != "filters.groups[1].rollout_percentage" || change["before"] != float64(100) || change["after"] != float64(0) {
+		t.Fatalf("plan = %v", plan)
+	}
+	if flag := s.flag("beta-gate"); flag["version"] != float64(1) {
+		t.Fatalf("plan wrote: %v", flag)
+	}
+	if r := s.mustRun("flags", "conditions", "set", "beta-gate", "1", "--rollout", "100", "--if-version", "1", "--yes"); r["outcome"] != "unchanged" {
+		t.Fatalf("same rollout = %v", r)
+	}
+	if errOut := s.mustFail("flags", "conditions", "set", "beta-gate", "5", "--rollout", "10", "--if-version", "1"); !strings.Contains(errOut, "no condition 5 (it has 2)") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+}

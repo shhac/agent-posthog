@@ -355,3 +355,44 @@ func TestYAMLNumbersBecomeValidJSONNumbers(t *testing.T) {
 		t.Fatal("~ should be null")
 	}
 }
+
+func TestBuildRefusesEncryptedPayloadChanges(t *testing.T) {
+	encrypted := func() map[string]any {
+		flag := mustFlag(t, boolFlag)
+		flag["has_encrypted_payloads"] = true
+		flag["is_remote_configuration"] = true
+		return flag
+	}
+	for _, spec := range []string{
+		`{"key":"beta-gate","type":"boolean"}`,
+		`{"key":"beta-gate","payload":1}`,
+		`{"key":"beta-gate","type":"multivariate","variants":[{"key":"a","rollout":100}],"payloads":{"a":1}}`,
+	} {
+		parsed, err := ParseSpec([]byte(spec))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Build(encrypted(), parsed, nil); err == nil || !strings.Contains(err.Error(), "encrypted") {
+			t.Fatalf("%s: err = %v", spec, err)
+		}
+	}
+	patch, err := buildFrom(t, encrypted(), `{"key":"beta-gate","active":false}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, touched := patch.Filters["payloads"]; touched {
+		t.Fatalf("an unrelated edit must leave encrypted payloads alone: %v", patch.Filters)
+	}
+}
+
+func TestBuildCreatesRemoteConfigServingEveryone(t *testing.T) {
+	patch, err := buildFrom(t, nil, `{"key":"cfg","type":"remote_config","payload":{"a":1}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(patch.Body())
+	want := `{"active":false,"filters":{"groups":[{"properties":[],"rollout_percentage":100}],"payloads":{"true":"{\"a\":1}"}},"is_remote_configuration":true,"key":"cfg"}`
+	if string(body) != want {
+		t.Fatalf("body = %s\nwant   %s", body, want)
+	}
+}

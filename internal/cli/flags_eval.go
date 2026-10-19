@@ -158,10 +158,15 @@ func (e *evaluator) publicEval(ctx context.Context, in evalContext) evalResult {
 	if err != nil {
 		return evalResult{Status: "error", Error: "unexpected /flags response"}
 	}
-	key := fmt.Sprint(e.flag["key"])
-	detail, returned := asObject(resp["flags"])[key].(map[string]any)
+	return interpretFlags(resp, e.flag)
+}
+
+// interpretFlags reads one flag's result out of a /flags response. A flag
+// PostHog did not return or could not evaluate is an error, never false.
+func interpretFlags(resp, flag map[string]any) evalResult {
+	detail, returned := asObject(resp["flags"])[fmt.Sprint(flag["key"])].(map[string]any)
 	switch {
-	case !returned && e.flag["active"] != true:
+	case !returned && flag["active"] != true:
 		return evalResult{Status: "ok", Reason: "flag_disabled"}
 	case !returned && resp["errorsWhileComputingFlags"] == true:
 		return evalResult{Status: "error", Error: "PostHog reported errors while computing flags and did not return this one"}

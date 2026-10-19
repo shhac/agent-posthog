@@ -39,6 +39,8 @@ against one server:
   `original_flag` the way PostHog does (field overlap only)
 - `approval-flag` (26): any PATCH returns the approval-policy 409
 - `policy-flag` (27): any PATCH returns the 400 `policy_conflict`
+- `secret-config` (28): remote config with encrypted payloads, which the CLI
+  must refuse to rewrite or export
 - archiving an active flag is a 400; DELETE is a 405; delete is `deleted: true`
 - `POST /flags?v=2` evaluates with the project token, no personal key. Its
   evaluator supports only person properties with `exact`, `is_not`, `icontains`,

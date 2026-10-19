@@ -122,3 +122,14 @@ func dependencyID(t *testing.T, s *mockSession, project string) any {
 	group := flag["filters"].(map[string]any)["groups"].([]any)[0].(map[string]any)
 	return group["properties"].([]any)[0].(map[string]any)["key"]
 }
+
+func TestCopyReportsPartialSuccess(t *testing.T) {
+	s := stagingSession(t)
+	out, errOut, err := s.run("flags", "copy", "checkout-v2", "--to", "staging", "--to", "125", "--yes", "--format", "json")
+	if err == nil || !strings.Contains(out, `"outcome": "partial"`) || !strings.Contains(errOut, "1 target(s) were not copied") {
+		t.Fatalf("err=%v\nstdout=%s\nstderr=%s", err, out, errOut)
+	}
+	if s.mustRun("--project", "staging", "flags", "get", "checkout-v2")["data"] == nil {
+		t.Fatal("the successful target should have the copy")
+	}
+}
