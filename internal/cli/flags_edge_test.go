@@ -108,29 +108,6 @@ func TestCopyReportsDroppedDependencies(t *testing.T) {
 	}
 }
 
-func TestAggregationNullClearsAndAbsentLeavesAlone(t *testing.T) {
-	flag, _ := flagspec.DecodeObject([]byte(`{"key":"k","filters":{"groups":[],"aggregation_group_type_index":0}}`))
-	for spec, wantChange := range map[string]bool{
-		`{"key":"k","aggregation_group_type_index":null}`: true,
-		`{"key":"k"}`: false,
-		`{"key":"k","aggregation_group_type_index":0}`: false,
-	} {
-		parsed, err := flagspec.ParseSpec([]byte(spec))
-		if err != nil {
-			t.Fatal(err)
-		}
-		patch, err := flagspec.Build(flag, parsed, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		patch.Prune(flag)
-		_, changed := patch.Filters["aggregation_group_type_index"]
-		if changed != wantChange {
-			t.Fatalf("%s: change = %v (%v)", spec, changed, patch.Filters)
-		}
-	}
-}
-
 func TestScenarioDistinctIDsAreStable(t *testing.T) {
 	cases, err := parseCases([]byte(`[{"name":"same","expect":{"enabled":true}}]`))
 	if err != nil {

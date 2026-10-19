@@ -428,3 +428,26 @@ func mustJSONString(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
+
+func TestAggregationNullClearsAndAbsentLeavesAlone(t *testing.T) {
+	flag, _ := DecodeObject([]byte(`{"key":"k","filters":{"groups":[],"aggregation_group_type_index":0}}`))
+	for spec, wantChange := range map[string]bool{
+		`{"key":"k","aggregation_group_type_index":null}`: true,
+		`{"key":"k"}`: false,
+		`{"key":"k","aggregation_group_type_index":0}`: false,
+	} {
+		parsed, err := ParseSpec([]byte(spec))
+		if err != nil {
+			t.Fatal(err)
+		}
+		patch, err := Build(flag, parsed, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		patch.Prune(flag)
+		_, changed := patch.Filters["aggregation_group_type_index"]
+		if changed != wantChange {
+			t.Fatalf("%s: change = %v (%v)", spec, changed, patch.Filters)
+		}
+	}
+}
