@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -13,46 +14,49 @@ import (
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
+// lifecycle is a write that sets top-level flag fields, such as enable or
+// archive, with the warnings that operation calls for.
+type lifecycle struct {
+	use, short, operation string
+	fields                map[string]any
+	warnings              func(ctx context.Context, resolved *resolvedContext, flag map[string]any) []string
+}
+
 func registerFlagWrites(flags *cobra.Command, globals *GlobalFlags) {
-	flags.AddCommand(lifecycleCommand(globals, "enable <id-or-key>", "Enable a feature flag", "enable", func(map[string]any) *flagspec.Patch {
-		return fieldPatch("active", true)
-	}))
-	flags.AddCommand(lifecycleCommand(globals, "disable <id-or-key>", "Disable a feature flag", "disable", func(map[string]any) *flagspec.Patch {
-		return fieldPatch("active", false)
-	}))
-	flags.AddCommand(lifecycleCommand(globals, "archive <id-or-key>", "Disable and archive a feature flag", "archive", func(map[string]any) *flagspec.Patch {
-		p := fieldPatch("archived", true)
-		p.Fields["active"] = false
-		return p
-	}))
-	flags.AddCommand(lifecycleCommand(globals, "unarchive <id-or-key>", "Unarchive a feature flag (it stays disabled)", "unarchive", func(map[string]any) *flagspec.Patch {
-		return fieldPatch("archived", false)
-	}))
-	flags.AddCommand(lifecycleCommand(globals, "delete <id-or-key>", "Soft-delete a feature flag (restore it by ID)", "delete", func(map[string]any) *flagspec.Patch {
-		return fieldPatch("deleted", true)
-	}))
+	for _, l := range []lifecycle{
+		{use: "enable <id-or-key>", short: "Enable a feature flag", operation: "enable",
+			fields: map[string]any{"active": true}, warnings: disabledDependencies},
+		{use: "disable <id-or-key>", short: "Disable a feature flag", operation: "disable",
+			fields: map[string]any{"active": false}, warnings: activeDependents},
+		{use: "archive <id-or-key>", short: "Disable and archive a feature flag", operation: "archive",
+			fields: map[string]any{"archived": true, "active": false}, warnings: activeDependents},
+		{use: "unarchive <id-or-key>", short: "Unarchive a feature flag (it stays disabled)", operation: "unarchive",
+			fields: map[string]any{"archived": false}},
+		{use: "delete <id-or-key>", short: "Soft-delete a feature flag (restore it by ID)", operation: "delete",
+			fields: map[string]any{"deleted": true}, warnings: deleteWarnings},
+	} {
+		flags.AddCommand(lifecycleCommand(globals, l))
+	}
 	flags.AddCommand(restoreCommand(globals))
 	flags.AddCommand(applyPlanCommand(globals))
 	flags.AddCommand(earlyExitCommand(globals))
 }
 
-func fieldPatch(field string, value any) *flagspec.Patch {
-	p := flagspec.NewPatch()
-	p.Fields[field] = value
-	return p
-}
-
-func lifecycleCommand(globals *GlobalFlags, use, short, operation string, patch func(map[string]any) *flagspec.Patch) *cobra.Command {
+func lifecycleCommand(globals *GlobalFlags, l lifecycle) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
-		Use:   use,
-		Short: short,
+		Use:   l.use,
+		Short: l.short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				return updateFlag(ctx, resolved, globals, args[0], operation, opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					warnings := append(lifecycleWarnings(operation, flag), dependencyWarnings(ctx, resolved, operation, flag)...)
-					return patch(flag), warnings, nil
+				return updateFlag(ctx, resolved, globals, args[0], l.operation, opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
+					p := flagspec.NewPatch()
+					maps.Copy(p.Fields, l.fields)
+					if l.warnings == nil {
+						return p, nil, nil
+					}
+					return p, l.warnings(ctx, resolved, flag), nil
 				})
 			})
 		},
@@ -61,61 +65,56 @@ func lifecycleCommand(globals *GlobalFlags, use, short, operation string, patch 
 	return cmd
 }
 
-func lifecycleWarnings(operation string, flag map[string]any) []string {
-	if operation != "delete" {
-		return nil
-	}
+func deleteWarnings(ctx context.Context, resolved *resolvedContext, flag map[string]any) []string {
 	warnings := []string{fmt.Sprintf("Deleted flags drop out of lists; restore with 'agent-posthog flags restore %v'.", flag["id"])}
 	if experiments, _ := flag["experiment_set"].([]any); len(experiments) > 0 {
 		warnings = append(warnings, "This flag backs an experiment; PostHog may refuse the delete or rename the key.")
 	}
-	return warnings
+	return append(warnings, activeDependents(ctx, resolved, flag)...)
 }
 
-// dependencyWarnings flags what PostHog may refuse or what may change
-// elsewhere: switching off a flag that active flags depend on, or switching
-// on one that depends on a disabled flag. Lookups are best effort.
-func dependencyWarnings(ctx context.Context, resolved *resolvedContext, operation string, flag map[string]any) []string {
-	switch operation {
-	case "disable", "archive", "delete":
-		raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]), "dependent_flags"), nil)
-		if err != nil {
-			return []string{"Could not check which flags depend on this one."}
+// activeDependents warns that switching off a flag that active flags depend
+// on may be refused, or stop them matching. The lookup is best effort.
+func activeDependents(ctx context.Context, resolved *resolvedContext, flag map[string]any) []string {
+	raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(flag["id"]), "dependent_flags"), nil)
+	if err != nil {
+		return []string{"Could not check which flags depend on this one."}
+	}
+	page, _ := flagspec.DecodeObject(raw)
+	var active []string
+	for _, item := range asList(page["results"]) {
+		if dep := asObject(item); dep["active"] == true {
+			active = append(active, fmt.Sprint(dep["key"]))
 		}
-		page, _ := flagspec.DecodeObject(raw)
-		var active []string
-		for _, item := range asList(page["results"]) {
-			if dep := asObject(item); dep["active"] == true {
-				active = append(active, fmt.Sprint(dep["key"]))
-			}
-		}
-		if len(active) == 0 {
-			return nil
-		}
-		return []string{fmt.Sprintf("Active flags depend on this one (%s): PostHog may refuse this, or they will stop matching.", strings.Join(active, ", "))}
-	case "enable":
-		var warnings []string
-		for _, group := range asList(asObject(flag["filters"])["groups"]) {
-			for _, item := range asList(asObject(group)["properties"]) {
-				prop := asObject(item)
-				if prop["type"] != flagspec.PropertyFlag {
-					continue
-				}
-				raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(prop["key"])), nil)
-				if err != nil {
-					warnings = appendOnce(warnings, "Could not check a flag this one depends on.")
-					continue
-				}
-				dep, _ := flagspec.DecodeObject(raw)
-				if dep["active"] != true {
-					warnings = appendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
-				}
-			}
-		}
-		return warnings
-	default:
+	}
+	if len(active) == 0 {
 		return nil
 	}
+	return []string{fmt.Sprintf("Active flags depend on this one (%s): PostHog may refuse this, or they will stop matching.", strings.Join(active, ", "))}
+}
+
+// disabledDependencies warns that switching on a flag that depends on a
+// disabled flag may be refused. Lookups are best effort.
+func disabledDependencies(ctx context.Context, resolved *resolvedContext, flag map[string]any) []string {
+	var warnings []string
+	for _, group := range asList(asObject(flag["filters"])["groups"]) {
+		for _, item := range asList(asObject(group)["properties"]) {
+			prop := asObject(item)
+			if prop["type"] != flagspec.PropertyFlag {
+				continue
+			}
+			raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(prop["key"])), nil)
+			if err != nil {
+				warnings = appendOnce(warnings, "Could not check a flag this one depends on.")
+				continue
+			}
+			dep, _ := flagspec.DecodeObject(raw)
+			if dep["active"] != true {
+				warnings = appendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
+			}
+		}
+	}
+	return warnings
 }
 
 // restoreCommand undeletes by ID. Deleted flags cannot be listed or read, so
