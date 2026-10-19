@@ -19,19 +19,16 @@ const cohortWarning = "Cohorts are compared by ID, and cohort IDs differ between
 func comparableSpec(ctx context.Context, resolved *resolvedContext, projectID int, flag map[string]any) (map[string]any, []string, error) {
 	named, _ := flagspec.Clone(flag).(map[string]any)
 	var warnings []string
-	for _, group := range asList(asObject(named["filters"])["groups"]) {
-		for _, item := range asList(asObject(group)["properties"]) {
-			prop := asObject(item)
-			switch prop["type"] {
-			case flagspec.PropertyCohort:
-				warnings = appendOnce(warnings, cohortWarning)
-			case flagspec.PropertyFlag:
-				key, err := flagKeyByID(ctx, resolved, projectID, fmt.Sprint(prop["key"]))
-				if err != nil {
-					return nil, nil, err
-				}
-				prop["key"] = key
+	for prop := range flagspec.ConditionProperties(named) {
+		switch prop["type"] {
+		case flagspec.PropertyCohort:
+			warnings = appendOnce(warnings, cohortWarning)
+		case flagspec.PropertyFlag:
+			key, err := flagKeyByID(ctx, resolved, projectID, fmt.Sprint(prop["key"]))
+			if err != nil {
+				return nil, nil, err
 			}
+			prop["key"] = key
 		}
 	}
 	exported, err := flagspec.Export(named)

@@ -97,21 +97,18 @@ func activeDependents(ctx context.Context, resolved *resolvedContext, flag map[s
 // disabled flag may be refused. Lookups are best effort.
 func disabledDependencies(ctx context.Context, resolved *resolvedContext, flag map[string]any) []string {
 	var warnings []string
-	for _, group := range asList(asObject(flag["filters"])["groups"]) {
-		for _, item := range asList(asObject(group)["properties"]) {
-			prop := asObject(item)
-			if prop["type"] != flagspec.PropertyFlag {
-				continue
-			}
-			raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(prop["key"])), nil)
-			if err != nil {
-				warnings = appendOnce(warnings, "Could not check a flag this one depends on.")
-				continue
-			}
-			dep, _ := flagspec.DecodeObject(raw)
-			if dep["active"] != true {
-				warnings = appendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
-			}
+	for prop := range flagspec.ConditionProperties(flag) {
+		if prop["type"] != flagspec.PropertyFlag {
+			continue
+		}
+		raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(prop["key"])), nil)
+		if err != nil {
+			warnings = appendOnce(warnings, "Could not check a flag this one depends on.")
+			continue
+		}
+		dep, _ := flagspec.DecodeObject(raw)
+		if dep["active"] != true {
+			warnings = appendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
 		}
 	}
 	return warnings
