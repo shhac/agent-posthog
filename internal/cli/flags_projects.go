@@ -185,13 +185,9 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 				result.Set("key", key)
 				result.Set("from_project", resolved.ProjectID)
 				result.Set("targets", plan)
-				body := map[string]any{
-					"feature_flag_key": key, "from_project": resolved.ProjectID, "target_project_ids": targetIDs,
-					"copy_schedule": false, "disable_copied_flag": disable, "copy_dependencies": copyDependencies,
-				}
+				request := map[string]any{"feature_flag_key": key, "from_project": resolved.ProjectID, "target_project_ids": targetIDs}
 				if copyDependencies {
-					raw, err := resolved.Client.Post(ctx, "/api/organizations/"+resolved.OrgID+"/feature_flags/copy_flags/dependency_requirements/", nil,
-						map[string]any{"feature_flag_key": key, "from_project": resolved.ProjectID, "target_project_ids": targetIDs})
+					raw, err := resolved.Client.Post(ctx, copyFlagsPath(resolved.OrgID)+"dependency_requirements/", nil, request)
 					if err != nil {
 						return err
 					}
@@ -199,18 +195,21 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 					result.Set("dependencies", requirements)
 				}
 				result.Set("warnings", warnings)
-				overwriteHint := fmt.Sprintf("Flag %s already exists in project(s) %s; review the differences, then pass --overwrite to replace it.", key, strings.Join(blocked, ", "))
+				hint := applyHint
+				if len(blocked) > 0 {
+					hint = fmt.Sprintf("Flag %s already exists in project(s) %s; review the differences, then pass --overwrite to replace it.", key, strings.Join(blocked, ", "))
+				}
 				if !opts.apply() {
-					result.Set("hint", applyHint)
-					if len(blocked) > 0 {
-						result.Set("hint", overwriteHint)
-					}
+					result.Set("hint", hint)
 					return writeExact(result, globals.Format)
 				}
 				if len(blocked) > 0 {
-					return agenterrors.New("Not copied: "+overwriteHint, agenterrors.FixableByAgent)
+					return agenterrors.New("Not copied: "+hint, agenterrors.FixableByAgent)
 				}
-				raw, err := resolved.Client.Mutate(ctx, http.MethodPost, "/api/organizations/"+resolved.OrgID+"/feature_flags/copy_flags/", nil, body)
+				request["copy_schedule"] = false
+				request["disable_copied_flag"] = disable
+				request["copy_dependencies"] = copyDependencies
+				raw, err := resolved.Client.Mutate(ctx, http.MethodPost, copyFlagsPath(resolved.OrgID), nil, request)
 				if err != nil {
 					return classifyWriteError(err)
 				}
@@ -225,6 +224,10 @@ func copyCommand(globals *GlobalFlags) *cobra.Command {
 	addWriteFlags(cmd, &opts)
 	_ = cmd.MarkFlagRequired("to")
 	return cmd
+}
+
+func copyFlagsPath(orgID string) string {
+	return "/api/organizations/" + orgID + "/feature_flags/copy_flags/"
 }
 
 func copyTargets(resolved *resolvedContext, targets []string) ([]int, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"sort"
@@ -128,11 +129,9 @@ func (s *flagStore) create(w http.ResponseWriter, r *http.Request, project int) 
 		validationError(w, "key", "This field is required.")
 		return
 	}
-	for _, existing := range s.flags[project] {
-		if existing["key"] == key && existing["deleted"] != true {
-			validationError(w, "key", "There is already a feature flag with this key.")
-			return
-		}
+	if findByKey(s.flags[project], key) != nil {
+		validationError(w, "key", "There is already a feature flag with this key.")
+		return
 	}
 	if fv, ok := asObject(body["filters"])["version"]; ok && fv != nil {
 		validationError(w, "filters", "filters.version is reserved. Remove it from the request.")
@@ -212,12 +211,8 @@ func (s *flagStore) patch(w http.ResponseWriter, r *http.Request, flag map[strin
 		return
 	}
 	updated["version"] = toInt(flag["version"]) + 1
-	for k := range flag {
-		delete(flag, k)
-	}
-	for k, v := range updated {
-		flag[k] = v
-	}
+	clear(flag)
+	maps.Copy(flag, updated)
 	write(w, flag)
 }
 
@@ -468,12 +463,7 @@ func (s *flagStore) copyFlags(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key, _ := body["feature_flag_key"].(string)
-	var source map[string]any
-	for _, flag := range s.flags[toInt(body["from_project"])] {
-		if flag["key"] == key && flag["deleted"] != true {
-			source = flag
-		}
-	}
+	source := findByKey(s.flags[toInt(body["from_project"])], key)
 	if source == nil {
 		writeStatus(w, http.StatusBadRequest, map[string]any{"error": "Feature flag to copy does not exist."})
 		return
@@ -490,12 +480,7 @@ func (s *flagStore) copyFlags(w http.ResponseWriter, r *http.Request) {
 			failed = append(failed, map[string]any{"project_id": project, "error_message": "Project not found."})
 			continue
 		}
-		var existing map[string]any
-		for _, flag := range flags {
-			if flag["key"] == key && flag["deleted"] != true {
-				existing = flag
-			}
-		}
+		existing := findByKey(flags, key)
 		active := source["active"] == true && body["disable_copied_flag"] != true
 		if existing == nil {
 			s.nextID++
@@ -604,6 +589,17 @@ func toInt(v any) int {
 		n, _ := strconv.Atoi(fmt.Sprint(v))
 		return n
 	}
+}
+
+// findByKey returns the live flag with key, picking the lowest ID so
+// duplicate-key fixtures resolve the same way every time.
+func findByKey(flags map[int]map[string]any, key string) map[string]any {
+	for _, id := range sortedIDs(flags) {
+		if flags[id]["key"] == key && flags[id]["deleted"] != true {
+			return flags[id]
+		}
+	}
+	return nil
 }
 
 func sortedIDs(flags map[int]map[string]any) []int {

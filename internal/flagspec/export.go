@@ -74,6 +74,9 @@ func (o *Ordered) MarshalYAML() (any, error) {
 // MarshalYAML renders any JSON-encodable value as YAML, keeping numbers exact
 // and quoting strings YAML would otherwise retype.
 func MarshalYAML(v any) ([]byte, error) {
+	if ordered, ok := v.(*Ordered); ok {
+		return yaml.Marshal(ordered)
+	}
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
@@ -81,9 +84,6 @@ func MarshalYAML(v any) ([]byte, error) {
 	decoded, err := Decode(data)
 	if err != nil {
 		return nil, err
-	}
-	if ordered, ok := v.(*Ordered); ok {
-		return yaml.Marshal(ordered)
 	}
 	node, err := yamlNode(decoded)
 	if err != nil {

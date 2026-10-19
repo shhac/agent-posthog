@@ -190,10 +190,11 @@ func formatWhere(prop map[string]any) (string, bool) {
 		if key == "cohort" || strings.HasPrefix(key, "person:") || strings.HasPrefix(key, "flag:") {
 			key = "person:" + key
 		}
+		kind := personOperators[op]
 		if symbol, ok := operatorSymbols[op]; ok {
 			op = symbol
 		}
-		if personOperators[prop["operator"].(string)] == "none" {
+		if kind == "none" {
 			return key + " " + op, true
 		}
 		return key + " " + op + " " + formatValue(prop["value"]), true
