@@ -151,53 +151,52 @@ func RemoveProfile(alias string) error {
 }
 
 func SetDefault(alias string) error {
-	return updateConfig(func(cfg *Config) error {
-		if _, ok := cfg.Profiles[alias]; !ok {
-			return fmt.Errorf("profile %q is not configured", alias)
-		}
+	return updateProfile(alias, func(cfg *Config, _ *Profile) error {
 		cfg.DefaultProfile = alias
 		return nil
 	})
 }
 
 func UpdateProfile(alias string, update func(Profile) Profile) error {
-	return updateConfig(func(cfg *Config) error {
-		profile, ok := cfg.Profiles[alias]
-		if !ok {
-			return fmt.Errorf("profile %q is not configured", alias)
-		}
-		cfg.Profiles[alias] = normalizeProfile(update(profile))
+	return updateProfile(alias, func(_ *Config, profile *Profile) error {
+		*profile = normalizeProfile(update(*profile))
 		return nil
 	})
 }
 
 // SetProjectAlias names a project ID within a profile.
 func SetProjectAlias(alias, name string, projectID int) error {
-	return updateConfig(func(cfg *Config) error {
-		profile, ok := cfg.Profiles[alias]
-		if !ok {
-			return fmt.Errorf("profile %q is not configured", alias)
-		}
+	return updateProfile(alias, func(_ *Config, profile *Profile) error {
 		if profile.ProjectAliases == nil {
 			profile.ProjectAliases = map[string]int{}
 		}
 		profile.ProjectAliases[name] = projectID
-		cfg.Profiles[alias] = profile
 		return nil
 	})
 }
 
 // UnsetProjectAlias removes a project alias from a profile.
 func UnsetProjectAlias(alias, name string) error {
+	return updateProfile(alias, func(_ *Config, profile *Profile) error {
+		if _, ok := profile.ProjectAliases[name]; !ok {
+			return fmt.Errorf("profile %q has no project alias %q", alias, name)
+		}
+		delete(profile.ProjectAliases, name)
+		return nil
+	})
+}
+
+// updateProfile changes a configured profile under the config lock, refusing
+// one that does not exist.
+func updateProfile(alias string, update func(*Config, *Profile) error) error {
 	return updateConfig(func(cfg *Config) error {
 		profile, ok := cfg.Profiles[alias]
 		if !ok {
 			return fmt.Errorf("profile %q is not configured", alias)
 		}
-		if _, ok := profile.ProjectAliases[name]; !ok {
-			return fmt.Errorf("profile %q has no project alias %q", alias, name)
+		if err := update(cfg, &profile); err != nil {
+			return err
 		}
-		delete(profile.ProjectAliases, name)
 		cfg.Profiles[alias] = profile
 		return nil
 	})
@@ -211,30 +210,10 @@ func SetMCPWrites(enabled bool) error {
 	})
 }
 
-func SetDefaultValue(key string, value int) error {
+// UpdateDefaults changes the command defaults under the config lock.
+func UpdateDefaults(update func(*Defaults)) error {
 	return updateConfig(func(cfg *Config) error {
-		switch key {
-		case "timeout_ms":
-			cfg.Defaults.TimeoutMS = intPtr(value)
-		case "max_retries":
-			cfg.Defaults.MaxRetries = intPtr(value)
-		default:
-			return fmt.Errorf("unknown config key %q", key)
-		}
-		return nil
-	})
-}
-
-func UnsetDefaultValue(key string) error {
-	return updateConfig(func(cfg *Config) error {
-		switch key {
-		case "timeout_ms":
-			cfg.Defaults.TimeoutMS = nil
-		case "max_retries":
-			cfg.Defaults.MaxRetries = nil
-		default:
-			return fmt.Errorf("unknown config key %q", key)
-		}
+		update(&cfg.Defaults)
 		return nil
 	})
 }
@@ -248,8 +227,4 @@ func normalizeProfile(profile Profile) Profile {
 		profile.Host = DefaultHost
 	}
 	return profile
-}
-
-func intPtr(value int) *int {
-	return &value
 }

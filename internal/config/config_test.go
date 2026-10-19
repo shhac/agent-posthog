@@ -59,10 +59,10 @@ func TestDefaultValueLifecycle(t *testing.T) {
 	})
 	SetConfigDir(t.TempDir())
 
-	if err := SetDefaultValue("timeout_ms", 1000); err != nil {
+	if err := UpdateDefaults(func(d *Defaults) { d.TimeoutMS = new(1000) }); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetDefaultValue("max_retries", 3); err != nil {
+	if err := UpdateDefaults(func(d *Defaults) { d.MaxRetries = new(3) }); err != nil {
 		t.Fatal(err)
 	}
 	cfg := Read()
@@ -72,14 +72,11 @@ func TestDefaultValueLifecycle(t *testing.T) {
 	if cfg.Defaults.MaxRetries == nil || *cfg.Defaults.MaxRetries != 3 {
 		t.Fatalf("MaxRetries = %#v", cfg.Defaults.MaxRetries)
 	}
-	if err := UnsetDefaultValue("timeout_ms"); err != nil {
+	if err := UpdateDefaults(func(d *Defaults) { d.TimeoutMS = nil }); err != nil {
 		t.Fatal(err)
 	}
 	if Read().Defaults.TimeoutMS != nil {
 		t.Fatal("timeout_ms was not unset")
-	}
-	if err := SetDefaultValue("unknown", 1); err == nil {
-		t.Fatal("expected unknown config key error")
 	}
 }
 
@@ -129,10 +126,10 @@ func TestConcurrentStoreProfileDoesNotLoseEntries(t *testing.T) {
 	}
 }
 
-// Concurrent SetDefaultValue calls against DIFFERENT keys must not lose each
+// Concurrent UpdateDefaults calls against DIFFERENT keys must not lose each
 // other: both keys live in the same Defaults struct, so an unlocked
 // read-modify-write lets the second writer's snapshot erase the first key.
-func TestConcurrentSetDefaultValueKeepsBothKeys(t *testing.T) {
+func TestConcurrentUpdateDefaultsKeepsBothKeys(t *testing.T) {
 	t.Cleanup(func() {
 		SetConfigDir("")
 		ClearCache()
@@ -145,14 +142,14 @@ func TestConcurrentSetDefaultValueKeepsBothKeys(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			if err := SetDefaultValue("timeout_ms", 1000); err != nil {
-				t.Errorf("SetDefaultValue(timeout_ms): %v", err)
+			if err := UpdateDefaults(func(d *Defaults) { d.TimeoutMS = new(1000) }); err != nil {
+				t.Errorf("UpdateDefaults(timeout_ms): %v", err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if err := SetDefaultValue("max_retries", 3); err != nil {
-				t.Errorf("SetDefaultValue(max_retries): %v", err)
+			if err := UpdateDefaults(func(d *Defaults) { d.MaxRetries = new(3) }); err != nil {
+				t.Errorf("UpdateDefaults(max_retries): %v", err)
 			}
 		}()
 	}

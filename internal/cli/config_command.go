@@ -39,8 +39,8 @@ func registerConfig(root *cobra.Command, globals *shared.GlobalFlags) {
 
 func configKeys() []libcli.ConfigKey {
 	return []libcli.ConfigKey{
-		intKey("timeout_ms", "Request timeout in milliseconds", func(d config.Defaults) *int { return d.TimeoutMS }),
-		intKey("max_retries", "Automatic retries for transient 429/5xx responses", func(d config.Defaults) *int { return d.MaxRetries }),
+		intKey("timeout_ms", "Request timeout in milliseconds", func(d *config.Defaults) **int { return &d.TimeoutMS }),
+		intKey("max_retries", "Automatic retries for transient 429/5xx responses", func(d *config.Defaults) **int { return &d.MaxRetries }),
 		{
 			Name:        "mcp_writes",
 			Description: "Allow PostHog writes from commands run through the MCP server (off by default)",
@@ -64,12 +64,12 @@ func configKeys() []libcli.ConfigKey {
 	}
 }
 
-func intKey(name, description string, current func(config.Defaults) *int) libcli.ConfigKey {
+func intKey(name, description string, field func(*config.Defaults) **int) libcli.ConfigKey {
 	return libcli.ConfigKey{
 		Name:        name,
 		Description: description,
 		Get: func() (string, bool) {
-			value := current(config.Read().Defaults)
+			value := *field(&config.Read().Defaults)
 			if value == nil {
 				return "", false
 			}
@@ -80,9 +80,9 @@ func intKey(name, description string, current func(config.Defaults) *int) libcli
 			if err != nil || value < 0 {
 				return agenterrors.New(name+" takes a whole number", agenterrors.FixableByAgent)
 			}
-			return config.SetDefaultValue(name, value)
+			return config.UpdateDefaults(func(d *config.Defaults) { *field(d) = &value })
 		},
-		Unset: func() error { return config.UnsetDefaultValue(name) },
+		Unset: func() error { return config.UpdateDefaults(func(d *config.Defaults) { *field(d) = nil }) },
 	}
 }
 
