@@ -20,12 +20,15 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 	if creating {
 		current = map[string]any{}
 	}
-	filters := asMap(current["filters"])
-	if err := RequireV1(filters); err != nil {
-		return nil, err
-	}
 	if !creating && current["key"] != spec.Key() {
 		return nil, fmt.Errorf("spec key %q does not match flag key %v; renaming is not supported", spec.Key(), current["key"])
+	}
+	filters := asMap(current["filters"])
+	if spec.Has("filters_document") {
+		return buildDocument(current, creating, spec)
+	}
+	if err := RequireV1(filters); err != nil {
+		return nil, err
 	}
 	encrypted := current["has_encrypted_payloads"] == true
 	fromType := TypeBoolean
@@ -91,6 +94,35 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 	if err := buildPayloads(p, spec, filters, toType, variantKeys, encrypted); err != nil {
 		return nil, err
 	}
+	return p, nil
+}
+
+// buildDocument writes a config version 2 filters document whole. PostHog
+// validates the document itself and admits these writes per project.
+func buildDocument(current map[string]any, creating bool, spec *Spec) (*Patch, error) {
+	if !creating {
+		version, err := ConfigVersion(asMap(current["filters"]))
+		if err != nil {
+			return nil, err
+		}
+		if version != 2 {
+			return nil, fmt.Errorf("this flag uses classic filters; describe them with conditions, variants, and payloads instead of filters_document")
+		}
+	}
+	p := NewPatch()
+	if creating {
+		if spec.Get("active") == true {
+			return nil, fmt.Errorf("PostHog creates config version 2 flags disabled; create it, then run 'flags enable'")
+		}
+		p.Fields["key"] = spec.Key()
+		p.Fields["active"] = false
+	}
+	for _, field := range passthroughFields {
+		if spec.Has(field) {
+			p.Fields[field] = Clone(spec.Get(field))
+		}
+	}
+	p.Fields["filters"] = Clone(spec.Get("filters_document"))
 	return p, nil
 }
 

@@ -39,6 +39,8 @@ against one server:
   `original_flag` the way PostHog does (field overlap only)
 - `approval-flag` (26): any PATCH returns the approval-policy 409
 - `policy-flag` (27): any PATCH returns the 400 `policy_conflict`
+- `v2-flag` (29): config version 2 filters; PATCH replaces the document whole
+  with a strict version check, and creates must be disabled
 - `secret-config` (28): remote config with encrypted payloads, which the CLI
   must refuse to rewrite or export
 - archiving an active flag is a 400; DELETE is a 405; delete is `deleted: true`

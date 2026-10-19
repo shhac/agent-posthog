@@ -223,6 +223,9 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 // if the flag changed at all since the version given.
 func setConditionRollout(ctx context.Context, resolved *resolvedContext, globals *GlobalFlags, ref string, index int, rollout float64, opts writeOptions) error {
 	build := func(flag map[string]any) (*flagspec.Patch, []string, error) {
+		if err := flagspec.RequireV1(asObject(flag["filters"])); err != nil {
+			return nil, nil, err
+		}
 		groups, _ := flagspec.Clone(asObject(flag["filters"])["groups"]).([]any)
 		if err := checkConditionIndex(groups, index); err != nil {
 			return nil, nil, err

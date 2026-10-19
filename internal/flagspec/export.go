@@ -12,37 +12,23 @@ import (
 // incomplete so it cannot be applied back over the flag.
 func Export(flag map[string]any) (*Ordered, error) {
 	filters := asMap(flag["filters"])
-	if err := RequireV1(filters); err != nil {
+	version, err := ConfigVersion(filters)
+	if err != nil {
 		return nil, err
 	}
-	spec := NewOrdered()
-	spec.Set("schema_version", number(SchemaVersion))
-	spec.Set("key", flag["key"])
-	if name, ok := flag["name"].(string); ok && name != "" {
-		spec.Set("name", name)
+	if version == 2 {
+		spec := exportCommon(flag, false)
+		spec.Set("filters_document", filters)
+		return spec, nil
 	}
-	flagType := TypeOf(flag)
-	spec.Set("type", flagType)
-	spec.Set("active", flag["active"] == true)
-	for _, field := range []string{"tags", "evaluation_contexts"} {
-		if list := asSlice(flag[field]); len(list) > 0 {
-			spec.Set(field, list)
-		}
-	}
+	spec := exportCommon(flag, true)
 	if v, ok := filters["early_exit"]; ok && v != nil {
 		spec.Set("early_exit", v)
 	}
 	if v, ok := filters["aggregation_group_type_index"]; ok && v != nil {
 		spec.Set("aggregation_group_type_index", v)
 	}
-	if flag["ensure_experience_continuity"] == true {
-		spec.Set("ensure_experience_continuity", true)
-	}
-	for _, field := range []string{"evaluation_runtime", "bucketing_identifier"} {
-		if v, ok := flag[field].(string); ok && v != "" {
-			spec.Set(field, v)
-		}
-	}
+	flagType := TypeOf(flag)
 	if flagType != TypeRemoteConfig {
 		spec.Set("conditions", ExportConditions(asSlice(filters["groups"])))
 	}
@@ -75,6 +61,34 @@ func Export(flag map[string]any) (*Ordered, error) {
 }
 
 // ExportConditions renders condition groups in spec form.
+// exportCommon sets the fields every spec carries, whatever the filters format.
+func exportCommon(flag map[string]any, withType bool) *Ordered {
+	spec := NewOrdered()
+	spec.Set("schema_version", number(SchemaVersion))
+	spec.Set("key", flag["key"])
+	if name, ok := flag["name"].(string); ok && name != "" {
+		spec.Set("name", name)
+	}
+	if withType {
+		spec.Set("type", TypeOf(flag))
+	}
+	spec.Set("active", flag["active"] == true)
+	for _, field := range []string{"tags", "evaluation_contexts"} {
+		if list := asSlice(flag[field]); len(list) > 0 {
+			spec.Set(field, list)
+		}
+	}
+	if flag["ensure_experience_continuity"] == true {
+		spec.Set("ensure_experience_continuity", true)
+	}
+	for _, field := range []string{"evaluation_runtime", "bucketing_identifier"} {
+		if v, ok := flag[field].(string); ok && v != "" {
+			spec.Set(field, v)
+		}
+	}
+	return spec
+}
+
 func ExportConditions(groups []any) []any {
 	out := make([]any, 0, len(groups))
 	for _, item := range groups {
@@ -165,12 +179,27 @@ func TypeOf(flag map[string]any) string {
 	return TypeBoolean
 }
 
-// RequireV1 refuses filters stored in a config format other than v1, which
-// PostHog's classic API will not edit.
-func RequireV1(filters map[string]any) error {
+// ConfigVersion reports a filters document's PostHog config format: 1 (the
+// classic groups/multivariate/payloads shape) or 2 (a pilot document PostHog
+// validates itself).
+func ConfigVersion(filters map[string]any) (int, error) {
 	v, ok := filters["version"]
-	if !ok || v == nil || Equal(v, number(1)) {
-		return nil
+	switch {
+	case !ok || v == nil || Equal(v, number(1)):
+		return 1, nil
+	case Equal(v, number(2)):
+		return 2, nil
+	default:
+		return 0, fmt.Errorf("this flag's filters use config version %v, which agent-posthog does not support", v)
 	}
-	return fmt.Errorf("this flag's filters use config version %v, which agent-posthog cannot edit; change it in the PostHog UI", v)
+}
+
+// RequireV1 refuses edits that address parts of the classic filters shape on
+// a flag stored in another format.
+func RequireV1(filters map[string]any) error {
+	version, err := ConfigVersion(filters)
+	if err != nil || version == 1 {
+		return err
+	}
+	return fmt.Errorf("this flag uses PostHog's config version 2 filters; edit them as a whole with 'flags export' and 'flags apply' (filters_document)")
 }

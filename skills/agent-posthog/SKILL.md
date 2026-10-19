@@ -163,6 +163,11 @@ targets a cohort; `flag:<key> = true|false|<variant>` depends on another flag;
 `person:<name>` targets a person property named like a keyword. Other property
 types (group properties) go in a spec as raw PostHog property objects.
 
+Flags stored in PostHog's newer **config version 2** format export a
+`filters_document` instead of conditions/variants/payloads. Edit that document
+and `apply` it back whole; PostHog validates it and admits these writes per
+project. Narrow edits refuse v2 flags; enable, disable, archive, and delete work.
+
 Rule → JSON config is a **multivariate** flag: conditions pick a variant with
 `variant:`, and each variant carries its payload. `remote_config` serves one
 payload to everyone and ignores conditions.

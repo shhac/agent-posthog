@@ -33,7 +33,7 @@ type flagStore struct {
 
 func newFlagStore() *flagStore {
 	s := &flagStore{nextID: 100, flags: map[int]map[int]map[string]any{123: {}, 124: {}, approvalProject: {}}}
-	for _, flag := range []map[string]any{checkoutFlag(), billingFlag(23), billingFlag(24), approvalFlag(), policyFlag(), encryptedFlag()} {
+	for _, flag := range []map[string]any{checkoutFlag(), billingFlag(23), billingFlag(24), approvalFlag(), policyFlag(), encryptedFlag(), v2Flag()} {
 		s.flags[123][toInt(flag["id"])] = withFlagDefaults(flag)
 	}
 	return s
@@ -131,7 +131,11 @@ func (s *flagStore) create(w http.ResponseWriter, r *http.Request, project int) 
 		validationError(w, "key", "There is already a feature flag with this key.")
 		return
 	}
-	if fv, ok := asObject(body["filters"])["version"]; ok && fv != nil {
+	if isV2(body) && body["active"] == true {
+		validationError(w, "active", "A flag with this configuration format is created disabled. Enable it in a separate request.")
+		return
+	}
+	if fv, ok := asObject(body["filters"])["version"]; ok && fv != nil && !isV2(body) {
 		validationError(w, "filters", "filters.version is reserved. Remove it from the request.")
 		return
 	}
@@ -165,6 +169,10 @@ func (s *flagStore) patch(w http.ResponseWriter, r *http.Request, flag map[strin
 			"code": "policy_conflict", "error": "This change matches more than one approval policy.",
 			"conflicting_policies": []any{}, "guidance": "Change the rollout and the targeting separately.",
 		})
+		return
+	}
+	if isV2(flag) {
+		s.patchV2(w, body, flag)
 		return
 	}
 	if fv, ok := asObject(body["filters"])["version"]; ok && fv != nil {
@@ -212,6 +220,30 @@ func (s *flagStore) patch(w http.ResponseWriter, r *http.Request, flag map[strin
 	clear(flag)
 	maps.Copy(flag, updated)
 	write(w, flag)
+}
+
+// patchV2 mirrors PostHog's config version 2 path: a strict version check and
+// whole-document filters, with the classic shallow merge unavailable.
+func (s *flagStore) patchV2(w http.ResponseWriter, body, flag map[string]any) {
+	if sent, ok := body["version"]; ok && toInt(sent) != toInt(flag["version"]) {
+		writeStatus(w, http.StatusConflict, map[string]any{"type": "server_error", "code": "conflict", "detail": "This feature flag has changed since the version you sent."})
+		return
+	}
+	delete(body, "version")
+	delete(body, "original_flag")
+	if filters, ok := body["filters"]; ok && !isV2(map[string]any{"filters": filters}) {
+		validationError(w, "filters", "This flag's stored configuration cannot be updated through this API.")
+		return
+	}
+	for k, v := range body {
+		flag[k] = v
+	}
+	flag["version"] = toInt(flag["version"]) + 1
+	write(w, flag)
+}
+
+func isV2(flag map[string]any) bool {
+	return toInt(asObject(flag["filters"])["version"]) == 2
 }
 
 func setRollout(w http.ResponseWriter, r *http.Request, flag map[string]any) {

@@ -27,7 +27,12 @@ var specFields = map[string]bool{
 	"aggregation_group_type_index": true, "ensure_experience_continuity": true,
 	"evaluation_runtime": true, "bucketing_identifier": true,
 	"conditions": true, "variants": true, "payload": true, "payloads": true, "incomplete": true,
+	"filters_document": true,
 }
+
+// classicFilterFields describe filters in the v1 shape and cannot be combined
+// with a whole filters_document.
+var classicFilterFields = []string{"type", "early_exit", "aggregation_group_type_index", "conditions", "variants", "payload", "payloads"}
 
 // Spec is a validated flag spec. Every field is presence-aware: a field that is
 // absent leaves the flag's current value alone on update.
@@ -124,6 +129,17 @@ func (s *Spec) validate() error {
 	}
 	if v, ok := s.fields["aggregation_group_type_index"]; ok && v != nil && !isInteger(v) {
 		return fmt.Errorf("aggregation_group_type_index must be an integer or null")
+	}
+	if s.Has("filters_document") {
+		document := asMap(s.fields["filters_document"])
+		if document == nil || !Equal(document["version"], number(2)) {
+			return fmt.Errorf("filters_document must be a config version 2 object (version: 2); describe v1 filters with conditions, variants, and payloads")
+		}
+		for _, field := range classicFilterFields {
+			if s.Has(field) {
+				return fmt.Errorf("filters_document replaces the filters whole; drop %s", field)
+			}
+		}
 	}
 	if s.Has("payload") && s.Has("payloads") {
 		return fmt.Errorf("use payload (boolean, remote_config) or payloads (multivariate), not both")

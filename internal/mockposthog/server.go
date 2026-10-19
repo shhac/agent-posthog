@@ -388,6 +388,15 @@ func encryptedFlag() map[string]any {
 	}
 }
 
+// v2Flag stores its filters in PostHog's config version 2 format, which is
+// edited only as a whole document.
+func v2Flag() map[string]any {
+	return map[string]any{
+		"id": 29, "key": "v2-flag", "name": "Config v2", "active": false, "version": 3,
+		"filters": map[string]any{"version": 2, "rules": []any{map[string]any{"when": "email ends_with @example.com", "serve": true}}},
+	}
+}
+
 func policyFlag() map[string]any {
 	return map[string]any{"id": 27, "key": policyFlagKey, "name": "Policy conflicted", "active": false, "version": 1}
 }

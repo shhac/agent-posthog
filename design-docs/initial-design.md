@@ -324,9 +324,10 @@ agent-posthog flags copy beta-gate --to prod --yes
 
 The spec and `--where` grammar live in `internal/flagspec` (pure, no HTTP).
 Specs are presence-aware (an omitted field is left alone), decode numbers
-losslessly, keep unknown condition and variant keys, and refuse flags whose
-`filters.version` is not 1, encrypted payload edits, and remote-config
-conditions. Evaluation errors are never reported as `false`.
+losslessly, keep unknown condition and variant keys, and refuse encrypted
+payload edits and remote-config conditions. Flags in PostHog's config version
+2 format round-trip as a whole `filters_document`, which PostHog validates;
+narrow edits refuse them. Evaluation errors are never reported as `false`.
 
 Decided not to add a config-level write opt-in: raw `api post --yes` already
 treats MCP host confirmation as consent, and gating typed flag writes alone
