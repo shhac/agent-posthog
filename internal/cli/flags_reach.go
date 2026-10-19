@@ -22,8 +22,8 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				filters := asObject(flag["filters"])
-				groups := asList(filters["groups"])
+				filters := flagspec.Object(flag["filters"])
+				groups := flagspec.List(filters["groups"])
 				indexes := make([]int, 0, len(groups))
 				for i := range groups {
 					if !cmd.Flags().Changed("condition") || i == condition {
@@ -34,7 +34,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 					return agenterrors.New(fmt.Sprintf("the flag has no condition %d", condition), agenterrors.FixableByAgent)
 				}
 				for _, i := range indexes {
-					group := asObject(groups[i])
+					group := flagspec.Object(groups[i])
 					aggregation, ok := group["aggregation_group_type_index"]
 					if !ok {
 						aggregation = filters["aggregation_group_type_index"]

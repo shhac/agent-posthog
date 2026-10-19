@@ -39,13 +39,13 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				conditions := flagspec.ExportConditions(asList(asObject(flag["filters"])["groups"]))
+				conditions := flagspec.ExportConditions(flagspec.List(flagspec.Object(flag["filters"])["groups"]))
 				format, err := output.ResolveFormat(globals.Format, output.FormatNDJSON)
 				if err != nil {
 					return err
 				}
 				if format != output.FormatNDJSON {
-					return writeExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": asObject(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
+					return writeExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
 				}
 				for i, condition := range conditions {
 					line := flagspec.NewOrdered()
@@ -82,7 +82,7 @@ func (c conditionFlags) validate() error {
 func (c conditionFlags) edit(group map[string]any, changed func(string) bool, resolve flagspec.FlagResolver) error {
 	switch {
 	case changed("where"):
-		props, err := flagspec.BuildProperties(stringsToAny(c.where), resolve)
+		props, err := flagspec.BuildProperties(flagspec.Strings(c.where), resolve)
 		if err != nil {
 			return err
 		}
@@ -128,7 +128,7 @@ func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				resolve := flagResolver(ctx, resolved, resolved.ProjectID)
 				return updateFlag(ctx, resolved, globals, args[0], "conditions add", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					condition := map[string]any{"where": stringsToAny(c.where), "rollout": rolloutNumber(c.rollout)}
+					condition := map[string]any{"where": flagspec.Strings(c.where), "rollout": rolloutNumber(c.rollout)}
 					if c.variant != "" {
 						condition["variant"] = c.variant
 					}
@@ -203,7 +203,7 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 					if err := checkConditionIndex(groups, index); err != nil {
 						return nil, nil, err
 					}
-					if err := c.edit(asObject(groups[index]), changed, resolve); err != nil {
+					if err := c.edit(flagspec.Object(groups[index]), changed, resolve); err != nil {
 						return nil, nil, err
 					}
 					return groupsPatch(flag, groups)
@@ -229,7 +229,7 @@ func setConditionRollout(ctx context.Context, resolved *resolvedContext, globals
 		if err := checkConditionIndex(groups, index); err != nil {
 			return nil, nil, err
 		}
-		asObject(groups[index])["rollout_percentage"] = rolloutNumber(rollout)
+		flagspec.Object(groups[index])["rollout_percentage"] = rolloutNumber(rollout)
 		p := flagspec.NewPatch()
 		p.Filters["groups"] = groups
 		return p, nil, nil
@@ -330,7 +330,7 @@ func moveGroup(groups []any, from, to int) ([]any, error) {
 // editableGroups returns a copy of the flag's conditions after checking the
 // flag is one whose conditions can be edited.
 func editableGroups(flag map[string]any) ([]any, error) {
-	filters := asObject(flag["filters"])
+	filters := flagspec.Object(flag["filters"])
 	if err := flagspec.RequireV1(filters); err != nil {
 		return nil, err
 	}

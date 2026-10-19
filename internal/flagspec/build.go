@@ -23,7 +23,7 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 	if !creating && current["key"] != spec.Key() {
 		return nil, fmt.Errorf("spec key %q does not match flag key %v; renaming is not supported", spec.Key(), current["key"])
 	}
-	filters := asMap(current["filters"])
+	filters := Object(current["filters"])
 	if spec.Has("filters_document") {
 		return buildDocument(current, creating, spec)
 	}
@@ -73,7 +73,7 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 		if toType == TypeRemoteConfig {
 			return nil, fmt.Errorf("remote_config flags serve one payload to everyone; remove conditions or use type multivariate")
 		}
-		groups, err := buildGroups(asSlice(spec.Get("conditions")), resolve)
+		groups, err := buildGroups(List(spec.Get("conditions")), resolve)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +86,7 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 	case creating:
 		p.Filters["groups"] = []any{}
 	case fromType != toType || spec.Has("variants"):
-		if err := CheckOverrides(asSlice(filters["groups"]), toType, variantKeys); err != nil {
+		if err := CheckOverrides(List(filters["groups"]), toType, variantKeys); err != nil {
 			return nil, fmt.Errorf("%w; supply conditions in the spec as well", err)
 		}
 	}
@@ -101,7 +101,7 @@ func Build(current map[string]any, spec *Spec, resolve FlagResolver) (*Patch, er
 // validates the document itself and admits these writes per project.
 func buildDocument(current map[string]any, creating bool, spec *Spec) (*Patch, error) {
 	if !creating {
-		version, err := ConfigVersion(asMap(current["filters"]))
+		version, err := ConfigVersion(Object(current["filters"]))
 		if err != nil {
 			return nil, err
 		}
@@ -132,11 +132,11 @@ func buildMultivariate(p *Patch, spec *Spec, filters map[string]any, fromType, t
 		if toType != TypeMultivariate {
 			return nil, fmt.Errorf("variants need type multivariate")
 		}
-		variants := BuildVariants(asSlice(spec.Get("variants")))
+		variants := BuildVariants(List(spec.Get("variants")))
 		p.Filters["multivariate"] = map[string]any{"variants": variants}
 		return variants, nil
 	case toType == TypeMultivariate:
-		variants := asSlice(asMap(filters["multivariate"])["variants"])
+		variants := List(Object(filters["multivariate"])["variants"])
 		if len(variants) == 0 {
 			return nil, fmt.Errorf("multivariate flags need variants")
 		}
@@ -148,7 +148,7 @@ func buildMultivariate(p *Patch, spec *Spec, filters map[string]any, fromType, t
 }
 
 func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, variantKeys map[string]bool, encrypted bool) error {
-	stored := asMap(filters["payloads"])
+	stored := Object(filters["payloads"])
 	editing := spec.Has("payloads") || spec.Has("payload")
 	if encrypted && editing {
 		return fmt.Errorf("encrypted payloads cannot be changed through agent-posthog")
@@ -159,7 +159,7 @@ func buildPayloads(p *Patch, spec *Spec, filters map[string]any, toType string, 
 			return fmt.Errorf("payloads (per variant) need type multivariate; use payload for boolean and remote_config flags")
 		}
 		out := map[string]any{}
-		for key, value := range asMap(spec.Get("payloads")) {
+		for key, value := range Object(spec.Get("payloads")) {
 			if !variantKeys[key] {
 				return fmt.Errorf("payload %q does not name a variant", key)
 			}
@@ -205,13 +205,13 @@ func PrunePayloads(stored map[string]any, flagType string, variantKeys map[strin
 
 // VariantKeys returns the keys of a flag's variants.
 func VariantKeys(flag map[string]any) map[string]bool {
-	return variantKeySet(asSlice(asMap(asMap(flag["filters"])["multivariate"])["variants"]))
+	return variantKeySet(List(Object(Object(flag["filters"])["multivariate"])["variants"]))
 }
 
 func variantKeySet(variants []any) map[string]bool {
 	keys := map[string]bool{}
 	for _, v := range variants {
-		keys[fmt.Sprint(asMap(v)["key"])] = true
+		keys[fmt.Sprint(Object(v)["key"])] = true
 	}
 	return keys
 }
@@ -230,7 +230,7 @@ func KeepOrEncode(stored, value any) (any, error) {
 func buildGroups(conditions []any, resolve FlagResolver) ([]any, error) {
 	groups := make([]any, 0, len(conditions))
 	for i, item := range conditions {
-		group, err := BuildGroup(asMap(item), resolve)
+		group, err := BuildGroup(Object(item), resolve)
 		if err != nil {
 			return nil, fmt.Errorf("conditions[%d]: %w", i, err)
 		}
@@ -250,7 +250,7 @@ func BuildGroup(condition map[string]any, resolve FlagResolver) (map[string]any,
 		}
 		group[key] = Clone(value)
 	}
-	props, err := BuildProperties(asSlice(condition["where"]), resolve)
+	props, err := BuildProperties(List(condition["where"]), resolve)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func BuildProperties(where []any, resolve FlagResolver) ([]any, error) {
 			}
 			prop = parsed
 		case map[string]any:
-			prop = asMap(Clone(w))
+			prop = Object(Clone(w))
 		default:
 			return nil, fmt.Errorf("where items must be expressions or property objects")
 		}
@@ -305,7 +305,7 @@ func BuildProperties(where []any, resolve FlagResolver) ([]any, error) {
 func BuildVariants(variants []any) []any {
 	out := make([]any, 0, len(variants))
 	for _, item := range variants {
-		variant := asMap(item)
+		variant := Object(item)
 		entry := map[string]any{}
 		for key, value := range variant {
 			if key == "rollout" {
@@ -323,7 +323,7 @@ func BuildVariants(variants []any) []any {
 // variant, and that non-multivariate flags carry none.
 func CheckOverrides(groups []any, flagType string, variantKeys map[string]bool) error {
 	for i, item := range groups {
-		variant, ok := asMap(item)["variant"].(string)
+		variant, ok := Object(item)["variant"].(string)
 		if !ok {
 			continue
 		}
@@ -349,10 +349,10 @@ func ConditionWarnings(groups []any, flagType string) []string {
 	}
 	var warnings []string
 	for i, item := range groups[:len(groups)-1] {
-		group := asMap(item)
+		group := Object(item)
 		rollout, hasRollout := group["rollout_percentage"]
 		full := !hasRollout || rollout == nil || Equal(rollout, number(100))
-		if len(asSlice(group["properties"])) == 0 && full {
+		if len(List(group["properties"])) == 0 && full {
 			warnings = append(warnings, fmt.Sprintf("Condition %d matches everyone at 100%%, so conditions after it never match.", i))
 		}
 	}

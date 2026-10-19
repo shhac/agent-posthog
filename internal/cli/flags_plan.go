@@ -105,7 +105,7 @@ func applyPlan(ctx context.Context, resolved *resolvedContext, globals *GlobalFl
 	if err != nil {
 		return err
 	}
-	if jsonInt(flag["version"]) != jsonInt(plan.BaseVersion) {
+	if flagspec.Int(flag["version"]) != flagspec.Int(plan.BaseVersion) {
 		return agenterrors.New(fmt.Sprintf("flag %v changed since the plan (version %v, plan made at %v); nothing was written", plan.Key, flag["version"], plan.BaseVersion), agenterrors.FixableByAgent).
 			WithHint("Plan the change again against the current flag.")
 	}

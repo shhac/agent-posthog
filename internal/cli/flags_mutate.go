@@ -212,7 +212,7 @@ func checkVersion(flag map[string]any, ref string, opts writeOptions) error {
 	if opts.ifVersion == noVersion {
 		return nil
 	}
-	current := jsonInt(flag["version"])
+	current := flagspec.Int(flag["version"])
 	if current == opts.ifVersion {
 		return nil
 	}

@@ -172,10 +172,10 @@ func (e *evaluator) publicEval(ctx context.Context, in evalContext) evalResult {
 // interpretFlags reads one flag's result out of a /flags response. A flag
 // PostHog did not return or could not evaluate is an error, never false.
 func interpretFlags(resp, flag map[string]any) evalResult {
-	if slices.Contains(asList(resp["quotaLimited"]), any("feature_flags")) {
+	if slices.Contains(flagspec.List(resp["quotaLimited"]), any("feature_flags")) {
 		return evalResult{Status: "error", Error: "the project is over its feature flag quota, so PostHog did not evaluate flags"}
 	}
-	detail, returned := asObject(resp["flags"])[fmt.Sprint(flag["key"])].(map[string]any)
+	detail, returned := flagspec.Object(resp["flags"])[fmt.Sprint(flag["key"])].(map[string]any)
 	switch {
 	case !returned && flag["active"] != true:
 		return evalResult{Status: "ok", Reason: "flag_disabled"}
@@ -184,9 +184,9 @@ func interpretFlags(resp, flag map[string]any) evalResult {
 	case !returned:
 		return evalResult{Status: "error", Error: "PostHog did not return this flag; a change made in the last few seconds may not have reached /flags yet, or its evaluation runtime or contexts exclude this request"}
 	case detail["failed"] == true:
-		return evalResult{Status: "error", Error: fmt.Sprint("evaluation failed: ", asObject(detail["reason"])["description"])}
+		return evalResult{Status: "error", Error: fmt.Sprint("evaluation failed: ", flagspec.Object(detail["reason"])["description"])}
 	}
-	reason := asObject(detail["reason"])
+	reason := flagspec.Object(detail["reason"])
 	r := evalResult{
 		Status:         "ok",
 		Enabled:        detail["enabled"] == true,
@@ -196,7 +196,7 @@ func interpretFlags(resp, flag map[string]any) evalResult {
 		ConditionIndex: reason["condition_index"],
 	}
 	if r.Enabled {
-		r.Payload, r.PayloadSet = decodeEvalPayload(asObject(detail["metadata"])["payload"])
+		r.Payload, r.PayloadSet = decodeEvalPayload(flagspec.Object(detail["metadata"])["payload"])
 	}
 	return r
 }
@@ -236,8 +236,8 @@ func (e *evaluator) record(in evalContext, r evalResult) *flagspec.Ordered {
 	}
 	out.Set("condition_index", r.ConditionIndex)
 	if index, ok := r.ConditionIndex.(json.Number); ok {
-		groups := asList(asObject(e.flag["filters"])["groups"])
-		if i := jsonInt(index); i >= 0 && i < len(groups) {
+		groups := flagspec.List(flagspec.Object(e.flag["filters"])["groups"])
+		if i := flagspec.Int(index); i >= 0 && i < len(groups) {
 			out.Set("condition", flagspec.ExportConditions(groups[i : i+1])[0])
 		}
 	}
@@ -249,7 +249,7 @@ func (e *evaluator) warnings() []string {
 	if e.flag["active"] != true {
 		warnings = append(warnings, "The flag is disabled, so it evaluates to false for everyone; this tests the saved definition only once it is enabled.")
 	}
-	if e.engine == enginePublic && asObject(e.flag["filters"])["early_exit"] == true {
+	if e.engine == enginePublic && flagspec.Object(e.flag["filters"])["early_exit"] == true {
 		warnings = append(warnings, "Early exit is on: /flags honors it, but SDKs evaluating locally honor it only in recent versions.")
 	}
 	return warnings

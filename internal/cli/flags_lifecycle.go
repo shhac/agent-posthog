@@ -82,8 +82,8 @@ func activeDependents(ctx context.Context, resolved *resolvedContext, flag map[s
 	}
 	page, _ := flagspec.DecodeObject(raw)
 	var active []string
-	for _, item := range asList(page["results"]) {
-		if dep := asObject(item); dep["active"] == true {
+	for _, item := range flagspec.List(page["results"]) {
+		if dep := flagspec.Object(item); dep["active"] == true {
 			active = append(active, fmt.Sprint(dep["key"]))
 		}
 	}
@@ -103,12 +103,12 @@ func disabledDependencies(ctx context.Context, resolved *resolvedContext, flag m
 		}
 		raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, fmt.Sprint(prop["key"])), nil)
 		if err != nil {
-			warnings = appendOnce(warnings, "Could not check a flag this one depends on.")
+			warnings = flagspec.AppendOnce(warnings, "Could not check a flag this one depends on.")
 			continue
 		}
 		dep, _ := flagspec.DecodeObject(raw)
 		if dep["active"] != true {
-			warnings = appendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
+			warnings = flagspec.AppendOnce(warnings, fmt.Sprintf("This flag depends on disabled flag %v; PostHog may refuse to enable it until that one is enabled.", dep["key"]))
 		}
 	}
 	return warnings
@@ -164,7 +164,7 @@ func earlyExitCommand(globals *GlobalFlags) *cobra.Command {
 			}
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				return updateFlag(ctx, resolved, globals, args[0], "early-exit", opts, func(flag map[string]any) (*flagspec.Patch, []string, error) {
-					if err := flagspec.RequireV1(asObject(flag["filters"])); err != nil {
+					if err := flagspec.RequireV1(flagspec.Object(flag["filters"])); err != nil {
 						return nil, nil, err
 					}
 					p := flagspec.NewPatch()

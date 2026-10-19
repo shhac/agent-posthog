@@ -165,7 +165,7 @@ func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]an
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	warnings = appendOnce([]string{
+	warnings = flagspec.AppendOnce([]string{
 		"The plan is advisory: PostHog's copy cannot check that a target is unchanged since it was read.",
 		"Tags, evaluation contexts, and archived state are not copied; cohorts are matched by name in each target.",
 	}, warnings...)
@@ -190,7 +190,7 @@ func planCopy(ctx context.Context, resolved *resolvedContext, flag map[string]an
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		warnings = appendOnce(warnings, targetWarnings...)
+		warnings = flagspec.AppendOnce(warnings, targetWarnings...)
 		entry.Set("action", "overwrite")
 		entry.Set("differences", relabel(flagspec.Diff("", source, targetSpec), "source", "target"))
 		plan = append(plan, entry)
@@ -208,8 +208,8 @@ func reportCopy(result *flagspec.Ordered, raw json.RawMessage, format string) er
 	if err != nil {
 		return agenterrors.Wrap(err, agenterrors.FixableByRetry)
 	}
-	succeeded := asList(resp["success"])
-	failed := asList(resp["failed"])
+	succeeded := flagspec.List(resp["success"])
+	failed := flagspec.List(resp["failed"])
 	outcome := outcomeApplied
 	switch {
 	case len(failed) > 0 && len(succeeded) > 0:
@@ -227,7 +227,7 @@ func reportCopy(result *flagspec.Ordered, raw json.RawMessage, format string) er
 		return nil
 	}
 	for _, f := range failed {
-		if asObject(f)["approval_pending"] == true {
+		if flagspec.Object(f)["approval_pending"] == true {
 			return agenterrors.New(fmt.Sprintf("%d target(s) were not copied; at least one waits on an approval", len(failed)), agenterrors.FixableByHuman).
 				WithHint("See failed[] for change request IDs; an approver must review them in PostHog.")
 		}

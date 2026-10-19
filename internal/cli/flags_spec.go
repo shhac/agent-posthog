@@ -206,5 +206,5 @@ func specWarnings(current map[string]any, patch *flagspec.Patch) []string {
 	if !changed {
 		return nil
 	}
-	return flagspec.ConditionWarnings(asList(groups), flagspec.TypeOf(flagspec.Result(current, patch)))
+	return flagspec.ConditionWarnings(flagspec.List(groups), flagspec.TypeOf(flagspec.Result(current, patch)))
 }

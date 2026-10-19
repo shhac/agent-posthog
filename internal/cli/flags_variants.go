@@ -45,11 +45,11 @@ func variantsPatch(flag map[string]any, parsed []any) (*flagspec.Patch, []string
 	if flagspec.TypeOf(flag) != flagspec.TypeMultivariate {
 		return nil, nil, fmt.Errorf("the flag is not multivariate; convert it with 'flags apply' and type: multivariate")
 	}
-	filters := asObject(flag["filters"])
+	filters := flagspec.Object(flag["filters"])
 	existing := map[string]map[string]any{}
 	var oldOrder []string
-	for _, v := range asList(asObject(filters["multivariate"])["variants"]) {
-		variant := asObject(v)
+	for _, v := range flagspec.List(flagspec.Object(filters["multivariate"])["variants"]) {
+		variant := flagspec.Object(v)
 		key := fmt.Sprint(variant["key"])
 		existing[key] = variant
 		oldOrder = append(oldOrder, key)
@@ -58,7 +58,7 @@ func variantsPatch(flag map[string]any, parsed []any) (*flagspec.Patch, []string
 	variants := make([]any, 0, len(parsed))
 	var newOrder []string
 	for _, item := range parsed {
-		spec := asObject(item)
+		spec := flagspec.Object(item)
 		key := spec["key"].(string)
 		entry, _ := flagspec.Clone(existing[key]).(map[string]any)
 		if entry == nil {
@@ -71,12 +71,12 @@ func variantsPatch(flag map[string]any, parsed []any) (*flagspec.Patch, []string
 			newOrder = append(newOrder, key)
 		}
 	}
-	if err := flagspec.CheckOverrides(asList(filters["groups"]), flagspec.TypeMultivariate, keys); err != nil {
+	if err := flagspec.CheckOverrides(flagspec.List(filters["groups"]), flagspec.TypeMultivariate, keys); err != nil {
 		return nil, nil, fmt.Errorf("%w; change or remove that condition first", err)
 	}
 	p := flagspec.NewPatch()
 	p.Filters["multivariate"] = map[string]any{"variants": variants}
-	if kept, changed := flagspec.PrunePayloads(asObject(filters["payloads"]), flagspec.TypeMultivariate, keys); changed {
+	if kept, changed := flagspec.PrunePayloads(flagspec.Object(filters["payloads"]), flagspec.TypeMultivariate, keys); changed {
 		p.Filters["payloads"] = kept
 	}
 	var warnings []string

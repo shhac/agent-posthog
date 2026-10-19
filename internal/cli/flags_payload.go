@@ -34,7 +34,7 @@ func payloadGetCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				stored, ok := asObject(asObject(flag["filters"])["payloads"])[payloadKey]
+				stored, ok := flagspec.Object(flagspec.Object(flag["filters"])["payloads"])[payloadKey]
 				result := flagspec.NewOrdered()
 				result.Set("key", flag["key"])
 				result.Set("payload_key", payloadKey)
@@ -115,14 +115,14 @@ func payloadPatch(flag map[string]any, variant string, edit func(payloads map[st
 	if flag["has_encrypted_payloads"] == true {
 		return nil, nil, fmt.Errorf("this flag has encrypted payloads, which agent-posthog does not change; edit them in PostHog")
 	}
-	if err := flagspec.RequireV1(asObject(flag["filters"])); err != nil {
+	if err := flagspec.RequireV1(flagspec.Object(flag["filters"])); err != nil {
 		return nil, nil, err
 	}
 	key, err := payloadKeyFor(flag, variant)
 	if err != nil {
 		return nil, nil, err
 	}
-	payloads, _ := flagspec.Clone(asObject(asObject(flag["filters"])["payloads"])).(map[string]any)
+	payloads, _ := flagspec.Clone(flagspec.Object(flagspec.Object(flag["filters"])["payloads"])).(map[string]any)
 	if payloads == nil {
 		payloads = map[string]any{}
 	}

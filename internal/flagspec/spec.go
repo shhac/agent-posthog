@@ -98,7 +98,7 @@ func (s *Spec) validate() error {
 		sort.Strings(unknown)
 		return fmt.Errorf("unknown field(s) %s", strings.Join(unknown, ", "))
 	}
-	if incomplete := asSlice(s.fields["incomplete"]); len(incomplete) > 0 {
+	if incomplete := List(s.fields["incomplete"]); len(incomplete) > 0 {
 		return fmt.Errorf("this spec is marked incomplete (%v) and cannot be applied", incomplete)
 	}
 	if v, ok := s.fields["schema_version"]; ok && !Equal(v, number(SchemaVersion)) {
@@ -131,7 +131,7 @@ func (s *Spec) validate() error {
 		return fmt.Errorf("aggregation_group_type_index must be an integer or null")
 	}
 	if s.Has("filters_document") {
-		document := asMap(s.fields["filters_document"])
+		document := Object(s.fields["filters_document"])
 		if document == nil || !Equal(document["version"], number(2)) {
 			return fmt.Errorf("filters_document must be a config version 2 object (version: 2); describe v1 filters with conditions, variants, and payloads")
 		}
@@ -144,7 +144,7 @@ func (s *Spec) validate() error {
 	if s.Has("payload") && s.Has("payloads") {
 		return fmt.Errorf("use payload (boolean, remote_config) or payloads (multivariate), not both")
 	}
-	if v, ok := s.fields["payloads"]; ok && asMap(v) == nil {
+	if v, ok := s.fields["payloads"]; ok && Object(v) == nil {
 		return fmt.Errorf("payloads must be an object keyed by variant")
 	}
 	if s.Has("conditions") {
@@ -164,7 +164,7 @@ func validateConditions(v any) error {
 		return fmt.Errorf("conditions must be a list")
 	}
 	for i, item := range conditions {
-		condition := asMap(item)
+		condition := Object(item)
 		if condition == nil {
 			return fmt.Errorf("conditions[%d] must be an object", i)
 		}
@@ -207,7 +207,7 @@ func ValidateVariants(v any) error {
 	seen := map[string]bool{}
 	total := 0.0
 	for i, item := range variants {
-		variant := asMap(item)
+		variant := Object(item)
 		key, _ := variant["key"].(string)
 		if key == "" {
 			return fmt.Errorf("variants[%d].key is required", i)

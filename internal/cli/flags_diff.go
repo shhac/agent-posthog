@@ -22,7 +22,7 @@ func comparableSpec(ctx context.Context, resolved *resolvedContext, projectID in
 	for prop := range flagspec.ConditionProperties(named) {
 		switch prop["type"] {
 		case flagspec.PropertyCohort:
-			warnings = appendOnce(warnings, cohortWarning)
+			warnings = flagspec.AppendOnce(warnings, cohortWarning)
 		case flagspec.PropertyFlag:
 			key, err := flagKeyByID(ctx, resolved, projectID, fmt.Sprint(prop["key"]))
 			if err != nil {
@@ -88,7 +88,7 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				warnings = appendOnce(warnings, againstWarnings...)
+				warnings = flagspec.AppendOnce(warnings, againstWarnings...)
 				differences := flagspec.Diff("", spec, againstSpec)
 				result := flagspec.NewOrdered()
 				result.Set("key", key)

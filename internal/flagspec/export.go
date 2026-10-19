@@ -11,7 +11,7 @@ import (
 // property object. Encrypted payloads are omitted and the spec is marked
 // incomplete so it cannot be applied back over the flag.
 func Export(flag map[string]any) (*Ordered, error) {
-	filters := asMap(flag["filters"])
+	filters := Object(flag["filters"])
 	version, err := ConfigVersion(filters)
 	if err != nil {
 		return nil, err
@@ -30,13 +30,13 @@ func Export(flag map[string]any) (*Ordered, error) {
 	}
 	flagType := TypeOf(flag)
 	if flagType != TypeRemoteConfig {
-		spec.Set("conditions", ExportConditions(asSlice(filters["groups"])))
+		spec.Set("conditions", ExportConditions(List(filters["groups"])))
 	}
 	if flagType == TypeMultivariate {
-		spec.Set("variants", exportVariants(asSlice(asMap(filters["multivariate"])["variants"])))
+		spec.Set("variants", exportVariants(List(Object(filters["multivariate"])["variants"])))
 	}
 
-	payloads := asMap(filters["payloads"])
+	payloads := Object(filters["payloads"])
 	if flag["has_encrypted_payloads"] == true && len(payloads) > 0 {
 		spec.Set("incomplete", []any{"encrypted payloads omitted"})
 		return spec, nil
@@ -74,7 +74,7 @@ func exportCommon(flag map[string]any, withType bool) *Ordered {
 	}
 	spec.Set("active", flag["active"] == true)
 	for _, field := range []string{"tags", "evaluation_contexts"} {
-		if list := asSlice(flag[field]); len(list) > 0 {
+		if list := List(flag[field]); len(list) > 0 {
 			spec.Set(field, list)
 		}
 	}
@@ -92,12 +92,12 @@ func exportCommon(flag map[string]any, withType bool) *Ordered {
 func ExportConditions(groups []any) []any {
 	out := make([]any, 0, len(groups))
 	for _, item := range groups {
-		group := asMap(item)
+		group := Object(item)
 		condition := NewOrdered()
-		if props := asSlice(group["properties"]); len(props) > 0 {
+		if props := List(group["properties"]); len(props) > 0 {
 			where := make([]any, 0, len(props))
 			for _, p := range props {
-				prop := asMap(p)
+				prop := Object(p)
 				if expr, ok := FormatWhere(prop); ok {
 					where = append(where, expr)
 				} else {
@@ -130,7 +130,7 @@ func ExportConditions(groups []any) []any {
 func exportVariants(variants []any) []any {
 	out := make([]any, 0, len(variants))
 	for _, item := range variants {
-		variant := asMap(item)
+		variant := Object(item)
 		entry := NewOrdered()
 		entry.Set("key", variant["key"])
 		entry.Set("rollout", variant["rollout_percentage"])
@@ -176,7 +176,7 @@ func TypeOf(flag map[string]any) string {
 	if flag["is_remote_configuration"] == true {
 		return TypeRemoteConfig
 	}
-	if len(asSlice(asMap(asMap(flag["filters"])["multivariate"])["variants"])) > 0 {
+	if len(List(Object(Object(flag["filters"])["multivariate"])["variants"])) > 0 {
 		return TypeMultivariate
 	}
 	return TypeBoolean

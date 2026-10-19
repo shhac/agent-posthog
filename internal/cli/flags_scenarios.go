@@ -74,12 +74,12 @@ func parseCases(data []byte) ([]testCase, error) {
 		}
 		deviceID, _ := raw["device_id"].(string)
 		var contexts []string
-		for _, c := range asList(raw["evaluation_contexts"]) {
+		for _, c := range flagspec.List(raw["evaluation_contexts"]) {
 			contexts = append(contexts, fmt.Sprint(c))
 		}
 		in := evalContext{
-			DistinctID: distinctID, PersonProps: asObject(raw["props"]), Groups: asObject(raw["groups"]),
-			GroupProperties: asObject(raw["group_props"]), At: at, DeviceID: deviceID, EvaluationContexts: contexts,
+			DistinctID: distinctID, PersonProps: flagspec.Object(raw["props"]), Groups: flagspec.Object(raw["groups"]),
+			GroupProperties: flagspec.Object(raw["group_props"]), At: at, DeviceID: deviceID, EvaluationContexts: contexts,
 		}
 		cases = append(cases, testCase{Name: name, In: in, Expect: expect})
 	}

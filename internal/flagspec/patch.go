@@ -43,7 +43,7 @@ func (p *Patch) Prune(current map[string]any) {
 			delete(p.Fields, key)
 		}
 	}
-	filters := asMap(current["filters"])
+	filters := Object(current["filters"])
 	for key, value := range p.Filters {
 		existing, ok := filters[key]
 		if !ok && value == nil {
@@ -61,9 +61,9 @@ func (p *Patch) Prune(current map[string]any) {
 
 // normalizeGroups treats null defaults like missing keys; they evaluate the same.
 func normalizeGroups(v any) any {
-	groups := asSlice(Clone(v))
+	groups := List(Clone(v))
 	for _, item := range groups {
-		group := asMap(item)
+		group := Object(item)
 		for _, key := range nullAsAbsentGroupKeys {
 			if value, ok := group[key]; ok && value == nil {
 				delete(group, key)
@@ -90,7 +90,7 @@ func Result(current map[string]any, p *Patch) map[string]any {
 	for key, value := range p.Fields {
 		result[key] = Clone(value)
 	}
-	filters, _ := Clone(asMap(result["filters"])).(map[string]any)
+	filters, _ := Clone(Object(result["filters"])).(map[string]any)
 	if filters == nil {
 		filters = map[string]any{}
 	}
@@ -114,7 +114,7 @@ func Unapplied(p *Patch, stored map[string]any) []string {
 			paths = append(paths, key)
 		}
 	}
-	filters := asMap(stored["filters"])
+	filters := Object(stored["filters"])
 	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
 		sent, got := p.Filters[key], filters[key]
 		if key == "groups" {

@@ -64,7 +64,7 @@ func TestExportThenApplyIsUnchanged(t *testing.T) {
 			flag := mustFlag(t, raw)
 			if name == "multivariate" {
 				// The stray "true" payload is pruned on any multivariate apply.
-				delete(asMap(asMap(flag["filters"])["payloads"]), "true")
+				delete(Object(Object(flag["filters"])["payloads"]), "true")
 			}
 			spec, err := ParseSpec(exportJSON(t, flag))
 			if err != nil {
@@ -119,7 +119,7 @@ func TestExportMarksEncryptedPayloadsIncomplete(t *testing.T) {
 
 func TestExportYAMLRoundTrips(t *testing.T) {
 	flag := mustFlag(t, multivariateFlag)
-	delete(asMap(asMap(flag["filters"])["payloads"]), "true")
+	delete(Object(Object(flag["filters"])["payloads"]), "true")
 	spec, err := Export(flag)
 	if err != nil {
 		t.Fatal(err)
@@ -268,11 +268,11 @@ func TestBuildRefusesV2AndRenames(t *testing.T) {
 	if _, err := buildFrom(t, flag, `{"key":"renamed"}`); err == nil || !strings.Contains(err.Error(), "renaming") {
 		t.Fatalf("rename err = %v", err)
 	}
-	asMap(flag["filters"])["version"] = json.Number("2")
+	Object(flag["filters"])["version"] = json.Number("2")
 	if _, err := buildFrom(t, flag, `{"key":"beta-gate","active":false}`); err == nil || !strings.Contains(err.Error(), "config version 2") {
 		t.Fatalf("v2 err = %v", err)
 	}
-	asMap(flag["filters"])["version"] = json.Number("1")
+	Object(flag["filters"])["version"] = json.Number("1")
 	if _, err := buildFrom(t, flag, `{"key":"beta-gate","active":false}`); err != nil {
 		t.Fatalf("v1 marker should be accepted: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestResultMergesPatchShallowly(t *testing.T) {
 	p.Filters["multivariate"] = nil
 	p.Filters["early_exit"] = true
 	result := Result(flag, p)
-	filters := asMap(result["filters"])
+	filters := Object(result["filters"])
 	if _, ok := filters["multivariate"]; ok || filters["early_exit"] != true || filters["groups"] == nil {
 		t.Fatalf("filters = %v", filters)
 	}
@@ -338,7 +338,7 @@ func TestYAMLNumbersBecomeValidJSONNumbers(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", in, err)
 		}
-		got := asMap(doc)["n"]
+		got := Object(doc)["n"]
 		if got != json.Number(want) {
 			t.Fatalf("%s → %v, want %s", in, got, want)
 		}
@@ -351,7 +351,7 @@ func TestYAMLNumbersBecomeValidJSONNumbers(t *testing.T) {
 			t.Fatalf("%s should be rejected", in)
 		}
 	}
-	if doc, _ := ParseDocument([]byte("n: ~")); asMap(doc)["n"] != nil {
+	if doc, _ := ParseDocument([]byte("n: ~")); Object(doc)["n"] != nil {
 		t.Fatal("~ should be null")
 	}
 }
@@ -414,7 +414,7 @@ func TestConfigVersionOnlyAcceptsNumericOneAndTwo(t *testing.T) {
 
 func TestStoredVersionOneIsNeverEchoed(t *testing.T) {
 	flag := mustFlag(t, boolFlag)
-	asMap(flag["filters"])["version"] = json.Number("1")
+	Object(flag["filters"])["version"] = json.Number("1")
 	patch, err := buildFrom(t, flag, `{"key":"beta-gate","conditions":[{"rollout":5}],"payload":{"a":1}}`)
 	if err != nil {
 		t.Fatal(err)

@@ -27,7 +27,7 @@ func Changes(current map[string]any, p *Patch) []Change {
 		before, ok := current[key]
 		out = append(out, Diff(key, presence(before, ok), p.Fields[key])...)
 	}
-	filters := asMap(current["filters"])
+	filters := Object(current["filters"])
 	for _, key := range slices.Sorted(maps.Keys(p.Filters)) {
 		before, ok := filters[key]
 		after := p.Filters[key]

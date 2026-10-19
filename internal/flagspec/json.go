@@ -10,6 +10,7 @@ import (
 	"io"
 	"iter"
 	"reflect"
+	"slices"
 )
 
 // Decode parses JSON keeping numbers as json.Number so payloads and filters
@@ -106,8 +107,8 @@ func Equal(a, b any) bool {
 // conditions, as the live maps, so callers may edit them in place.
 func ConditionProperties(flag map[string]any) iter.Seq[map[string]any] {
 	return func(yield func(map[string]any) bool) {
-		for _, group := range asSlice(asMap(flag["filters"])["groups"]) {
-			for _, item := range asSlice(asMap(group)["properties"]) {
+		for _, group := range List(Object(flag["filters"])["groups"]) {
+			for _, item := range List(Object(group)["properties"]) {
 				prop, ok := item.(map[string]any)
 				if ok && !yield(prop) {
 					return
@@ -117,14 +118,50 @@ func ConditionProperties(flag map[string]any) iter.Seq[map[string]any] {
 	}
 }
 
-func asMap(v any) map[string]any {
+// Object is v as a JSON object, or nil.
+func Object(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
 }
 
-func asSlice(v any) []any {
+// List is v as a JSON array, or nil.
+func List(v any) []any {
 	s, _ := v.([]any)
 	return s
+}
+
+// Int reads a decoded JSON number (json.Number, float64, or int), or 0.
+func Int(v any) int {
+	switch t := v.(type) {
+	case json.Number:
+		n, _ := t.Int64()
+		return int(n)
+	case float64:
+		return int(t)
+	case int:
+		return t
+	default:
+		return 0
+	}
+}
+
+// Strings is values as a JSON array.
+func Strings(values []string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
+}
+
+// AppendOnce appends the items not already in list.
+func AppendOnce(list []string, items ...string) []string {
+	for _, item := range items {
+		if !slices.Contains(list, item) {
+			list = append(list, item)
+		}
+	}
+	return list
 }
 
 func number(n int) json.Number {
