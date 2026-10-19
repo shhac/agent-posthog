@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
@@ -26,7 +27,7 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "user",
-		Short: "Resolve a user and stream recent context",
+		Short: "Resolve a user and its recent context",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
 				path, err := resolved.path(scopeEnvironment, "persons")
@@ -34,38 +35,27 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				q := baseValues(limit)
-				if email != "" {
-					q.Set("email", email)
-				}
-				if distinctID != "" {
-					q.Set("distinct_id", distinctID)
-				}
+				setIf(q, "email", email)
+				setIf(q, "distinct_id", distinctID)
 				page, err := resolved.Client.List(ctx, path, q)
 				if err != nil {
 					return err
 				}
-				writer := output.NewNDJSONWriter(output.Stdout())
 				if len(page.Results) == 0 {
-					return writer.WriteItem(findingRecord("warning", "No matching person found", map[string]any{"email": email, "distinct_id": distinctID}))
+					return writeEvidence([]any{findingRecord("warning", "No matching person found", map[string]any{"email": email, "distinct_id": distinctID})}, "", globals.Format)
 				}
+				var records []any
 				for _, raw := range page.Results {
 					var person map[string]any
 					if err := json.Unmarshal(raw, &person); err != nil {
 						return err
 					}
-					if err := writer.WriteItem(entityRecord("person", person["id"], person)); err != nil {
-						return err
-					}
+					records = append(records, entityRecord("person", person["id"], person))
 					if personID, ok := person["id"]; ok {
-						if err := writer.WriteItem(nextStepRecord(fmt.Sprintf("agent-posthog persons activity %v --env %d", personID, resolved.EnvironmentID))); err != nil {
-							return err
-						}
+						records = append(records, nextStepRecord(fmt.Sprintf("agent-posthog persons activity %v --env %d", personID, resolved.EnvironmentID)))
 					}
 				}
-				if page.Next != "" {
-					return writer.WritePagination(&output.Pagination{HasMore: true, NextURL: page.Next})
-				}
-				return nil
+				return writeEvidence(records, page.Next, globals.Format)
 			})
 		},
 	}
@@ -87,19 +77,17 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				writer := output.NewNDJSONWriter(output.Stdout())
-				if err := writer.WriteItem(entityRecord("event", event, map[string]any{"name": event})); err != nil {
-					return err
-				}
 				sql := fmt.Sprintf("select event, timestamp, distinct_id, properties from events where event = {event} order by timestamp desc limit %d", limit)
-				body := hogQLBody(sql, map[string]any{"event": event})
-				raw, err := resolved.Client.Post(ctx, path, nil, body)
+				raw, err := resolved.Client.Post(ctx, path, nil, hogQLBody(sql, map[string]any{"event": event}))
 				if err != nil {
 					return err
 				}
 				var result any
 				_ = json.Unmarshal(raw, &result)
-				return writer.WriteItem(queryResultRecord("recent_events", result))
+				return writeEvidence([]any{
+					entityRecord("event", event, map[string]any{"name": event}),
+					queryResultRecord("recent_events", result),
+				}, "", globals.Format)
 			})
 		},
 	}
@@ -115,54 +103,47 @@ func investigateFlag(globals *GlobalFlags) *cobra.Command {
 		Short: "Inspect a feature flag and related evidence",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				id, err := resolveFlagID(ctx, resolved, args[0])
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				id, err := p.ResolveID(ctx, args[0])
 				if err != nil {
 					return err
 				}
-				writer := output.NewNDJSONWriter(output.Stdout())
-				flagRaw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, id), nil)
+				raw, err := p.Get(ctx, id)
 				if err != nil {
 					return err
 				}
 				var flag map[string]any
-				_ = json.Unmarshal(flagRaw, &flag)
-				if err := writer.WriteItem(entityRecord("feature_flag", flag["id"], flag)); err != nil {
-					return err
-				}
+				_ = json.Unmarshal(raw, &flag)
+				records := []any{entityRecord("feature_flag", flag["id"], flag)}
 				if active, _ := flag["active"].(bool); !active {
-					if err := writer.WriteItem(findingRecord("warning", "Feature flag is inactive", map[string]any{"key": flag["key"]})); err != nil {
-						return err
-					}
+					records = append(records, findingRecord("warning", "Feature flag is inactive", map[string]any{"key": flag["key"]}))
 				}
 				for _, name := range []string{"dependent_flags", "activity"} {
-					if err := writeEvidence(ctx, resolved, writer, name, flagPath(resolved.ProjectID, id, name)); err != nil {
+					related, err := p.Related(ctx, id, name)
+					if err != nil {
 						return err
 					}
+					for _, item := range related {
+						var data any
+						_ = json.Unmarshal(item, &data)
+						records = append(records, queryResultRecord(name, data))
+					}
 				}
-				return writer.WriteItem(nextStepRecord(fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])))
+				records = append(records, nextStepRecord(fmt.Sprintf("agent-posthog flags get %v --full", flag["id"])))
+				return writeEvidence(records, "", globals.Format)
 			})
 		},
 	}
 }
 
-// writeEvidence streams each record of a related collection as a query result.
-func writeEvidence(ctx context.Context, resolved *resolvedContext, writer *output.NDJSONWriter, name, path string) error {
-	page, err := resolved.Client.List(ctx, path, nil)
+// writeEvidence prints an investigation's records as a list, NDJSON by
+// default.
+func writeEvidence(records []any, nextURL, flagFormat string) error {
+	format, err := output.ResolveFormat(flagFormat, output.FormatNDJSON)
 	if err != nil {
 		return err
 	}
-	for _, raw := range page.Results {
-		var data any
-		_ = json.Unmarshal(raw, &data)
-		if err := writer.WriteItem(queryResultRecord(name, data)); err != nil {
-			return err
-		}
-	}
-	return nil
+	return output.WriteList(format, records, output.PaginationMeta(nextURL))
 }
 
 func entityRecord(entity string, id any, data any) map[string]any {

@@ -240,6 +240,16 @@ func TestInvestigateFlagEmitsEvidence(t *testing.T) {
 	}
 }
 
+func TestInvestigateHonorsFormat(t *testing.T) {
+	out, errOut := runCLI(t, "investigate", "flag", "checkout-v2", "--format", "json")
+	var envelope struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil || errOut != "" || len(envelope.Data) < 3 || envelope.Data[0]["type"] != "entity" {
+		t.Fatalf("err=%v stderr=%s stdout=%s", err, errOut, out)
+	}
+}
+
 func TestMockSmokeChecklist(t *testing.T) {
 	cases := [][]string{
 		{"orgs", "list", "--limit", "1"},

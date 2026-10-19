@@ -46,11 +46,3 @@ func (r *resolvedContext) require(s scope) error {
 		return nil
 	}
 }
-
-func flagsPath(projectID int, segments ...string) string {
-	return api.ProjectPath(projectID, append([]string{"feature_flags"}, segments...)...)
-}
-
-func flagPath(projectID int, id string, segments ...string) string {
-	return flagsPath(projectID, append([]string{id}, segments...)...)
-}

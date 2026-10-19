@@ -5,6 +5,8 @@ import (
 	"net/url"
 
 	"github.com/spf13/cobra"
+
+	"github.com/shhac/agent-posthog/internal/featureflag"
 )
 
 func registerFlags(root *cobra.Command, globals *GlobalFlags) {
@@ -34,34 +36,44 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 	root.AddCommand(flags)
 }
 
+// flagProject is the current project's feature flags; a project must be
+// configured.
+func (r *resolvedContext) flagProject() (featureflag.Project, error) {
+	if err := requireProject(r); err != nil {
+		return featureflag.Project{}, err
+	}
+	return featureflag.Project{Client: r.Client, ID: r.ProjectID, OrgID: r.OrgID, Host: r.Host, Alias: r.ProjectAlias}, nil
+}
+
 // fetchFlagRecord reads a flag by ID or key for 'flags get'.
 func fetchFlagRecord(ctx context.Context, resolved *resolvedContext, ref string) (any, error) {
-	id, err := resolveFlagID(ctx, resolved, ref)
+	p, err := resolved.flagProject()
 	if err != nil {
 		return nil, err
 	}
-	raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, id), nil)
+	id, err := p.ResolveID(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := p.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	return decodeRaw(raw), nil
 }
 
-func flagSubresourceCommand(globals *GlobalFlags, use, short, suffix string) *cobra.Command {
+func flagSubresourceCommand(globals *GlobalFlags, use, short, subresource string) *cobra.Command {
 	return &cobra.Command{
 		Use:   use,
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withClient(cmd.Context(), globals, func(ctx context.Context, resolved *resolvedContext) error {
-				if err := requireProject(resolved); err != nil {
-					return err
-				}
-				id, err := resolveFlagID(ctx, resolved, args[0])
+			return withFlags(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+				id, err := p.ResolveID(ctx, args[0])
 				if err != nil {
 					return err
 				}
-				raw, err := resolved.Client.Get(ctx, flagPath(resolved.ProjectID, id, suffix), nil)
+				raw, err := p.Get(ctx, id, subresource)
 				if err != nil {
 					return err
 				}

@@ -168,3 +168,12 @@ func (p Project) Resolver(ctx context.Context) flagspec.FlagResolver {
 		return p.ResolveID(ctx, ref)
 	}
 }
+
+// Related lists a flag's related records by ID: dependent_flags or activity.
+func (p Project) Related(ctx context.Context, id, subresource string) ([]json.RawMessage, error) {
+	page, err := p.Client.List(ctx, p.flagPath(id, subresource), nil)
+	if err != nil {
+		return nil, err
+	}
+	return page.Results, nil
+}
