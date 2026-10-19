@@ -1,22 +1,23 @@
-package cli
+package flags
 
 import (
 	"context"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func diffCommand(globals *GlobalFlags) *cobra.Command {
+func diffCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var against string
 	cmd := &cobra.Command{
 		Use:   "diff <id-or-key> --against <project>",
 		Short: "Compare a flag with the same-key flag in another project (ID or alias)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
-				p, err := resolved.flagProject()
+			return shared.WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *shared.Resolved) error {
+				p, err := project(resolved)
 				if err != nil {
 					return err
 				}
@@ -24,7 +25,7 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				c, err := p.Compare(ctx, args[0], p.In(otherProject, AliasName(against)))
+				c, err := p.Compare(ctx, args[0], p.In(otherProject, shared.AliasName(against)))
 				if err != nil {
 					return err
 				}
@@ -38,7 +39,7 @@ func diffCommand(globals *GlobalFlags) *cobra.Command {
 				if len(c.Warnings) > 0 {
 					result.Set("warnings", c.Warnings)
 				}
-				return WriteExact(result, globals.Format)
+				return shared.WriteExact(result, globals.Format)
 			})
 		},
 	}

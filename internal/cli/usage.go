@@ -1,13 +1,17 @@
 package cli
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
 
-func registerUsageCommand(root *cobra.Command, globals *GlobalFlags) {
+	"github.com/shhac/agent-posthog/internal/cli/shared"
+)
+
+func registerUsageCommand(root *cobra.Command, globals *shared.GlobalFlags) {
 	root.AddCommand(&cobra.Command{
 		Use:   "usage",
 		Short: "Agent-friendly command reference",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WriteItem(map[string]any{
+			return shared.WriteItem(map[string]any{
 				"setup": []string{
 					"agent-posthog auth add prod --form --host https://us.posthog.com",
 					"agent-posthog auth check prod",

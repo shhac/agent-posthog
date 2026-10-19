@@ -152,7 +152,7 @@ removed; additional environments (e.g. staging, dev) each get their own distinct
 numeric ID. So for the common single-environment setup, `project_id ==
 environment_id` — which is why the URL number in `/project/12345/` doubles as the
 environment ID, and why the CLI defaults `environment_id` to `project_id` when it
-is unset (`resolve()` in `internal/cli/context.go`). Override `--env` only to
+is unset (`Resolve` in `internal/cli/shared/context.go`). Override `--env` only to
 target a non-default environment.
 
 The split in the table above is **intentional resource scoping, not legacy

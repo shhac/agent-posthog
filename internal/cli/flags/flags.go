@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -6,23 +6,24 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 )
 
-func registerFlags(root *cobra.Command, globals *GlobalFlags) {
+func Register(root *cobra.Command, globals *shared.GlobalFlags) {
 	flags := &cobra.Command{Use: "flags", Short: "Read, create, edit, and evaluate PostHog feature flags"}
 	var active, search string
-	list := ListCommand(globals, ListSpec{
-		Use: "list", Short: "List feature flags", Scope: ScopeProject, Collection: []string{"feature_flags"},
+	list := shared.ListCommand(globals, shared.ListSpec{
+		Use: "list", Short: "List feature flags", Scope: shared.ScopeProject, Collection: []string{"feature_flags"},
 		Query: func(q url.Values) {
-			SetIf(q, "active", active)
-			SetIf(q, "search", search)
+			shared.SetIf(q, "active", active)
+			shared.SetIf(q, "search", search)
 		},
 	})
 	list.Flags().StringVar(&active, "active", "", "Active filter: true or false")
 	list.Flags().StringVar(&search, "search", "", "Search feature flags")
 	flags.AddCommand(list)
-	flags.AddCommand(EntityGetCommand("get <id-or-key>...", "Get one or more feature flags by ID or key", globals, ScopeProject, fetchFlagRecord))
+	flags.AddCommand(shared.EntityGetCommand("get <id-or-key>...", "Get one or more feature flags by ID or key", globals, shared.ScopeProject, fetchFlagRecord))
 	flags.AddCommand(flagSubresourceCommand(globals, "dependent <id-or-key>", "List dependent feature flags", "dependent_flags"))
 	flags.AddCommand(flagSubresourceCommand(globals, "activity <id-or-key>", "Get feature flag activity", "activity"))
 	registerFlagWrites(flags, globals)
@@ -39,8 +40,8 @@ func registerFlags(root *cobra.Command, globals *GlobalFlags) {
 }
 
 // fetchFlagRecord reads a flag by ID or key for 'flags get'.
-func fetchFlagRecord(ctx context.Context, resolved *Resolved, ref string) (any, error) {
-	p, err := resolved.flagProject()
+func fetchFlagRecord(ctx context.Context, resolved *shared.Resolved, ref string) (any, error) {
+	p, err := project(resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -52,10 +53,10 @@ func fetchFlagRecord(ctx context.Context, resolved *Resolved, ref string) (any, 
 	if err != nil {
 		return nil, err
 	}
-	return DecodeRaw(raw), nil
+	return shared.DecodeRaw(raw), nil
 }
 
-func flagSubresourceCommand(globals *GlobalFlags, use, short, subresource string) *cobra.Command {
+func flagSubresourceCommand(globals *shared.GlobalFlags, use, short, subresource string) *cobra.Command {
 	return &cobra.Command{
 		Use:   use,
 		Short: short,
@@ -70,7 +71,7 @@ func flagSubresourceCommand(globals *GlobalFlags, use, short, subresource string
 				if err != nil {
 					return err
 				}
-				return WriteRawResource(raw, globals.Format, globals.Full)
+				return shared.WriteRawResource(raw, globals.Format, globals.Full)
 			})
 		},
 	}

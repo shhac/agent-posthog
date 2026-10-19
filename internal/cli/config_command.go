@@ -9,27 +9,28 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/config"
 )
 
 // registerConfig builds the config group on the family's ConfigCommand
 // (get/set/unset/list over configKeys) and adds the bespoke path, show, and
 // alias commands.
-func registerConfig(root *cobra.Command, globals *GlobalFlags) {
+func registerConfig(root *cobra.Command, globals *shared.GlobalFlags) {
 	cfg := libcli.ConfigCommand(&globals.Globals, configKeys())
 	cfg.Short = "Inspect and update non-secret agent-posthog config"
 	cfg.AddCommand(&cobra.Command{
 		Use:   "path",
 		Short: "Print config path",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WriteItem(map[string]any{"config_path": config.ConfigPath()}, globals.Format)
+			return shared.WriteItem(map[string]any{"config_path": config.ConfigPath()}, globals.Format)
 		},
 	})
 	cfg.AddCommand(&cobra.Command{
 		Use:   "show",
 		Short: "Show non-secret config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WriteItem(config.Read(), globals.Format)
+			return shared.WriteItem(config.Read(), globals.Format)
 		},
 	})
 	cfg.AddCommand(aliasCommand(globals))
@@ -87,7 +88,7 @@ func intKey(name, description string, current func(config.Defaults) *int) libcli
 
 // aliasCommand manages per-profile project aliases, so a separate staging
 // project can be addressed as --project staging.
-func aliasCommand(globals *GlobalFlags) *cobra.Command {
+func aliasCommand(globals *shared.GlobalFlags) *cobra.Command {
 	alias := &cobra.Command{
 		Use:   "alias",
 		Short: "Name projects within a profile (e.g. staging, prod) for --project",
@@ -108,7 +109,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if err := config.SetProjectAlias(profile, name, id); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return WriteItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, globals.Format)
+			return shared.WriteItem(map[string]any{"status": "set", "profile": profile, "alias": name, "project_id": id}, globals.Format)
 		}),
 	})
 	alias.AddCommand(&cobra.Command{
@@ -119,7 +120,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if err := config.UnsetProjectAlias(profile, args[0]); err != nil {
 				return agenterrors.Wrap(err, agenterrors.FixableByAgent)
 			}
-			return WriteItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, globals.Format)
+			return shared.WriteItem(map[string]any{"status": "unset", "profile": profile, "alias": args[0]}, globals.Format)
 		}),
 	})
 	alias.AddCommand(&cobra.Command{
@@ -131,7 +132,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 			if aliases == nil {
 				aliases = map[string]int{}
 			}
-			return WriteItem(map[string]any{"profile": profile, "aliases": aliases}, globals.Format)
+			return shared.WriteItem(map[string]any{"profile": profile, "aliases": aliases}, globals.Format)
 		}),
 	})
 	return alias
@@ -139,7 +140,7 @@ func aliasCommand(globals *GlobalFlags) *cobra.Command {
 
 // withAliasProfile runs an alias command against the selected profile, which
 // must exist, since aliases live inside it.
-func withAliasProfile(globals *GlobalFlags, run func(profile string, args []string) error) func(*cobra.Command, []string) error {
+func withAliasProfile(globals *shared.GlobalFlags, run func(profile string, args []string) error) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, args []string) error {
 		profile, err := aliasProfile(globals)
 		if err != nil {
@@ -149,9 +150,9 @@ func withAliasProfile(globals *GlobalFlags, run func(profile string, args []stri
 	}
 }
 
-func aliasProfile(globals *GlobalFlags) (string, error) {
+func aliasProfile(globals *shared.GlobalFlags) (string, error) {
 	cfg := config.Read()
-	profile := SelectedProfile(globals, cfg)
+	profile := shared.SelectedProfile(globals, cfg)
 	if profile == "" {
 		return "", agenterrors.New("project aliases belong to a profile, and none is selected", agenterrors.FixableByAgent).
 			WithHint("Pass -p <profile>, or create one with 'agent-posthog auth add <profile> --form'.")

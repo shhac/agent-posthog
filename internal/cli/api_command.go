@@ -11,9 +11,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shhac/agent-posthog/internal/api"
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 )
 
-func registerAPI(root *cobra.Command, globals *GlobalFlags) {
+func registerAPI(root *cobra.Command, globals *shared.GlobalFlags) {
 	apiCmd := &cobra.Command{
 		Use:   "api",
 		Short: "Constrained raw PostHog API escape hatch",
@@ -23,7 +24,7 @@ func registerAPI(root *cobra.Command, globals *GlobalFlags) {
 	root.AddCommand(apiCmd)
 }
 
-func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
+func rawAPICommand(globals *shared.GlobalFlags, method string) *cobra.Command {
 	var queryPairs []string
 	var bodyFile, inline string
 	var yes, printRequest bool
@@ -40,10 +41,10 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 				return agenterrors.New("raw POST outside query endpoints requires --yes", agenterrors.FixableByHuman).
 					WithHint("Many PostHog POST endpoints mutate state. Use a typed command when available.")
 			}
-			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
+			return shared.WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *shared.Resolved) error {
 				q := queryValuesFromPairs(queryPairs)
 				if printRequest {
-					return WriteItem(map[string]any{
+					return shared.WriteItem(map[string]any{
 						"method":  method,
 						"host":    resolved.Host,
 						"path":    path,
@@ -55,7 +56,7 @@ func rawAPICommand(globals *GlobalFlags, method string) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return WriteRaw(raw, globals.Format)
+				return shared.WriteRaw(raw, globals.Format)
 			})
 		},
 	}
@@ -78,7 +79,7 @@ func sendRaw(ctx context.Context, client *api.Client, method, path string, q url
 	}
 	body := map[string]any{}
 	if inline != "" || bodyFile != "" {
-		parsed, err := ReadJSONObject(inline, bodyFile, "json", "body")
+		parsed, err := shared.ReadJSONObject(inline, bodyFile, "json", "body")
 		if err != nil {
 			return nil, err
 		}

@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -7,11 +7,12 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func testCommand(globals *GlobalFlags) *cobra.Command {
+func testCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var f evalFlags
 	var casesFile, casesJSON string
 	var parallel int
@@ -28,7 +29,7 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 			if parallel < 1 || parallel > featureflag.MaxParallelCases {
 				return agenterrors.New(fmt.Sprintf("--parallel must be from 1 to %d", featureflag.MaxParallelCases), agenterrors.FixableByAgent)
 			}
-			data, err := ReadInput(casesJSON, casesFile, "cases-json", "cases")
+			data, err := shared.ReadInput(casesJSON, casesFile, "cases-json", "cases")
 			if err != nil {
 				return err
 			}
@@ -83,7 +84,7 @@ func writeCaseResults(e *featureflag.Evaluator, results []featureflag.CaseResult
 	if warnings := e.Warnings(); len(warnings) > 0 {
 		totals.Set("warnings", warnings)
 	}
-	if err := WriteExactList(lines, map[string]any{"@summary": totals}, format); err != nil {
+	if err := shared.WriteExactList(lines, map[string]any{"@summary": totals}, format); err != nil {
 		return err
 	}
 	if summary.Passed() {

@@ -1,15 +1,16 @@
-package cli
+package flags
 
 import (
 	"context"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func reachCommand(globals *GlobalFlags) *cobra.Command {
+func reachCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var condition int
 	cmd := &cobra.Command{
 		Use:   "reach <id-or-key>",
@@ -40,7 +41,7 @@ func reachCommand(globals *GlobalFlags) *cobra.Command {
 					lines = append(lines, line)
 				}
 				note := "matching counts users whose properties pass a condition's filters, before its rollout; conditions overlap, so do not sum them"
-				return WriteExactList(lines, map[string]any{"@note": note}, globals.Format)
+				return shared.WriteExactList(lines, map[string]any{"@note": note}, globals.Format)
 			})
 		},
 	}

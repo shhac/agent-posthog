@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/shhac/agent-posthog/internal/cli/auth"
 	"github.com/shhac/agent-posthog/internal/credential"
 )
 
@@ -50,9 +51,9 @@ func TestStoredProfileCredentialIsUsed(t *testing.T) {
 
 func TestAuthAddFormUsesThePrompt(t *testing.T) {
 	s, _ := authSession(t)
-	saved := PromptSecret
-	t.Cleanup(func() { PromptSecret = saved })
-	PromptSecret = func(context.Context, string, string, string) (string, error) { return "phx_from_dialog", nil }
+	saved := auth.PromptSecret
+	t.Cleanup(func() { auth.PromptSecret = saved })
+	auth.PromptSecret = func(context.Context, string, string, string) (string, error) { return "phx_from_dialog", nil }
 	if r := s.mustRun("auth", "add", "dialog", "--form"); r["status"] != "added" {
 		t.Fatalf("add --form = %v", r)
 	}

@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -7,10 +7,11 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 )
 
-func registerFlagWrites(flags *cobra.Command, globals *GlobalFlags) {
+func registerFlagWrites(flags *cobra.Command, globals *shared.GlobalFlags) {
 	for _, l := range []struct{ use, short, operation string }{
 		{"enable <id-or-key>", "Enable a feature flag", "enable"},
 		{"disable <id-or-key>", "Disable a feature flag", "disable"},
@@ -25,7 +26,7 @@ func registerFlagWrites(flags *cobra.Command, globals *GlobalFlags) {
 	flags.AddCommand(earlyExitCommand(globals))
 }
 
-func lifecycleCommand(globals *GlobalFlags, use, short, operation string) *cobra.Command {
+func lifecycleCommand(globals *shared.GlobalFlags, use, short, operation string) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   use,
@@ -41,7 +42,7 @@ func lifecycleCommand(globals *GlobalFlags, use, short, operation string) *cobra
 	return cmd
 }
 
-func restoreCommand(globals *GlobalFlags) *cobra.Command {
+func restoreCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   "restore <id>",
@@ -66,7 +67,7 @@ func restoreCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func earlyExitCommand(globals *GlobalFlags) *cobra.Command {
+func earlyExitCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   "early-exit <id-or-key> <on|off>",

@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 )
 
@@ -84,5 +85,5 @@ func writeFlag(ctx context.Context, pending *featureflag.Pending, opts writeOpti
 		}
 		r = applied
 	}
-	return WriteExact(r, format)
+	return shared.WriteExact(r, format)
 }

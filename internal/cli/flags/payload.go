@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -6,11 +6,12 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func registerFlagPayloadCommands(flags *cobra.Command, globals *GlobalFlags) {
+func registerFlagPayloadCommands(flags *cobra.Command, globals *shared.GlobalFlags) {
 	payload := &cobra.Command{Use: "payload", Short: "Read and edit flag payloads (the JSON a matching user receives)"}
 	payload.AddCommand(payloadGetCommand(globals))
 	payload.AddCommand(payloadSetCommand(globals))
@@ -18,7 +19,7 @@ func registerFlagPayloadCommands(flags *cobra.Command, globals *GlobalFlags) {
 	flags.AddCommand(payload)
 }
 
-func payloadGetCommand(globals *GlobalFlags) *cobra.Command {
+func payloadGetCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var variant string
 	cmd := &cobra.Command{
 		Use:   "get <id-or-key>",
@@ -41,7 +42,7 @@ func payloadGetCommand(globals *GlobalFlags) *cobra.Command {
 				if payload.Set {
 					result.Set("payload", payload.Value)
 				}
-				return WriteExact(result, globals.Format)
+				return shared.WriteExact(result, globals.Format)
 			})
 		},
 	}
@@ -49,7 +50,7 @@ func payloadGetCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func payloadSetCommand(globals *GlobalFlags) *cobra.Command {
+func payloadSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var variant, inline, file string
 	cmd := &cobra.Command{
@@ -57,7 +58,7 @@ func payloadSetCommand(globals *GlobalFlags) *cobra.Command {
 		Short: "Set the payload for a boolean/remote_config flag, or for one --variant",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := ReadInput(inline, file, "json", "file")
+			data, err := shared.ReadInput(inline, file, "json", "file")
 			if err != nil {
 				return err
 			}
@@ -77,7 +78,7 @@ func payloadSetCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func payloadUnsetCommand(globals *GlobalFlags) *cobra.Command {
+func payloadUnsetCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var variant string
 	cmd := &cobra.Command{

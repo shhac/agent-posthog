@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -6,17 +6,18 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func registerFlagVariantCommands(flags *cobra.Command, globals *GlobalFlags) {
+func registerFlagVariantCommands(flags *cobra.Command, globals *shared.GlobalFlags) {
 	variants := &cobra.Command{Use: "variants", Short: "Edit a multivariate flag's variants"}
 	variants.AddCommand(variantsSetCommand(globals))
 	flags.AddCommand(variants)
 }
 
-func variantsSetCommand(globals *GlobalFlags) *cobra.Command {
+func variantsSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   "set <id-or-key> <key=percent>...",

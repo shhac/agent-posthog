@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
@@ -30,7 +31,7 @@ func (f *evalFlags) addContext(cmd *cobra.Command) {
 	cmd.Flags().StringArrayVar(&f.contexts, "evaluation-context", nil, "Evaluation context the request carries, as an SDK would; repeat (public engine)")
 }
 
-func evaluateCommand(globals *GlobalFlags) *cobra.Command {
+func evaluateCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var f evalFlags
 	var distinctID, at string
 	cmd := &cobra.Command{
@@ -59,7 +60,7 @@ func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 				if warnings := e.Warnings(); len(warnings) > 0 {
 					record.Set("warnings", warnings)
 				}
-				return WriteExact(record, globals.Format)
+				return shared.WriteExact(record, globals.Format)
 			})
 		},
 	}

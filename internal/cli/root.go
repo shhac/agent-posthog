@@ -7,13 +7,19 @@ import (
 	agentmcp "github.com/shhac/lib-agent-mcp"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/auth"
+	"github.com/shhac/agent-posthog/internal/cli/flags"
+	"github.com/shhac/agent-posthog/internal/cli/investigate"
+	"github.com/shhac/agent-posthog/internal/cli/query"
+	"github.com/shhac/agent-posthog/internal/cli/resources"
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/config"
 	"github.com/shhac/agent-posthog/internal/credential"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
 func newRootCmd(version string) *cobra.Command {
-	globals := &GlobalFlags{}
+	globals := &shared.GlobalFlags{}
 
 	var root *cobra.Command
 	root = libcli.NewRoot(libcli.Options{
@@ -44,16 +50,11 @@ func newRootCmd(version string) *cobra.Command {
 	registerUsageCommand(root, globals)
 	registerCompletion(root)
 	registerConfig(root, globals)
-	registerAuth(root, globals)
-	registerOrgs(root, globals)
-	registerProjects(root, globals)
-	registerEnvironments(root, globals)
-	registerSchema(root, globals)
-	registerQuery(root, globals)
-	registerPersons(root, globals)
-	registerFlags(root, globals)
-	registerGenericDomains(root, globals)
-	registerInvestigate(root, globals)
+	auth.Register(root, globals)
+	resources.Register(root, globals)
+	query.Register(root, globals)
+	flags.Register(root, globals)
+	investigate.Register(root, globals)
 	registerAPI(root, globals)
 
 	installUnknownSubcommandHandlers(root)
@@ -75,7 +76,7 @@ func newRootCmd(version string) *cobra.Command {
 	mcpCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		// Tool calls run as subprocesses that inherit this, so writes they make
 		// are subject to 'config set mcp_writes'.
-		if err := os.Setenv(ViaMCPEnv, "1"); err != nil {
+		if err := os.Setenv(shared.ViaMCPEnv, "1"); err != nil {
 			return err
 		}
 		return serve(cmd, args)
@@ -112,13 +113,13 @@ func Run(version string) {
 	libcli.Run(newRootCmd(version))
 }
 
-func applyConfiguredDefaults(root *cobra.Command, globals *GlobalFlags) {
+func applyConfiguredDefaults(root *cobra.Command, globals *shared.GlobalFlags) {
 	cfg := config.Read()
-	flags := root.PersistentFlags()
-	if cfg.Defaults.TimeoutMS != nil && !flags.Changed("timeout") {
+	pf := root.PersistentFlags()
+	if cfg.Defaults.TimeoutMS != nil && !pf.Changed("timeout") {
 		globals.TimeoutMS = *cfg.Defaults.TimeoutMS
 	}
-	if cfg.Defaults.MaxRetries != nil && !flags.Changed("max-retries") {
+	if cfg.Defaults.MaxRetries != nil && !pf.Changed("max-retries") {
 		globals.MaxRetries = *cfg.Defaults.MaxRetries
 	}
 	output.SetExpose(globals.Expose)

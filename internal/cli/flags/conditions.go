@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -7,12 +7,13 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
-func registerFlagConditionCommands(flags *cobra.Command, globals *GlobalFlags) {
+func registerFlagConditionCommands(flags *cobra.Command, globals *shared.GlobalFlags) {
 	conditions := &cobra.Command{
 		Use:   "conditions",
 		Short: "List and edit a flag's release conditions (tried top to bottom; the first match wins)",
@@ -25,7 +26,7 @@ func registerFlagConditionCommands(flags *cobra.Command, globals *GlobalFlags) {
 	flags.AddCommand(conditions)
 }
 
-func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
+func conditionsListCommand(globals *shared.GlobalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list <id-or-key>",
 		Short: "List conditions in evaluation order, with the flag version to pass as --if-version",
@@ -42,14 +43,14 @@ func conditionsListCommand(globals *GlobalFlags) *cobra.Command {
 					return err
 				}
 				if format != output.FormatNDJSON {
-					return WriteExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
+					return shared.WriteExact(map[string]any{"key": flag["key"], "version": flag["version"], "early_exit": flagspec.Object(flag["filters"])["early_exit"], "conditions": conditions}, globals.Format)
 				}
 				for i, condition := range conditions {
 					line := flagspec.NewOrdered()
 					line.Set("index", i)
 					line.Set("version", flag["version"])
 					line.Set("condition", condition)
-					if err := WriteExactLine(line); err != nil {
+					if err := shared.WriteExactLine(line); err != nil {
 						return err
 					}
 				}
@@ -95,7 +96,7 @@ func addConditionFlags(cmd *cobra.Command, c *conditionFlags) {
 	cmd.Flags().StringVar(&c.variant, "variant", "", "Serve this variant to matching users (multivariate)")
 }
 
-func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
+func conditionsAddCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var c conditionFlags
 	var at int
@@ -129,7 +130,7 @@ func conditionsAddCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
+func conditionsSetCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var c conditionFlags
 	cmd := &cobra.Command{
@@ -179,7 +180,7 @@ func conditionsSetCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
+func conditionsRemoveCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   "remove <id-or-key> <index>",
@@ -202,7 +203,7 @@ func conditionsRemoveCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func conditionsMoveCommand(globals *GlobalFlags) *cobra.Command {
+func conditionsMoveCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	cmd := &cobra.Command{
 		Use:   "move <id-or-key> <from> <to>",

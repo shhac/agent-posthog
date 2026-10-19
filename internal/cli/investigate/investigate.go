@@ -1,4 +1,4 @@
-package cli
+package investigate
 
 import (
 	"context"
@@ -7,12 +7,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/flags"
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/hogql"
 	"github.com/shhac/agent-posthog/internal/output"
 )
 
-func registerInvestigate(root *cobra.Command, globals *GlobalFlags) {
+func Register(root *cobra.Command, globals *shared.GlobalFlags) {
 	investigate := &cobra.Command{
 		Use:   "investigate",
 		Short: "Opinionated PostHog investigation workflows",
@@ -23,21 +25,21 @@ func registerInvestigate(root *cobra.Command, globals *GlobalFlags) {
 	root.AddCommand(investigate)
 }
 
-func investigateUser(globals *GlobalFlags) *cobra.Command {
+func investigateUser(globals *shared.GlobalFlags) *cobra.Command {
 	var email, distinctID string
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "user",
 		Short: "Resolve a user and its recent context",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
-				path, err := resolved.Path(ScopeEnvironment, "persons")
+			return shared.WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *shared.Resolved) error {
+				path, err := resolved.Path(shared.ScopeEnvironment, "persons")
 				if err != nil {
 					return err
 				}
-				q := BaseValues(limit)
-				SetIf(q, "email", email)
-				SetIf(q, "distinct_id", distinctID)
+				q := shared.BaseValues(limit)
+				shared.SetIf(q, "email", email)
+				shared.SetIf(q, "distinct_id", distinctID)
 				page, err := resolved.Client.List(ctx, path, q)
 				if err != nil {
 					return err
@@ -66,15 +68,15 @@ func investigateUser(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func investigateEvent(globals *GlobalFlags) *cobra.Command {
+func investigateEvent(globals *shared.GlobalFlags) *cobra.Command {
 	var event string
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "event",
 		Short: "Sample recent events through HogQL",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
-				path, err := resolved.Path(ScopeEnvironment, "query")
+			return shared.WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *shared.Resolved) error {
+				path, err := resolved.Path(shared.ScopeEnvironment, "query")
 				if err != nil {
 					return err
 				}
@@ -98,13 +100,13 @@ func investigateEvent(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func investigateFlag(globals *GlobalFlags) *cobra.Command {
+func investigateFlag(globals *shared.GlobalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "flag <id-or-key>",
 		Short: "Inspect a feature flag and related evidence",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
+			return flags.WithProject(cmd, globals, func(ctx context.Context, p featureflag.Project) error {
 				id, err := p.ResolveID(ctx, args[0])
 				if err != nil {
 					return err

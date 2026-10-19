@@ -1,4 +1,4 @@
-package cli
+package flags
 
 import (
 	"context"
@@ -9,17 +9,18 @@ import (
 	agenterrors "github.com/shhac/lib-agent-output"
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 	"github.com/shhac/agent-posthog/internal/flagspec"
 )
 
-func registerFlagSpecCommands(flags *cobra.Command, globals *GlobalFlags) {
+func registerFlagSpecCommands(flags *cobra.Command, globals *shared.GlobalFlags) {
 	flags.AddCommand(exportCommand(globals))
 	flags.AddCommand(createCommand(globals))
 	flags.AddCommand(applyCommand(globals))
 }
 
-func exportCommand(globals *GlobalFlags) *cobra.Command {
+func exportCommand(globals *shared.GlobalFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "export <id-or-key>",
 		Short: "Export a flag as a spec that 'flags apply' accepts (json, or --format yaml)",
@@ -34,13 +35,13 @@ func exportCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return agenterrors.Wrap(err, agenterrors.FixableByHuman)
 				}
-				return WriteExact(spec, globals.Format)
+				return shared.WriteExact(spec, globals.Format)
 			})
 		},
 	}
 }
 
-func applyCommand(globals *GlobalFlags) *cobra.Command {
+func applyCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var specJSON, file string
 	cmd := &cobra.Command{
@@ -51,7 +52,7 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 			"Start from 'flags export <key>' to edit an existing flag.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := ReadInput(specJSON, file, "spec-json", "file")
+			data, err := shared.ReadInput(specJSON, file, "spec-json", "file")
 			if err != nil {
 				return err
 			}
@@ -74,7 +75,7 @@ func applyCommand(globals *GlobalFlags) *cobra.Command {
 	return cmd
 }
 
-func createCommand(globals *GlobalFlags) *cobra.Command {
+func createCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var flagType, name, payloadJSON string
 	var active bool

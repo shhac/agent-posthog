@@ -1,14 +1,15 @@
-package cli
+package flags
 
 import (
 	"context"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shhac/agent-posthog/internal/cli/shared"
 	"github.com/shhac/agent-posthog/internal/featureflag"
 )
 
-func applyPlanCommand(globals *GlobalFlags) *cobra.Command {
+func applyPlanCommand(globals *shared.GlobalFlags) *cobra.Command {
 	var opts writeOptions
 	var file string
 	cmd := &cobra.Command{
@@ -23,8 +24,8 @@ func applyPlanCommand(globals *GlobalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *Resolved) error {
-				p, err := resolved.flagProject()
+			return shared.WithClient(cmd.Context(), globals, func(ctx context.Context, resolved *shared.Resolved) error {
+				p, err := project(resolved)
 				if err != nil {
 					return err
 				}

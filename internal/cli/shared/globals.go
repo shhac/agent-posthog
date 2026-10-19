@@ -1,4 +1,4 @@
-package cli
+package shared
 
 import (
 	libcli "github.com/shhac/lib-agent-cli/cli"
