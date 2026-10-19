@@ -96,7 +96,8 @@ func registerAuthUpdate(parent *cobra.Command, globals *shared.GlobalFlags) {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			alias := args[0]
-			if !clearOrg && !clearProject && !clearEnv && !setDefault && !slices.ContainsFunc([]string{"host", "org", "project", "env"}, cmd.Flags().Changed) {
+			requested := clearOrg || clearProject || clearEnv || setDefault || slices.ContainsFunc([]string{"host", "org", "project", "env"}, cmd.Flags().Changed)
+			if !requested {
 				return agenterrors.New("no profile updates requested", agenterrors.FixableByAgent).
 					WithHint("Use --host, --org, --project, --env, --clear-org, --clear-project, --clear-env, or --default.")
 			}
