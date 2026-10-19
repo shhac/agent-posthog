@@ -210,6 +210,10 @@ NDJSON should use data rows plus `@` meta rows:
 {"@query":{"columns":["event","count"],"elapsed_ms":124}}
 ```
 
+Under `--format json|yaml` a list is one document with the same meta keys, as
+lib-agent-output's `WriteList` renders it for the whole family:
+`{"data":[…],"@pagination":{"has_more":true,"next_url":"…"}}`.
+
 Errors are JSON on stderr:
 
 ```json

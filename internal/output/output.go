@@ -115,6 +115,22 @@ func WriteRawJSON(raw json.RawMessage, format Format, prune bool) {
 	Print(data, format, prune)
 }
 
+// WriteList renders a list in the family's two shapes (NDJSON records then
+// @-prefixed meta lines, or one {"data":[...], <meta>} document), cleaning
+// each record.
+func WriteList(format Format, items []any, meta map[string]any) error {
+	return out.WriteList(Stdout(), format, items, meta, Clean)
+}
+
+// PaginationMeta is the meta map for a page that has more after it, keyed
+// @pagination in every format.
+func PaginationMeta(nextURL string) map[string]any {
+	if nextURL == "" {
+		return nil
+	}
+	return map[string]any{MetaKeyPagination: Pagination{HasMore: true, NextURL: nextURL}}
+}
+
 // Pagination is PostHog-shaped (a next URL, not an opaque cursor), so it stays
 // local rather than using out.Pagination.
 type Pagination struct {

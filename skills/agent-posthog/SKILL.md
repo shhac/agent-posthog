@@ -109,6 +109,10 @@ id. Item-level misses stay on stdout and exit 0; a command-level failure (auth,
 permissions, network, or a missing org/project/environment, checked before any
 request) goes to stderr with exit 1 and empty stdout.
 
+Lists print one NDJSON line per record, then `{"@pagination":{"has_more":true,"next_url":…}}`
+when more remain (`--all` follows it); `--format json|yaml` gives one
+`{"data":[…],"@pagination":{…}}` document.
+
 Lists, queries, and investigation commands default to NDJSON; every command
 (including `auth`, `config`, and `usage`) honors `--format`. Read output prunes
 nulls and redacts secrets (tokens show as `[REDACTED]` with an `@redacted`

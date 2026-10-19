@@ -15,7 +15,9 @@ and no direct access to PostHog secrets, and for setting up feature flags
   project's default environment shares the project's ID, so most setups only set
   `--project`. Override `--env` only to target a non-default environment.
 - LLM-shaped output: lists and queries default to NDJSON, and every command
-  honors `--format json|yaml|jsonl`. Entity gets (`get <id>...`) print one
+  honors `--format json|yaml|jsonl`. A list prints one line per record, then
+  `{"@pagination":{"has_more":true,"next_url":…}}` when more remain;
+  `--format json|yaml` gives `{"data":[…],"@pagination":{…}}`. Entity gets (`get <id>...`) print one
   NDJSON line per id, in order; `--format json|yaml` wraps them in one
   `{"data":[…],"@unresolved":[…]}` envelope. An id that is not found becomes an
   `{"@unresolved":{...}}` line (exit 0); a command-level failure (auth,

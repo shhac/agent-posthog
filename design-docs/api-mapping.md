@@ -76,7 +76,8 @@ CLI behavior:
 - default to one page unless `--all` is set
 - support `--limit` and `--page-limit`
 - stream each result as an NDJSON row
-- emit `{"@pagination":{...}}` with `next_url` when more data exists
+- emit `{"@pagination":{...}}` with `next_url` when more data exists (the same
+  key sits beside `data` under `--format json|yaml`)
 - if `--all`, follow `next` URLs exactly
 
 ## Resource mapping

@@ -40,43 +40,15 @@ func writeListResource(items []json.RawMessage, nextURL string, flagFormat strin
 	if !full {
 		items = compactRawItems(items)
 	}
-	if format != output.FormatNDJSON {
-		output.Print(listPayload(items, nextURL), format, true)
-		return nil
-	}
-	return writeListNDJSON(items, nextURL)
-}
-
-func listPayload(items []json.RawMessage, nextURL string) map[string]any {
-	var decoded []any
-	for _, raw := range items {
-		var item any
-		if err := json.Unmarshal(raw, &item); err == nil {
-			decoded = append(decoded, item)
-		}
-	}
-	payload := map[string]any{"results": decoded}
-	if nextURL != "" {
-		payload["next"] = nextURL
-	}
-	return payload
-}
-
-func writeListNDJSON(items []json.RawMessage, nextURL string) error {
-	writer := output.NewNDJSONWriter(output.Stdout())
+	decoded := make([]any, 0, len(items))
 	for _, raw := range items {
 		var item any
 		if err := json.Unmarshal(raw, &item); err != nil {
 			return err
 		}
-		if err := writer.WriteItem(item); err != nil {
-			return err
-		}
+		decoded = append(decoded, item)
 	}
-	if nextURL != "" {
-		return writer.WritePagination(&output.Pagination{HasMore: true, NextURL: nextURL})
-	}
-	return nil
+	return output.WriteList(format, decoded, output.PaginationMeta(nextURL))
 }
 
 func compactRawItems(items []json.RawMessage) []json.RawMessage {

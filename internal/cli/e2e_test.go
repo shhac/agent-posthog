@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,23 @@ func TestPaginationMetaFromMock(t *testing.T) {
 		t.Fatalf("stderr = %s", errOut)
 	}
 	if !strings.Contains(out, `"id":"org_1"`) || !strings.Contains(out, `"@pagination"`) || !strings.Contains(out, `"has_more":true`) {
+		t.Fatalf("stdout = %s", out)
+	}
+}
+
+func TestListEnvelopeMatchesTheFamily(t *testing.T) {
+	out, errOut := runCLI(t, "orgs", "list", "--limit", "1", "--format", "json")
+	if errOut != "" {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	var envelope struct {
+		Data       []map[string]any `json:"data"`
+		Pagination map[string]any   `json:"@pagination"`
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatalf("stdout not JSON: %v\n%s", err, out)
+	}
+	if len(envelope.Data) != 1 || envelope.Data[0]["id"] != "org_1" || envelope.Pagination["has_more"] != true || envelope.Pagination["next_url"] == nil {
 		t.Fatalf("stdout = %s", out)
 	}
 }
