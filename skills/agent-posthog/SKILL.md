@@ -235,7 +235,9 @@ and `payload` must match exactly:
 ```
 
 It prints one line per case (`pass`, `fail` with mismatches, or `error`), then
-`@summary`, and exits 1 unless every case passes. An `error` means PostHog could
+`@summary`, and exits 1 unless every case passes. `--parallel N` (up to 8)
+evaluates N cases at once; output stays in case order, and `--timeout` bounds
+the whole suite. An `error` means PostHog could
 not evaluate the flag; it is never a false result. Tests evaluate the **saved**
 flag: a disabled flag is false for everyone. A change takes a few seconds to
 reach `/flags`, so a suite run right after a write may report "did not return

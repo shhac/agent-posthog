@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -110,6 +111,7 @@ func mismatches(expect map[string]any, r evalResult) []any {
 func testCommand(globals *GlobalFlags) *cobra.Command {
 	var f evalFlags
 	var casesFile, casesJSON string
+	var parallel int
 	cmd := &cobra.Command{
 		Use:   "test <id-or-key>",
 		Short: "Run scenario cases against a saved flag; exits 1 if any case fails or cannot be evaluated",
@@ -120,6 +122,9 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 			"agent-posthog-test:<name> so percentage rollouts are stable. Prints one line per case, then @summary.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if parallel < 1 || parallel > maxParallelCases {
+				return agenterrors.New(fmt.Sprintf("--parallel must be from 1 to %d", maxParallelCases), agenterrors.FixableByAgent)
+			}
 			data, err := readInput(casesJSON, casesFile, "cases-json", "cases")
 			if err != nil {
 				return err
@@ -145,20 +150,44 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return runCases(ctx, e, cases)
+				return runCases(ctx, e, cases, parallel)
 			})
 		},
 	}
 	cmd.Flags().StringVar(&casesFile, "cases", "", "Cases file (JSON or YAML)")
+	cmd.Flags().IntVar(&parallel, "parallel", 1, fmt.Sprintf("Cases evaluated at once (1-%d); results print in case order", maxParallelCases))
 	cmd.Flags().StringVar(&casesJSON, "cases-json", "", "Cases as inline JSON")
 	f.add(cmd)
 	return cmd
 }
 
-func runCases(ctx context.Context, e *evaluator, cases []testCase) error {
+// maxParallelCases bounds --parallel so a suite cannot flood /flags.
+const maxParallelCases = 8
+
+// evaluateCases runs up to parallel evaluations at once and returns results in
+// case order, so output is the same whatever the parallelism.
+func evaluateCases(ctx context.Context, e *evaluator, cases []testCase, parallel int) []evalResult {
+	results := make([]evalResult, len(cases))
+	slots := make(chan struct{}, parallel)
+	var wg sync.WaitGroup
+	for i, c := range cases {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			results[i] = e.evaluate(ctx, c.In)
+		}()
+	}
+	wg.Wait()
+	return results
+}
+
+func runCases(ctx context.Context, e *evaluator, cases []testCase, parallel int) error {
 	counts := map[string]int{"pass": 0, "fail": 0, "error": 0}
-	for _, c := range cases {
-		r := e.evaluate(ctx, c.In)
+	results := evaluateCases(ctx, e, cases, parallel)
+	for i, c := range cases {
+		r := results[i]
 		line := flagspec.NewOrdered()
 		line.Set("case", c.Name)
 		diff := mismatches(c.Expect, r)

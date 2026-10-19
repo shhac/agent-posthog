@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -122,9 +123,27 @@ func TestScenarioSuitesRunOneAtATimeWithinTheTimeout(t *testing.T) {
 		t.Fatalf("cases overlapped: %d requests in flight at once", peak)
 	}
 
+	mu.Lock()
+	peak = 0
+	mu.Unlock()
+	slowSix := `[{"name":"1","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"2","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"3","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"4","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"5","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"6","distinct_id":"mock-slow","expect":{"enabled":true}}]`
+	out, _, err := s.run("flags", "test", "plain", "--parallel", "3", "--cases-json", slowSix)
+	if err != nil || peak != 3 {
+		t.Fatalf("--parallel 3 should run exactly 3 at once (peak %d): %v\n%s", peak, err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for i, line := range lines[:6] {
+		if !strings.HasPrefix(line, fmt.Sprintf(`{"case":"%d"`, i+1)) {
+			t.Fatalf("results must print in case order: %s", out)
+		}
+	}
+	if errOut := s.mustFail("flags", "test", "plain", "--parallel", "9", "--cases-json", slowSix); !strings.Contains(errOut, "--parallel must be from 1 to 8") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+
 	slow := `[{"name":"s1","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"s2","distinct_id":"mock-slow","expect":{"enabled":true}},{"name":"s3","distinct_id":"mock-slow","expect":{"enabled":true}}]`
 	start := time.Now()
-	out, _, err := s.run("--timeout", "200", "flags", "test", "plain", "--cases-json", slow)
+	out, _, err = s.run("--timeout", "200", "flags", "test", "plain", "--cases-json", slow)
 	if elapsed := time.Since(start); elapsed > 650*time.Millisecond {
 		t.Fatalf("suite took %v; --timeout should bound the whole suite, not each 300ms case", elapsed)
 	}
