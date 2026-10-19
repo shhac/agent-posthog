@@ -20,7 +20,7 @@ type testCase struct {
 	Expect map[string]any
 }
 
-var caseFields = map[string]bool{"name": true, "distinct_id": true, "props": true, "groups": true, "group_props": true, "expect": true}
+var caseFields = map[string]bool{"name": true, "distinct_id": true, "props": true, "groups": true, "group_props": true, "at": true, "expect": true}
 
 var expectFields = map[string]bool{"enabled": true, "variant": true, "payload": true, "condition_index": true, "reason": true}
 
@@ -66,7 +66,12 @@ func parseCases(data []byte) ([]testCase, error) {
 		if distinctID == "" {
 			distinctID = "agent-posthog-test:" + name
 		}
-		in := evalContext{DistinctID: distinctID, PersonProps: asObject(raw["props"]), Groups: asObject(raw["groups"]), GroupProperties: asObject(raw["group_props"])}
+		rawAt, _ := raw["at"].(string)
+		at, err := normalizeAt(rawAt)
+		if err != nil {
+			return nil, fmt.Errorf("case %q: %w", name, err)
+		}
+		in := evalContext{DistinctID: distinctID, PersonProps: asObject(raw["props"]), Groups: asObject(raw["groups"]), GroupProperties: asObject(raw["group_props"]), At: at}
 		cases = append(cases, testCase{Name: name, In: in, Expect: expect})
 	}
 	return cases, nil
@@ -101,7 +106,8 @@ func testCommand(globals *GlobalFlags) *cobra.Command {
 		Use:   "test <id-or-key>",
 		Short: "Run scenario cases against a saved flag; exits 1 if any case fails or cannot be evaluated",
 		Long: "Cases (--cases file or --cases-json; JSON or YAML) are a list of " +
-			`{name, distinct_id?, props?, groups?, group_props?, expect: {enabled?, variant?, payload?, condition_index?, reason?}}. ` +
+			`{name, distinct_id?, props?, groups?, group_props?, at?, expect: {enabled?, variant?, payload?, condition_index?, reason?}}. ` +
+			"at (an ISO 8601 time) replays the case as of then and needs --engine diagnostic. " +
 			"Only the expected fields are checked; payload must match exactly. distinct_id defaults to " +
 			"agent-posthog-test:<name> so percentage rollouts are stable. Prints one line per case, then @summary.",
 		Args: cobra.ExactArgs(1),

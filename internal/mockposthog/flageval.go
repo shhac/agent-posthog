@@ -79,9 +79,13 @@ func testEvaluation(w http.ResponseWriter, r *http.Request, flag map[string]any)
 	if result.variant != "" {
 		value = result.variant
 	}
+	description := result.reason
+	if at, ok := body["timestamp"].(string); ok {
+		description += " as of " + at
+	}
 	write(w, map[string]any{
 		"flag_key": flag["key"], "result": value, "reason": result.reason,
-		"reason_description": result.reason, "condition_index": result.conditionIndex,
+		"reason_description": description, "condition_index": result.conditionIndex,
 		"payload": result.payload, "evaluation_distinct_id": distinctID, "conditions": []any{},
 	})
 }

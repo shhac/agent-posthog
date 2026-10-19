@@ -80,3 +80,23 @@ func TestInterpretFlagsNeverTurnsFailureIntoFalse(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateAsOfAPastTime(t *testing.T) {
+	s := flagSession(t)
+	s.mustRun("flags", "apply", "--yes", "--spec-json", `{"key":"pro-gate","active":true,"conditions":[{"where":["plan = pro"]}]}`)
+	r := s.mustRun("flags", "evaluate", "pro-gate", "--distinct-id", "user_123", "--engine", "diagnostic", "--at", "2026-04-29T15:30:00")
+	if r["at"] != "2026-04-29T15:30:00Z" || r["reason_description"] != "condition_match as of 2026-04-29T15:30:00Z" {
+		t.Fatalf("evaluate = %v", r)
+	}
+	if errOut := s.mustFail("flags", "evaluate", "pro-gate", "--distinct-id", "user_123", "--at", "2026-04-29"); !strings.Contains(errOut, "--engine diagnostic") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	if errOut := s.mustFail("flags", "evaluate", "pro-gate", "--distinct-id", "user_123", "--engine", "diagnostic", "--at", "last week"); !strings.Contains(errOut, "ISO 8601") {
+		t.Fatalf("stderr = %s", errOut)
+	}
+	out, errOut, err := s.run("flags", "test", "pro-gate", "--engine", "diagnostic", "--cases-json",
+		`[{"name":"before launch","distinct_id":"user_123","at":"2026-01-01","expect":{"enabled":true}}]`)
+	if err != nil || !strings.Contains(out, `"at":"2026-01-01T00:00:00Z"`) || !strings.Contains(out, `"pass":1`) {
+		t.Fatalf("err=%v\n%s\n%s", err, out, errOut)
+	}
+}

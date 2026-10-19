@@ -201,6 +201,7 @@ edited.
 ```bash
 agent-posthog flags evaluate beta-gate --distinct-id u_1 --props-json '{"app_env":"staging"}'
 agent-posthog flags evaluate beta-gate --distinct-id user_123 --engine diagnostic
+agent-posthog flags evaluate beta-gate --distinct-id user_123 --engine diagnostic --at 2026-04-29T15:30:00Z
 agent-posthog flags test beta-gate --cases cases.yaml        # or --cases-json '[...]'
 agent-posthog flags reach beta-gate                          # users matching each condition
 ```
@@ -209,7 +210,8 @@ agent-posthog flags reach beta-gate                          # users matching ea
 `condition`. The default `--engine public` calls PostHog's `/flags` as an SDK
 would, using the project token it reads from the project (never printed) and
 any `--props-json` overrides on top of stored properties. `--engine diagnostic`
-uses stored properties only. Cloud `/flags` hosts are derived (`us.posthog.com`
+uses stored properties only, and with `--at` (or a case's `at`) replays the
+evaluation with the flag and person as they were at that time. Cloud `/flags` hosts are derived (`us.posthog.com`
 → `us.i.posthog.com`); set `--flags-host` or `AGENT_POSTHOG_FLAGS_HOST` for
 self-hosted proxies.
 

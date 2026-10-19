@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -34,6 +35,8 @@ type evalContext struct {
 	PersonProps     map[string]any
 	Groups          map[string]any
 	GroupProperties map[string]any
+	// At replays the evaluation as of a past moment (diagnostic engine only).
+	At string
 }
 
 // evalResult is one evaluation. Status "error" means PostHog could not
@@ -45,6 +48,7 @@ type evalResult struct {
 	Payload        any
 	PayloadSet     bool
 	Reason         any
+	Description    any
 	ConditionIndex any
 	Error          string
 }
@@ -118,6 +122,9 @@ func (e *evaluator) diagnostic(ctx context.Context, in evalContext) evalResult {
 	if len(in.Groups) > 0 {
 		body["groups"] = in.Groups
 	}
+	if in.At != "" {
+		body["timestamp"] = in.At
+	}
 	raw, err := e.resolved.Client.Post(ctx, flagPath(e.resolved.ProjectID, fmt.Sprint(e.flag["id"]))+"test_evaluation/", nil, body)
 	if err != nil {
 		return evalResult{Status: "error", Error: err.Error()}
@@ -126,7 +133,7 @@ func (e *evaluator) diagnostic(ctx context.Context, in evalContext) evalResult {
 	if err != nil {
 		return evalResult{Status: "error", Error: "unexpected test_evaluation response"}
 	}
-	r := evalResult{Status: "ok", Reason: resp["reason"], ConditionIndex: resp["condition_index"]}
+	r := evalResult{Status: "ok", Reason: resp["reason"], Description: resp["reason_description"], ConditionIndex: resp["condition_index"]}
 	switch value := resp["result"].(type) {
 	case bool:
 		r.Enabled = value
@@ -181,6 +188,7 @@ func interpretFlags(resp, flag map[string]any) evalResult {
 		Enabled:        detail["enabled"] == true,
 		Variant:        detail["variant"],
 		Reason:         reason["code"],
+		Description:    reason["description"],
 		ConditionIndex: reason["condition_index"],
 	}
 	if r.Enabled {
@@ -205,6 +213,9 @@ func (e *evaluator) record(in evalContext, r evalResult) *flagspec.Ordered {
 	out.Set("engine", e.engine)
 	out.Set("key", e.flag["key"])
 	out.Set("distinct_id", in.DistinctID)
+	if in.At != "" {
+		out.Set("at", in.At)
+	}
 	out.Set("status", r.Status)
 	if r.Status == "error" {
 		out.Set("error", r.Error)
@@ -216,6 +227,9 @@ func (e *evaluator) record(in evalContext, r evalResult) *flagspec.Ordered {
 		out.Set("payload", r.Payload)
 	}
 	out.Set("reason", r.Reason)
+	if r.Description != nil && r.Description != r.Reason {
+		out.Set("reason_description", r.Description)
+	}
 	out.Set("condition_index", r.ConditionIndex)
 	if index, ok := r.ConditionIndex.(json.Number); ok {
 		groups := asList(asObject(e.flag["filters"])["groups"])
@@ -254,13 +268,13 @@ func (f *evalFlags) addContext(cmd *cobra.Command) {
 
 func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 	var f evalFlags
-	var distinctID string
+	var distinctID, at string
 	cmd := &cobra.Command{
 		Use:   "evaluate <id-or-key>",
 		Short: "Evaluate a saved flag for one user: enabled, variant, payload, and which condition matched",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			in, err := f.context(distinctID)
+			in, err := f.context(distinctID, at)
 			if err != nil {
 				return err
 			}
@@ -293,16 +307,21 @@ func evaluateCommand(globals *GlobalFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&distinctID, "distinct-id", "", "Distinct ID to evaluate for (required; it also decides percentage rollouts)")
+	cmd.Flags().StringVar(&at, "at", "", "Evaluate as of this past time, with the flag and person as they were then (--engine diagnostic)")
 	f.add(cmd)
 	f.addContext(cmd)
 	return cmd
 }
 
-func (f *evalFlags) context(distinctID string) (evalContext, error) {
+func (f *evalFlags) context(distinctID, at string) (evalContext, error) {
 	if distinctID == "" {
 		return evalContext{}, agenterrors.New("--distinct-id is required; it decides percentage rollouts", agenterrors.FixableByAgent)
 	}
-	in := evalContext{DistinctID: distinctID}
+	at, err := normalizeAt(at)
+	if err != nil {
+		return evalContext{}, err
+	}
+	in := evalContext{DistinctID: distinctID, At: at}
 	for _, field := range []struct {
 		name, value string
 		target      *map[string]any
@@ -327,5 +346,22 @@ func checkEngineContext(engine string, in evalContext) error {
 	if engine == engineDiagnostic && (in.PersonProps != nil || in.GroupProperties != nil) {
 		return agenterrors.New("the diagnostic engine uses stored properties only; drop property overrides or use --engine public", agenterrors.FixableByAgent)
 	}
+	if engine != engineDiagnostic && in.At != "" {
+		return agenterrors.New("evaluating as of a past moment needs --engine diagnostic, which rebuilds the flag and person as they were", agenterrors.FixableByAgent)
+	}
 	return nil
+}
+
+// normalizeAt checks a point in time for historical evaluation, reading a
+// zoneless timestamp as UTC the way PostHog does.
+func normalizeAt(at string) (string, error) {
+	if at == "" {
+		return "", nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, at); err == nil {
+			return t.UTC().Format(time.RFC3339), nil
+		}
+	}
+	return "", agenterrors.New("--at must be an ISO 8601 time such as 2026-04-29T15:30:00Z", agenterrors.FixableByAgent)
 }
